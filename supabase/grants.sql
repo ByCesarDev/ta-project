@@ -114,9 +114,9 @@ GRANT INSERT, UPDATE, DELETE ON TABLE
 TO authenticated;
 
 -- 3.7 Ejecución de Funciones de Seguridad y RPCs
-GRANT EXECUTE ON FUNCTION public.is_active_user() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_moderator_or_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_active_user() TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.is_moderator_or_admin() TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_anime(INT) TO authenticated;
 
 -- ========================================================

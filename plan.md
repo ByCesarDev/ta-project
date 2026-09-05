@@ -650,9 +650,9 @@ GRANT DELETE ON public.animes TO authenticated;
 
 GRANT INSERT, UPDATE, DELETE ON public.episodes, public.episode_sources, public.genres, public.anime_genres, public.avatars, public.admin_notifications TO authenticated;
 
-GRANT EXECUTE ON FUNCTION public.is_active_user() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.is_moderator_or_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_active_user() TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.is_moderator_or_admin() TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_anime(INT) TO authenticated;
 
 -- 5. Concesiones Explícitas a 'service_role' (Worker / Backend en Render)

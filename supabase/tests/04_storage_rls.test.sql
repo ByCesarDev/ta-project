@@ -18,11 +18,11 @@ VALUES
 UPDATE public.user_roles SET role = 'moderator' WHERE user_id = '33333333-3333-3333-3333-333333333333';
 
 -- Crear objetos iniciales
-INSERT INTO storage.objects (bucket_id, name, owner_id)
+INSERT INTO storage.objects (bucket_id, name, owner_id, metadata)
 VALUES 
-    ('avatars', '11111111-1111-1111-1111-111111111111/avatar.webp', '11111111-1111-1111-1111-111111111111'),
-    ('avatars', '22222222-2222-2222-2222-222222222222/avatar.webp', '22222222-2222-2222-2222-222222222222'),
-    ('posters', 'naruto.webp', '33333333-3333-3333-3333-333333333333');
+    ('avatars', '11111111-1111-1111-1111-111111111111/avatar.webp', '11111111-1111-1111-1111-111111111111', '{"custom": "user_a"}'::jsonb),
+    ('avatars', '22222222-2222-2222-2222-222222222222/avatar.webp', '22222222-2222-2222-2222-222222222222', '{"custom": "user_b"}'::jsonb),
+    ('posters', 'naruto.webp', '33333333-3333-3333-3333-333333333333', '{}'::jsonb);
 
 -- -----------------------------------------------------------------------------
 -- 2. TEST: Lectura pública de objetos en buckets (Rol: anon)
@@ -58,15 +58,16 @@ SELECT throws_ok(
 );
 
 -- -----------------------------------------------------------------------------
--- 5. TEST: Usuario A intenta borrar el avatar de Usuario B (RLS silencioso DELETE 0)
+-- 5. TEST: Usuario A intenta modificar el avatar de Usuario B (RLS silencioso UPDATE 0)
 -- -----------------------------------------------------------------------------
-DELETE FROM storage.objects 
+UPDATE storage.objects 
+SET metadata = '{"custom": "hacked"}'::jsonb
 WHERE bucket_id = 'avatars' AND name = '22222222-2222-2222-2222-222222222222/avatar.webp';
 
 SELECT is(
-    (SELECT COUNT(*)::int FROM storage.objects WHERE bucket_id = 'avatars' AND name = '22222222-2222-2222-2222-222222222222/avatar.webp'),
-    1,
-    'RLS evita el borrado no autorizado: el avatar del Usuario B debe continuar existiendo intacto'
+    (SELECT metadata->>'custom' FROM storage.objects WHERE bucket_id = 'avatars' AND name = '22222222-2222-2222-2222-222222222222/avatar.webp'),
+    'user_b',
+    'RLS evita la modificación no autorizada: los metadatos del avatar del Usuario B se mantienen intactos'
 );
 
 -- -----------------------------------------------------------------------------
