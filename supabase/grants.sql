@@ -122,9 +122,15 @@ GRANT EXECUTE ON FUNCTION public.claim_anime(INT) TO authenticated;
 -- ========================================================
 -- 4. CONCESIONES EXPLÍCITAS PARA ROL 'service_role' (Backend / Render Worker)
 -- ========================================================
--- Garantiza privilegios totales deterministas para operaciones de servidor con Secret Key
+-- 4.1 Privilegios actuales
 GRANT USAGE ON SCHEMA public TO service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
 GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role;
 GRANT EXECUTE ON FUNCTION public.record_anime_view(INT) TO service_role;
+
+-- 4.2 Privilegios por defecto para futuras entidades creadas en schema public
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO service_role;
+
