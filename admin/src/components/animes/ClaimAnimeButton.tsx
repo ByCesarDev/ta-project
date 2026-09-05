@@ -15,19 +15,26 @@ export const ClaimAnimeButton: React.FC<ClaimAnimeButtonProps> = ({
   claimedBy,
   onSuccess,
 }) => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const isClaimedByMe = claimedBy === user?.id;
+  const isClaimedByOther = Boolean(claimedBy && !isClaimedByMe);
 
   const handleClaim = async () => {
     if (!user || isClaimedByMe) return;
 
+    // Non-admins cannot reassign an anime claimed by another moderator
+    if (isClaimedByOther && !isAdmin) {
+      alert('Solo un administrador puede reasignar una serie reclamada por otro moderador.');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Call Supabase RPC claim_anime(anime_id)
+      // Call Supabase RPC claim_anime(p_anime_id INT)
       const { error } = await supabase.rpc('claim_anime', {
-        target_anime_id: animeId,
+        p_anime_id: animeId,
       });
 
       if (error) {
@@ -51,6 +58,18 @@ export const ClaimAnimeButton: React.FC<ClaimAnimeButtonProps> = ({
     );
   }
 
+  // If claimed by another moderator and current user is NOT admin, do not offer reassign
+  if (isClaimedByOther && !isAdmin) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 text-xs text-slate-400 font-medium bg-slate-800/50 px-2.5 py-1 rounded-lg border border-slate-700/60"
+        title="Esta serie ya está asignada a otro moderador. Solo administradores pueden reasignarla."
+      >
+        <Shield className="w-3.5 h-3.5 text-slate-500" /> Asignada
+      </span>
+    );
+  }
+
   return (
     <Button
       variant="outline"
@@ -58,9 +77,9 @@ export const ClaimAnimeButton: React.FC<ClaimAnimeButtonProps> = ({
       isLoading={loading}
       icon={<Shield className="w-3.5 h-3.5 text-indigo-400" />}
       onClick={handleClaim}
-      title={claimedBy ? 'Reclamar y reasignar a tu perfil' : 'Reclamar moderación de esta serie'}
+      title={isClaimedByOther ? 'Reclamar y reasignar a tu perfil (Admin)' : 'Reclamar moderación de esta serie'}
     >
-      {claimedBy ? 'Reasignar' : 'Reclamar Serie'}
+      {isClaimedByOther ? 'Reasignar' : 'Reclamar Serie'}
     </Button>
   );
 };

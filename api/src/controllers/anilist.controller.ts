@@ -197,18 +197,22 @@ export class AniListController {
 
       // 5. Register in Audit Log
       if (req.user?.id) {
-        await supabaseAdmin.from('audit_logs').insert({
-          user_id: req.user.id,
+        const { error: auditError } = await supabaseAdmin.from('audit_logs').insert({
+          actor_id: req.user.id,
           action: 'import_anime_anilist',
           entity_type: 'animes',
           entity_id: String(animeId),
-          details: {
+          metadata: {
             anilist_id: anilistId,
             name: animeData.name,
             episodes: animeData.episodes,
             created_episodes: createdEpisodesCount,
           },
         });
+
+        if (auditError) {
+          console.warn('[AniListController] Warning recording audit log:', auditError.message);
+        }
       }
 
       // Retrieve full resulting anime

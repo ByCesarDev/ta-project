@@ -124,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         {/* Footer Link to Web Client */}
         <div className="p-4 border-t border-slate-800/80 bg-[#07090e]/60">
           <a
-            href="http://localhost:5173"
+            href={import.meta.env.VITE_WEB_URL || 'http://localhost:5173'}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors"
@@ -133,7 +133,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               <ExternalLink className="w-3.5 h-3.5" />
               Ver Portal Web
             </span>
-            <span className="text-[10px] font-mono text-slate-500">:5173</span>
+            <span className="text-[10px] font-mono text-slate-500">
+              {(() => {
+                try {
+                  const target = import.meta.env.VITE_WEB_URL || 'http://localhost:5173';
+                  const parsed = new URL(target);
+                  return parsed.port ? `:${parsed.port}` : parsed.hostname;
+                } catch {
+                  return 'Web';
+                }
+              })()}
+            </span>
           </a>
         </div>
       </aside>

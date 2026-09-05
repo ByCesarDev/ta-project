@@ -180,6 +180,10 @@ DROP POLICY IF EXISTS "Public: EpisodeSources SELECT" ON public.episode_sources;
 CREATE POLICY "Public: EpisodeSources SELECT" ON public.episode_sources
     FOR SELECT USING (is_active = true);
 
+DROP POLICY IF EXISTS "ModAdmin: EpisodeSources SELECT All" ON public.episode_sources;
+CREATE POLICY "ModAdmin: EpisodeSources SELECT All" ON public.episode_sources
+    FOR SELECT USING ((select public.is_moderator_or_admin()));
+
 DROP POLICY IF EXISTS "ModAdmin: EpisodeSources INSERT" ON public.episode_sources;
 CREATE POLICY "ModAdmin: EpisodeSources INSERT" ON public.episode_sources
     FOR INSERT WITH CHECK ((select public.is_moderator_or_admin()));

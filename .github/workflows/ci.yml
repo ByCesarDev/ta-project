@@ -58,5 +58,11 @@ jobs:
       - name: Validate Admin Panel
         run: |
           npm run admin:lint
+          npm run admin:test
           npm run admin:build
+        env:
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvdGFsYW5pbWUiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoxOTAwMDAwMDAwfQ.dummy
+          VITE_API_URL: http://localhost:4000
+          VITE_WEB_URL: http://localhost:5173
 

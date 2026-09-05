@@ -1,7 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Check, Clock, Calendar, Tv } from 'lucide-react';
-
+import { Check, Clock, Calendar, Tv, BellRing } from 'lucide-react';
 import { supabase } from '../lib/supabase.js';
 import { Button } from '../components/common/Button.js';
 import { Badge } from '../components/common/Badge.js';
@@ -15,11 +14,32 @@ export const NotificationsPage: React.FC = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('admin_notifications')
-        .select('*, animes(id, name, cover_image, slug)')
+        .select(`
+          id,
+          anime_id,
+          episode_id,
+          moderator_id,
+          notification_type,
+          episode_air_date,
+          notification_date,
+          is_read,
+          created_at,
+          animes (
+            id,
+            name,
+            cover_image,
+            slug
+          ),
+          episodes (
+            id,
+            episode_number,
+            title
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return (data || []) as AdminNotification[];
+      return (data || []) as unknown as AdminNotification[];
     },
   });
 
@@ -56,7 +76,10 @@ export const NotificationsPage: React.FC = () => {
               {notif.animes?.name || `Anime #${notif.anime_id}`}
             </h4>
             <span className="text-xs text-indigo-400 font-semibold flex items-center gap-1 mt-0.5">
-              Episodio {notif.episode_number}
+              {notif.episodes?.episode_number
+                ? `Episodio ${notif.episodes.episode_number}`
+                : `Episodio #${notif.episode_id}`}
+              {notif.episodes?.title ? ` - ${notif.episodes.title}` : ''}
             </span>
           </div>
         </div>
@@ -67,18 +90,18 @@ export const NotificationsPage: React.FC = () => {
       cell: (notif) => (
         <Badge
           variant={
-            notif.alert_type === '1_day'
+            notif.notification_type === '1_day'
               ? 'danger'
-              : notif.alert_type === '2_days'
+              : notif.notification_type === '2_days'
               ? 'warning'
               : 'primary'
           }
           size="sm"
         >
           <Clock className="w-3 h-3" />
-          {notif.alert_type === '1_day'
+          {notif.notification_type === '1_day'
             ? '¡Estreno Mañana!'
-            : notif.alert_type === '2_days'
+            : notif.notification_type === '2_days'
             ? 'Estreno en 2 Días'
             : 'Estreno en 3 Días'}
         </Badge>
@@ -89,7 +112,7 @@ export const NotificationsPage: React.FC = () => {
       cell: (notif) => (
         <span className="text-xs text-slate-300 font-mono flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-slate-500" />
-          {formatDate(notif.air_date)}
+          {formatDate(notif.episode_air_date)}
         </span>
       ),
     },
@@ -124,7 +147,8 @@ export const NotificationsPage: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-['Outfit']">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-['Outfit'] flex items-center gap-2">
+          <BellRing className="w-7 h-7 text-indigo-400" />
           Alertas de Emisión y Estrenos
         </h1>
         <p className="text-sm text-slate-400 mt-1">

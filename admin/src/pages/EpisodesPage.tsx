@@ -17,10 +17,12 @@ import { Badge } from '../components/common/Badge.js';
 import { Table, Column } from '../components/common/Table.js';
 import { EpisodeSourcesModal } from '../components/episodes/EpisodeSourcesModal.js';
 import { Episode, Anime } from '../types/index.js';
+import { useAuth } from '../context/AuthContext.js';
 
 export const EpisodesPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const animeId = parseInt(id || '0', 10);
+  const { isAdmin } = useAuth();
 
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
@@ -61,7 +63,11 @@ export const EpisodesPage: React.FC = () => {
     if (!anime) return;
     setIsCreatingEpisode(true);
     try {
-      const nextEpNum = (episodes?.length || 0) + 1;
+      const maxEpNum = episodes && episodes.length > 0
+        ? Math.max(...episodes.map((e) => e.episode_number))
+        : 0;
+      const nextEpNum = maxEpNum + 1;
+
       const { error } = await supabase.from('episodes').insert({
         anime_id: animeId,
         episode_number: nextEpNum,
@@ -81,6 +87,10 @@ export const EpisodesPage: React.FC = () => {
   };
 
   const handleDeleteEpisode = async (episodeId: number, epNum: number) => {
+    if (!isAdmin) {
+      alert('Solo los administradores pueden eliminar episodios.');
+      return;
+    }
     if (!confirm(`¿Estás seguro de eliminar el Episodio ${epNum}?`)) return;
 
     try {
@@ -177,13 +187,15 @@ export const EpisodesPage: React.FC = () => {
             Servidores
           </Button>
 
-          <button
-            onClick={() => handleDeleteEpisode(ep.id, ep.episode_number)}
-            className="p-2 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
-            title="Eliminar Episodio"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => handleDeleteEpisode(ep.id, ep.episode_number)}
+              className="p-2 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors"
+              title="Eliminar Episodio (Admin)"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       ),
     },

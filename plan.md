@@ -42,26 +42,26 @@ TotalAnime 2.0 adopta una arquitectura **BaaS-First Híbrida**:
 
 ## 2. Matriz de Migración Legacy (`totalanime (2).sql` $\rightarrow$ TotalAnime 2.0)
 
-| Tabla Legacy (MySQL)     | Destino en TotalAnime 2.0                                    | Acción                     | Justificación Técnica                                                                                                                                  |
-| :----------------------- | :----------------------------------------------------------- | :-------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tabla Legacy (MySQL)   | Destino en TotalAnime 2.0                              | Acción                | Justificación Técnica                                                                                                                          |
+| :--------------------- | :----------------------------------------------------- | :-------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------- |
 | `user_form`            | `auth.users` + `public.profiles` + `public.user_roles` | **Transformar (ETL)** | Separación de identidad (Auth), perfil público (`profiles`) y autorización (`user_roles`). Requerirá reset de contraseña (eliminación de MD5). |
-| `user_sessions`        | `auth.sessions` (Supabase nativo)                          | **Eliminar**          | Supabase Auth maneja sesiones, refresh tokens y rotación JWT de forma nativa.                                                                           |
-| `rate_limits`          | Middleware API + Supabase Auth Rate Limiting                 | **Eliminar**          | La base de datos no almacena rate-limiting volátil; se maneja en Edge/Redis.                                                                            |
-| `security_logs`        | `public.audit_logs`                                        | **Rediseñar**        | Registro de auditoría*append-only* para acciones críticas de moderadores y administradores.                                                          |
-| `system_config`        | `public.app_settings`                                      | **Transformar**       | Clave/Valor para configuración global pública (**cero secretos**).                                                                               |
-| `system_notifications` | `public.admin_notifications`                               | **Transformar**       | Alertas operativas de próximos estrenos para moderadores/admins.                                                                                        |
-| `pageview`             | `public.anime_views` + `views_count`                     | **Rediseñar**        | `views_count` en `animes`/`episodes` para lectura O(1) y `anime_views` para agregación diaria particionada por fecha.                           |
-| `google`               | *N/A*                                                      | **Eliminar**          | Tabla residual legacy sin uso real.                                                                                                                      |
-| `genres`               | `public.genres`                                            | **Migrar (1:1)**      | Catálogo oficial de 19 géneros.                                                                                                                        |
-| `avatars`              | `public.avatars` + Supabase Storage                        | **Migrar**            | 13 avatares predeterminados en bucket`avatars`.                                                                                                        |
-| `animes`               | `public.animes`                                            | **Transformar**       | Se elimina la columna redundante`genres TEXT` (la fuente de verdad es `anime_genres`). Se conservan campos de emisión y títulos multilingües.     |
-| `anime_genres`         | `public.anime_genres`                                      | **Migrar (1:1)**      | Tabla relacional N:M de animes y géneros.                                                                                                               |
-| `episodes`             | `public.episodes`                                          | **Transformar**       | Se eliminan las columnas rígidas`video_url1/2/3`. Se añade `air_at TIMESTAMPTZ`.                                                                   |
-| *N/A (Nueva)*          | `public.episode_sources`                                   | **Crear**             | **Soporte N-ario de servidores de video** con clave única para idempotencia (`episode_id, provider, language, quality`).                        |
-| *N/A (Nueva)*          | `public.scrape_jobs`                                       | **Crear**             | Cola de tareas de scraping asíncrono para series largas.                                                                                                |
-| `user_history`         | `public.user_history`                                      | **Normalizar (ETL)**  | Se eliminan columnas desnormalizadas (`anime_title`, `anime_image`, etc.). Mapeo de `user_id` de `INT` a `UUID`.                               |
-| `user_episode_status`  | `public.user_episode_status`                               | **Transformar (ETL)** | Mapeo de`user_id` de `INT` a `UUID`.                                                                                                               |
-| `watch_later`          | `public.watch_later`                                       | **Normalizar (ETL)**  | Se eliminan columnas desnormalizadas (`name`, `image`, etc.). Mapeo de `user_id` de `INT` a `UUID`.                                            |
+| `user_sessions`        | `auth.sessions` (Supabase nativo)                      | **Eliminar**          | Supabase Auth maneja sesiones, refresh tokens y rotación JWT de forma nativa.                                                                  |
+| `rate_limits`          | Middleware API + Supabase Auth Rate Limiting           | **Eliminar**          | La base de datos no almacena rate-limiting volátil; se maneja en Edge/Redis.                                                                   |
+| `security_logs`        | `public.audit_logs`                                    | **Rediseñar**         | Registro de auditoría*append-only* para acciones críticas de moderadores y administradores.                                                    |
+| `system_config`        | `public.app_settings`                                  | **Transformar**       | Clave/Valor para configuración global pública (**cero secretos**).                                                                             |
+| `system_notifications` | `public.admin_notifications`                           | **Transformar**       | Alertas operativas de próximos estrenos para moderadores/admins.                                                                               |
+| `pageview`             | `public.anime_views` + `views_count`                   | **Rediseñar**         | `views_count` en `animes`/`episodes` para lectura O(1) y `anime_views` para agregación diaria particionada por fecha.                          |
+| `google`               | _N/A_                                                  | **Eliminar**          | Tabla residual legacy sin uso real.                                                                                                            |
+| `genres`               | `public.genres`                                        | **Migrar (1:1)**      | Catálogo oficial de 19 géneros.                                                                                                                |
+| `avatars`              | `public.avatars` + Supabase Storage                    | **Migrar**            | 13 avatares predeterminados en bucket`avatars`.                                                                                                |
+| `animes`               | `public.animes`                                        | **Transformar**       | Se elimina la columna redundante`genres TEXT` (la fuente de verdad es `anime_genres`). Se conservan campos de emisión y títulos multilingües.  |
+| `anime_genres`         | `public.anime_genres`                                  | **Migrar (1:1)**      | Tabla relacional N:M de animes y géneros.                                                                                                      |
+| `episodes`             | `public.episodes`                                      | **Transformar**       | Se eliminan las columnas rígidas`video_url1/2/3`. Se añade `air_at TIMESTAMPTZ`.                                                               |
+| _N/A (Nueva)_          | `public.episode_sources`                               | **Crear**             | **Soporte N-ario de servidores de video** con clave única para idempotencia (`episode_id, provider, language, quality`).                       |
+| _N/A (Nueva)_          | `public.scrape_jobs`                                   | **Crear**             | Cola de tareas de scraping asíncrono para series largas.                                                                                       |
+| `user_history`         | `public.user_history`                                  | **Normalizar (ETL)**  | Se eliminan columnas desnormalizadas (`anime_title`, `anime_image`, etc.). Mapeo de `user_id` de `INT` a `UUID`.                               |
+| `user_episode_status`  | `public.user_episode_status`                           | **Transformar (ETL)** | Mapeo de`user_id` de `INT` a `UUID`.                                                                                                           |
+| `watch_later`          | `public.watch_later`                                   | **Normalizar (ETL)**  | Se eliminan columnas desnormalizadas (`name`, `image`, etc.). Mapeo de `user_id` de `INT` a `UUID`.                                            |
 
 ---
 
@@ -80,7 +80,7 @@ graph TB
         PG[("PostgreSQL Database\n(RLS Estricto + Grants)")]
         STOR["Supabase Storage CDN\n(posters, banners, avatars)"]
         RT["Supabase Realtime\n(Sync WebSockets)"]
-    
+
         AUTH --> PG
         PG <--> RT
     end
@@ -90,7 +90,7 @@ graph TB
         VSCRAP["Base64 Video Scraper\n(videos-api engine)"]
         AL_SYNC["AniList Ingestion Worker"]
         JOBS["Scrape Job Queue Engine"]
-    
+
         API --> VSCRAP
         API --> AL_SYNC
         API --> JOBS
@@ -493,7 +493,7 @@ BEGIN
     UPDATE public.animes
     SET claimed_by = auth.uid(),
         claimed_at = NOW()
-    WHERE id = p_anime_id 
+    WHERE id = p_anime_id
       AND (claimed_by IS NULL OR public.is_admin());
 
     IF NOT FOUND THEN
@@ -588,15 +588,15 @@ CREATE POLICY "Public: AnimeGenres SELECT" ON public.anime_genres FOR SELECT USI
 CREATE POLICY "Public: Avatars SELECT" ON public.avatars FOR SELECT USING (true);
 
 -- 3. Interacción de Usuarios Activos
-CREATE POLICY "UserHistory: Manage Own" ON public.user_history 
+CREATE POLICY "UserHistory: Manage Own" ON public.user_history
     FOR ALL USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
     WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
 
-CREATE POLICY "EpisodeStatus: Manage Own" ON public.user_episode_status 
+CREATE POLICY "EpisodeStatus: Manage Own" ON public.user_episode_status
     FOR ALL USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
     WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
 
-CREATE POLICY "WatchLater: Manage Own" ON public.watch_later 
+CREATE POLICY "WatchLater: Manage Own" ON public.watch_later
     FOR ALL USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
     WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
 
@@ -676,33 +676,33 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIO
 
 ### 7.1 Configuración de Buckets
 
-| Bucket         | Visibilidad | MIME Types                            | Tamaño Máx | Políticas                                                                                                  |
-| :------------- | :---------- | :------------------------------------ | :----------- | :---------------------------------------------------------------------------------------------------------- |
-| `posters`    | Público    | `image/webp, image/jpeg, image/png` | 5 MB         | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                        |
-| `banners`    | Público    | `image/webp, image/jpeg, image/png` | 8 MB         | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                        |
-| `thumbnails` | Público    | `image/webp, image/jpeg, image/png` | 3 MB         | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                        |
-| `avatars`    | Público    | `image/webp, image/jpeg, image/png` | 2 MB         | **Lectura:** Pública \| **Sistema:** Solo Admin \| **Custom:** `{user_id}/avatar.webp` |
+| Bucket       | Visibilidad | MIME Types                          | Tamaño Máx | Políticas                                                                              |
+| :----------- | :---------- | :---------------------------------- | :--------- | :------------------------------------------------------------------------------------- |
+| `posters`    | Público     | `image/webp, image/jpeg, image/png` | 5 MB       | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                  |
+| `banners`    | Público     | `image/webp, image/jpeg, image/png` | 8 MB       | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                  |
+| `thumbnails` | Público     | `image/webp, image/jpeg, image/png` | 3 MB       | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                  |
+| `avatars`    | Público     | `image/webp, image/jpeg, image/png` | 2 MB       | **Lectura:** Pública \| **Sistema:** Solo Admin \| **Custom:** `{user_id}/avatar.webp` |
 
 ```sql
 -- Políticas en storage.objects
-CREATE POLICY "Storage: Public Read" ON storage.objects 
+CREATE POLICY "Storage: Public Read" ON storage.objects
     FOR SELECT USING (bucket_id IN ('posters', 'banners', 'thumbnails', 'avatars'));
 
-CREATE POLICY "Storage: ModAdmin Write Media" ON storage.objects 
+CREATE POLICY "Storage: ModAdmin Write Media" ON storage.objects
     FOR ALL USING (
-        bucket_id IN ('posters', 'banners', 'thumbnails') 
+        bucket_id IN ('posters', 'banners', 'thumbnails')
         AND (select public.is_moderator_or_admin())
     );
 
 -- Ciclo de Vida Completo para Avatares Personalizados (INSERT, UPDATE, DELETE)
-CREATE POLICY "Storage: User Avatar Management" ON storage.objects 
+CREATE POLICY "Storage: User Avatar Management" ON storage.objects
     FOR ALL USING (
-        bucket_id = 'avatars' 
+        bucket_id = 'avatars'
         AND (storage.foldername(name))[1] = (select auth.uid())::text
         AND (select public.is_active_user())
     )
     WITH CHECK (
-        bucket_id = 'avatars' 
+        bucket_id = 'avatars'
         AND (storage.foldername(name))[1] = (select auth.uid())::text
         AND (select public.is_active_user())
     );
@@ -795,13 +795,13 @@ c:\Users\Usuario\Desktop\Proyectos\totalanime\api/
 ### 9.2 CORS Allowlist Estricto
 
 ```typescript
-import cors from 'cors';
+import cors from "cors";
 
 const allowedOrigins = [
-  'https://totalanime.com',
-  'https://admin.totalanime.com',
-  'http://localhost:5173', // Vite Web Local
-  'http://localhost:5174', // Vite Admin Local
+  "https://totalanime.com",
+  "https://admin.totalanime.com",
+  "http://localhost:5173", // Vite Web Local
+  "http://localhost:5174", // Vite Admin Local
 ];
 
 export const corsMiddleware = cors({
@@ -809,7 +809,7 @@ export const corsMiddleware = cors({
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('No autorizado por CORS'));
+      callback(new Error("No autorizado por CORS"));
     }
   },
   credentials: true,
@@ -903,11 +903,11 @@ Stack: **React Native 0.86+ + Expo SDK 57 + React 19.2 + TypeScript + Expo Route
 ## 13. Definición de Tipos e Interfaces Compartidas (TypeScript)
 
 ```typescript
-export type UserRole = 'user' | 'moderator' | 'admin';
-export type UserStatus = 'active' | 'suspended' | 'banned';
-export type EpisodeStatus = 'pending' | 'available' | 'unavailable';
-export type StreamLanguage = 'sub' | 'dub';
-export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type UserRole = "user" | "moderator" | "admin";
+export type UserStatus = "active" | "suspended" | "banned";
+export type EpisodeStatus = "pending" | "available" | "unavailable";
+export type StreamLanguage = "sub" | "dub";
+export type JobStatus = "pending" | "processing" | "completed" | "failed";
 
 export interface Profile {
   id: string;
@@ -1055,64 +1055,74 @@ gantt
 
 ### Checklist Exhaustivo de Tareas
 
-- [X] **FASE 0: Auditoría y Aprobación del Modelo Definitivo**
+- [x] **FASE 0: Auditoría y Aprobación del Modelo Definitivo**
+  - [x] Matriz de migración legacy aprobada.
+  - [x] Modelo DDL final con `episode_sources`, `audit_logs`, `scrape_jobs`, `anime_views`.
+  - [x] Hardening de `SECURITY DEFINER` con `search_path = ''`.
+  - [x] Column-Level Privileges para evitar bypass de `claim_anime()`.
+  - [x] Normalización estricta de `user_history` y `watch_later`.
+  - [x] Definición de stack móvil: Expo SDK 57 + React Native 0.86 + React 19.2.
 
-  - [X] Matriz de migración legacy aprobada.
-  - [X] Modelo DDL final con `episode_sources`, `audit_logs`, `scrape_jobs`, `anime_views`.
-  - [X] Hardening de `SECURITY DEFINER` con `search_path = ''`.
-  - [X] Column-Level Privileges para evitar bypass de `claim_anime()`.
-  - [X] Normalización estricta de `user_history` y `watch_later`.
-  - [X] Definición de stack móvil: Expo SDK 57 + React Native 0.86 + React 19.2.
-- [X] **FASE 1: Configuración de Base de Datos y Seguridad en Supabase**
+- [x] **FASE 1: Configuración de Base de Datos y Seguridad en Supabase**
+  - [x] Crear proyecto en [supabase.com](https://supabase.com).
+  - [x] Crear directorio `Desktop/Proyectos/totalanime/supabase/`.
+  - [x] Generar y ejecutar `schema.sql` (18 tablas/tipos/triggers).
+  - [x] Generar y ejecutar `grants.sql` (Revocación y concesión determinista por columna).
+  - [x] Generar y ejecutar `rls.sql` (Políticas con RBAC Admin/Moderador y función `is_active_user`).
+  - [x] Configurar buckets de almacenamiento: `posters`, `banners`, `avatars`, `thumbnails` con sus políticas de acceso en `storage.sql`.
 
-  - [X] Crear proyecto en [supabase.com](https://supabase.com).
-  - [X] Crear directorio `Desktop/Proyectos/totalanime/supabase/`.
-  - [X] Generar y ejecutar `schema.sql` (18 tablas/tipos/triggers).
-  - [X] Generar y ejecutar `grants.sql` (Revocación y concesión determinista por columna).
-  - [X] Generar y ejecutar `rls.sql` (Políticas con RBAC Admin/Moderador y función `is_active_user`).
-  - [X] Configurar buckets de almacenamiento: `posters`, `banners`, `avatars`, `thumbnails` con sus políticas de acceso en `storage.sql`.
-- [X] **FASE 2: Pipeline ETL y Migración de Datos (IMPLEMENTACIÓN CERRADA ✅)**
+- [x] **FASE 2: Pipeline ETL y Migración de Datos (IMPLEMENTACIÓN CERRADA ✅)**
+  - [x] Separación arquitectónica: seed local (`supabase/seed.sql`) vs cutover productivo (`supabase/production-etl.sql` y `scripts/migrate-data.ts`).
+  - [x] 19 Géneros oficiales (`public.genres`).
+  - [x] 13 Avatares del sistema (`public.avatars`).
+  - [x] 17 Animes del backup con títulos multilingües y datos de emisión (`public.animes`, IDs 66 a 82).
+  - [x] 484 Episodios completos migrados a `public.episodes` (IDs 2038 a 2521).
+  - [x] Fail-fast en verificación de integridad de `migrate-data.ts` (termina con `exit 1` si faltan registros).
+  - [x] 6 Fuentes de video legacy migradas a `public.episode_sources`.
+  - [x] Trazabilidad histórica con recencia y staging (`unresolved_user_history`, `unresolved_watch_later`).
+  - [x] Mapeo formal de usuarios legacy con `public.migration_user_map`.
+  - [x] Script de migración de Auth productivo con Admin API, contraseñas seguras y flags en `app_metadata` (`scripts/migrate-users.ts`).
+  - [ ] _Nota operativa:_ Ejecución del cutover final en la base de datos de producción (tarea de deployment/operaciones).
 
-  - [X] Separación arquitectónica: seed local (`supabase/seed.sql`) vs cutover productivo (`supabase/production-etl.sql` y `scripts/migrate-data.ts`).
-  - [X] 19 Géneros oficiales (`public.genres`).
-  - [X] 13 Avatares del sistema (`public.avatars`).
-  - [X] 17 Animes del backup con títulos multilingües y datos de emisión (`public.animes`, IDs 66 a 82).
-  - [X] 484 Episodios completos migrados a `public.episodes` (IDs 2038 a 2521).
-  - [X] Fail-fast en verificación de integridad de `migrate-data.ts` (termina con `exit 1` si faltan registros).
-  - [X] 6 Fuentes de video legacy migradas a `public.episode_sources`.
-  - [X] Trazabilidad histórica con recencia y staging (`unresolved_user_history`, `unresolved_watch_later`).
-  - [X] Mapeo formal de usuarios legacy con `public.migration_user_map`.
-  - [X] Script de migración de Auth productivo con Admin API, contraseñas seguras y flags en `app_metadata` (`scripts/migrate-users.ts`).
-  - [ ] *Nota operativa:* Ejecución del cutover final en la base de datos de producción (tarea de deployment/operaciones).
+- [x] **FASE 3: API y Workers en Render (`api/`) (EN REVISIÓN DE HARDENING 🟡 - CI Verde)**
+  - [x] Inicializar microservicio Node.js 22 LTS / Express / TypeScript en `api/`.
+  - [x] Integrar motor de scraping Base64 en `videoScraper.service.ts` con **SSRF Hardening** (bloqueo de loopback `127.0.0.1`/`localhost`, subredes privadas RFC 1918, AWS metadata `169.254.169.254`).
+  - [x] Cuarentena automática (`is_active = false`) para proveedores desconocidos en `serverParsers.ts`.
+  - [x] Restricción de `refresh=true` en `/api/v1/stream` exclusivamente para personal autorizado (`admin` / `moderator`).
+  - [x] Integrar cliente GraphQL de AniList en `anilist.service.ts` para importación y búsqueda.
+  - [x] Sistema de colas (`scrapeWorker.ts`) con **Atomic Job Claiming** (`FOR UPDATE SKIP LOCKED` vía RPC `claim_next_scrape_job`) y recuperación automática de jobs zombi (`heartbeat_at`, `locked_at`, `attempts`).
+  - [x] Middleware de seguridad con **RBAC granular por endpoint** (`jwtAuthGuard.ts`) consultando roles y estado activo directamente en BD.
+  - [x] Validación estricta de variables de entorno en `env.ts` (sin fallbacks ficticios en producción; `SUPABASE_SECRET_KEY`, `SUPABASE_URL` y `CORS_ORIGINS` obligatorios).
+  - [x] Suite de pruebas unitarias Vitest al 100% (34 tests en 6 archivos).
 
-- [ ] **FASE 3: API y Workers en Render (`api/`) (EN REVISIÓN DE HARDENING 🟡 - CI Verde)**
-
-  - [X] Inicializar microservicio Node.js 22 LTS / Express / TypeScript en `api/`.
-  - [X] Integrar motor de scraping Base64 en `videoScraper.service.ts` con **SSRF Hardening** (bloqueo de loopback `127.0.0.1`/`localhost`, subredes privadas RFC 1918, AWS metadata `169.254.169.254`).
-  - [X] Cuarentena automática (`is_active = false`) para proveedores desconocidos en `serverParsers.ts`.
-  - [X] Restricción de `refresh=true` en `/api/v1/stream` exclusivamente para personal autorizado (`admin` / `moderator`).
-  - [X] Integrar cliente GraphQL de AniList en `anilist.service.ts` para importación y búsqueda.
-  - [X] Sistema de colas (`scrapeWorker.ts`) con **Atomic Job Claiming** (`FOR UPDATE SKIP LOCKED` vía RPC `claim_next_scrape_job`) y recuperación automática de jobs zombi (`heartbeat_at`, `locked_at`, `attempts`).
-  - [X] Middleware de seguridad con **RBAC granular por endpoint** (`jwtAuthGuard.ts`) consultando roles y estado activo directamente en BD.
-  - [X] Validación estricta de variables de entorno en `env.ts` (sin fallbacks ficticios en producción; `SUPABASE_SECRET_KEY`, `SUPABASE_URL` y `CORS_ORIGINS` obligatorios).
-  - [X] Suite de pruebas unitarias Vitest al 100% (34 tests en 6 archivos).
-
-- [ ] **FASE 4: Panel de Administración (`admin/`) (CONGELADA ⏸️ - Código base creado, validado build & lint)**
-
-  - [X] Inicializar SPA React 19 + Vite + TypeScript en `admin/`.
-  - [X] Configurar cliente Supabase, React Query, Tailwind CSS y Lucide Icons.
-  - [X] Autenticación protegida por RBAC (`AuthContext`, `ProtectedRoute` para Admin y Staff).
-  - [X] Dashboard con métricas y estado del sistema.
-  - [X] CRUD de Animes, importador de AniList y disparador de `scrape_jobs`.
-  - [X] Editor N-ario de servidores de streaming (`episode_sources`).
-  - [X] Gestión de usuarios y roles (`user_roles`).
-  - [X] Compilación de producción (`tsc -b && vite build`) y linter validados exitosamente.
-  - [ ] *En espera:* Revisión y aprobación formal antes de despliegue.
+- [x] **FASE 4: Panel de Administración (`admin/`) (HARDENING Y CONTRATOS COMPLETADOS ✅ - CI & Tests Verdes)**
+  - [x] Inicializar SPA React 19 + Vite + TypeScript en `admin/`.
+  - [x] Configurar cliente Supabase, React Query, Tailwind CSS y Lucide Icons.
+  - [x] Tipado estricto `createClient<Database>()` con `Database` (`admin/src/types/database.ts`) evitando castings manuales ciegos.
+  - [x] Autenticación protegida por RBAC (`AuthContext`, `ProtectedRoute` para Admin y Staff).
+  - [x] Dashboard con métricas y estado del sistema.
+  - [x] CRUD de Animes, importador de AniList con `actor_id` y `metadata` en logs de auditoría, y disparador de `scrape_jobs`.
+  - [x] RPC `claim_anime({ p_anime_id })` corregido y UI de reasignación restringida a administradores (moderadores solo reclaman libres).
+  - [x] Editor N-ario de servidores de streaming (`episode_sources`) con validación SSRF, allowlist idéntica a Fase 3, auto-cuarentena para hosts desconocidos y sincronización centralizada en API (`PUT /api/v1/stream/episodes/:id/sources`).
+  - [x] Migración RLS `ModAdmin: EpisodeSources SELECT All` para visibilidad de cuarentena por parte de staff.
+  - [x] Toggle interactivo `is_active` con estados visuales (🟢 Activo, 🟠 En revisión, ⚫ Deshabilitado) y alerta `⚠️ Host no verificado`.
+  - [x] RBAC visual coherente con Postgres: hard-delete de episodios y fuentes exclusivo para administradores; soft-disable para moderadores.
+  - [x] `AuditLogsPage` alineado al esquema real (`actor_id`, `metadata`, `ip`) con resolución en memoria de perfiles sin depender de FK externa.
+  - [x] `NotificationsPage` alineado a columnas reales (`episode_id`, `notification_type`, `episode_air_date`) con embed relacional `episodes(episode_number)`.
+  - [x] Hardening de configuración con `VITE_SUPABASE_PUBLISHABLE_KEY` (sin defaults silenciosos en producción) y enlace dinámico `VITE_WEB_URL` en Sidebar.
+  - [x] Cálculo resiliente de `nextEpNum` con `Math.max` para evitar colisiones ante secuencias no contiguas.
+  - [x] Suite de pruebas unitarias Vitest en `admin/tests/admin.test.ts` (11 tests al 100%) y ejecución en CI (`npm run admin:test`).
+  - [x] Compilación de producción (`tsc -b && vite build`), linter y suite de tests validados exitosamente en verde.
 
 - [ ] **FASE 5: Frontend Web (`web/`) (BLOQUEADA 🚫)**
-
-  - 🛑 **STOP:** Prohibido crear o modificar archivos en `web/` hasta que CI esté verde y Fase 3 y Fase 4 hayan sido formalmente aprobadas por el usuario.
+  - [ ] Inicializar SPA en `Desktop/Proyectos/totalanime/web/` (`npm create vite@latest web -- --template react-ts`).
+  - [ ] Desarrollar Home, Ficha de Anime y Reproductor de video HLS con selector dinámico de servidores (`[Mega] [StreamWish] [Streamtape] [FileMoon]`).
+  - [ ] Integrar autenticación, historial de usuario y lista de favoritos con Supabase.
+  - [ ] 🛑 **STOP:** Prohibido crear o modificar archivos en `web/` hasta que CI esté verde y Fase 3 y Fase 4 hayan sido formalmente aprobadas por el usuario.
 
 - [ ] **FASE 6: Aplicación Móvil (`app/`) (BLOQUEADA 🚫)**
-
-  - 🛑 **STOP:** Prohibido iniciar hasta la conclusión exitosa de las fases previas.
+  - [ ] Inicializar Expo App en `Desktop/Proyectos/totalanime/app/` (`npx create-expo-app app -t tabs`).
+  - [ ] Conectar cliente Supabase con `expo-secure-store` y `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+  - [ ] Desarrollar pantallas nativas (Home, Explorador, Favoritos, Perfil).
+  - [ ] Implementar reproductor nativo a pantalla completa con selector de servidores de streaming.+
+  - [ ] 🛑 **STOP:** Prohibido iniciar hasta la conclusión exitosa de las fases previas.

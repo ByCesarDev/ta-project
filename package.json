@@ -16,7 +16,8 @@
     "api:worker": "npm --prefix api run worker:dev",
     "admin:dev": "npm --prefix admin run dev",
     "admin:build": "npm --prefix admin run build",
-    "admin:lint": "npm --prefix admin run lint"
+    "admin:lint": "npm --prefix admin run lint",
+    "admin:test": "npm --prefix admin run test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

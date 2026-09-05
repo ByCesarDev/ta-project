@@ -88,12 +88,12 @@ export interface EpisodeSource {
   provider: string;
   server_name: string;
   embed_url: string;
-  direct_stream_url?: string;
+  direct_stream_url?: string | null;
   language: StreamLanguage;
   quality: string;
   priority: number;
   is_active: boolean;
-  last_verified_at?: string;
+  last_verified_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -120,32 +120,38 @@ export interface AdminNotification {
   id: number;
   moderator_id: string;
   anime_id: number;
-  episode_number: number;
-  air_date: string;
-  alert_type: '3_days' | '2_days' | '1_day';
+  episode_id: number;
+  episode_air_date: string;
+  notification_date: string;
+  notification_type: '3_days' | '2_days' | '1_day';
   is_read: boolean;
   created_at: string;
   animes?: {
     id: number;
     name: string;
-    cover_image: string;
+    cover_image: string | null;
     slug: string;
-  };
+  } | null;
+  episodes?: {
+    id: number;
+    episode_number: number;
+    title: string | null;
+  } | null;
 }
 
 export interface AuditLog {
   id: number;
-  user_id: string;
+  actor_id: string | null;
   action: string;
   entity_type: string;
-  entity_id: string;
-  details: Record<string, unknown>;
-  ip_address?: string;
+  entity_id: string | null;
+  metadata: Record<string, unknown> | null;
+  ip: string | null;
   created_at: string;
   profiles?: {
     username: string;
     avatar_url: string;
-  };
+  } | null;
 }
 
 export interface AniListSearchResult {

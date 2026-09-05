@@ -1,6 +1,9 @@
-import { ScrapedServer, StreamLanguage } from '../types/index.js';
+/**
+ * TotalAnime 2.0 - Admin Episode Source Validation & Hardening
+ * Replicates serverParsers.ts SSRF checks and provider allowlist.
+ */
 
-interface ProviderDefinition {
+export interface KnownProvider {
   provider: string;
   name: string;
   allowedHostnames: string[];
@@ -8,7 +11,7 @@ interface ProviderDefinition {
   quality: string;
 }
 
-export const KNOWN_PROVIDERS: ProviderDefinition[] = [
+export const KNOWN_PROVIDERS: KnownProvider[] = [
   {
     provider: 'mega',
     name: 'Mega',
@@ -91,7 +94,7 @@ export const isPrivateOrLoopbackHost = (hostname: string): boolean => {
     return true;
   }
 
-  // AWS / Cloud Provider Instance Metadata Service
+  // Cloud Instance Metadata Service (AWS / GCP / Azure)
   if (lower === '169.254.169.254') {
     return true;
   }
@@ -123,8 +126,9 @@ export const sanitizeEmbedUrl = (rawUrl: string): string | null => {
     cleaned = `https:${cleaned}`;
   }
 
-  // Handle leading javascript: or invalid schemes
-  if (cleaned.toLowerCase().startsWith('javascript:') || cleaned.toLowerCase().startsWith('data:')) {
+  // Block dangerous schemes
+  const lower = cleaned.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
     return null;
   }
 
@@ -134,7 +138,6 @@ export const sanitizeEmbedUrl = (rawUrl: string): string | null => {
       return null;
     }
 
-    // SSRF Hardening: Reject loopback, private networks, and cloud metadata endpoints
     if (isPrivateOrLoopbackHost(parsed.hostname)) {
       return null;
     }
@@ -145,28 +148,53 @@ export const sanitizeEmbedUrl = (rawUrl: string): string | null => {
   }
 };
 
+export interface ValidatedSource {
+  isValid: boolean;
+  sanitizedUrl: string | null;
+  hostname: string;
+  isKnownProvider: boolean;
+  matchedProvider: KnownProvider | null;
+  suggestedProvider: string;
+  isQuarantined: boolean;
+  errorMessage?: string;
+}
+
 /**
- * Normalizes a raw embed URL into a ScrapedServer structure with strict hostname validation
+ * Validates an embed URL and determines provider trust & quarantine status
  */
-export const normalizeServer = (
-  rawUrl: string,
-  hintName?: string,
-  language: StreamLanguage = 'sub'
-): ScrapedServer | null => {
-  const sanitizedUrl = sanitizeEmbedUrl(rawUrl);
-  if (!sanitizedUrl) return null;
+export const validateSource = (rawUrl: string): ValidatedSource => {
+  const sanitized = sanitizeEmbedUrl(rawUrl);
+
+  if (!sanitized) {
+    return {
+      isValid: false,
+      sanitizedUrl: null,
+      hostname: '',
+      isKnownProvider: false,
+      matchedProvider: null,
+      suggestedProvider: 'custom',
+      isQuarantined: true,
+      errorMessage: 'URL inválida o rechazada por directiva de seguridad SSRF (no se permiten dominios privados ni esquemas inseguros).',
+    };
+  }
 
   let hostname = '';
   try {
-    hostname = new URL(sanitizedUrl).hostname.toLowerCase();
+    hostname = new URL(sanitized).hostname.toLowerCase();
   } catch {
-    return null;
+    return {
+      isValid: false,
+      sanitizedUrl: null,
+      hostname: '',
+      isKnownProvider: false,
+      matchedProvider: null,
+      suggestedProvider: 'custom',
+      isQuarantined: true,
+      errorMessage: 'No se pudo parsear el hostname de la URL.',
+    };
   }
 
-  // Security: Trust is based EXCLUSIVELY on strict hostname or subdomain match against allowedHostnames.
-  // hintName is NEVER used to determine provider trust.
-  let matchedProvider: ProviderDefinition | null = null;
-
+  let matched: KnownProvider | null = null;
   for (const prov of KNOWN_PROVIDERS) {
     const matches = prov.allowedHostnames.some((allowed) => {
       const target = allowed.toLowerCase();
@@ -174,46 +202,43 @@ export const normalizeServer = (
     });
 
     if (matches) {
-      matchedProvider = prov;
+      matched = prov;
       break;
     }
   }
 
-  if (matchedProvider) {
+  if (matched) {
     return {
-      provider: matchedProvider.provider,
-      server_name: hintName && hintName.trim().length > 0 ? hintName.trim() : matchedProvider.name,
-      embed_url: sanitizedUrl,
-      language,
-      quality: matchedProvider.quality,
-      priority: matchedProvider.priority,
-      is_active: true, // Known providers matching allowed hostnames are active
+      isValid: true,
+      sanitizedUrl: sanitized,
+      hostname,
+      isKnownProvider: true,
+      matchedProvider: matched,
+      suggestedProvider: matched.provider,
+      isQuarantined: false,
     };
   }
 
-  // Unknown provider: Quarantine with is_active = false for moderator review
+  // Unknown host: Quarantined by default
   let domain = 'custom';
   try {
     const parts = hostname.replace(/^www\./, '').split('.');
     domain = parts.length >= 2 ? parts[parts.length - 2] : parts[0] || 'custom';
   } catch {
-    // ignore
+    // fallback
   }
 
-  // Prevent identity spoofing: an unverified custom provider cannot use a known provider slug
   if (KNOWN_PROVIDERS.some((p) => p.provider === domain.toLowerCase())) {
     domain = `unverified-${domain}`;
   }
 
-  const fallbackName = hintName && hintName.trim().length > 0 ? hintName.trim() : domain.toUpperCase();
-
   return {
-    provider: domain.toLowerCase(),
-    server_name: fallbackName,
-    embed_url: sanitizedUrl,
-    language,
-    quality: '720p',
-    priority: 100,
-    is_active: false, // Unknown providers are quarantined until reviewed by staff
+    isValid: true,
+    sanitizedUrl: sanitized,
+    hostname,
+    isKnownProvider: false,
+    matchedProvider: null,
+    suggestedProvider: domain.toLowerCase(),
+    isQuarantined: true, // Unknown host starts quarantined
   };
 };
