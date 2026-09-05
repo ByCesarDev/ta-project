@@ -612,33 +612,55 @@ CREATE POLICY "AppSettings: Admin Write" ON public.app_settings FOR ALL USING ((
 
 ## 6. Estrategia Determinista de GRANTs y Privilegios por Columna
 
-Para garantizar seguridad determinista, iniciamos con revocación total y concedemos privilegios explícitos a nivel de tabla y columna:
+Para garantizar seguridad determinista, iniciamos con revocación total y concedemos privilegios explícitos a nivel de tabla, columna y rol:
 
 ```sql
 -- 1. Revocación Total Inicial
-REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
-REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated, public;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated, public;
+REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon, authenticated, public;
 
 -- 2. Concesiones a 'anon' (Visitantes no autenticados)
 GRANT SELECT ON public.animes, public.episodes, public.episode_sources, public.genres, public.anime_genres, public.avatars, public.app_settings, public.anime_views, public.profiles TO anon;
 
 -- 3. Concesiones a 'authenticated' (Usuarios y Moderadores/Admins)
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON public.user_history, public.user_episode_status, public.watch_later TO authenticated;
 GRANT UPDATE (username, avatar_url, bio) ON public.profiles TO authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.user_roles TO authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.app_settings TO authenticated;
 
--- 4. Privilegios por Columna en 'animes' para Moderadores/Admins (Bloquea bypass de claimed_by y views_count)
-GRANT INSERT ON public.animes TO authenticated;
+-- 4. Privilegios por Columna en 'animes' (Bloquea bypass de claimed_by, claimed_at y views_count tanto en INSERT como en UPDATE)
+GRANT INSERT (
+    name, title_romaji, title_english, title_native,
+    cover_image, banner_image, status, episodes,
+    description, anilist_id, season_year, format, slug,
+    air_day, air_time, air_timezone, start_date, end_date
+) ON public.animes TO authenticated;
+
 GRANT UPDATE (
     name, title_romaji, title_english, title_native,
     cover_image, banner_image, status, episodes,
     description, anilist_id, season_year, format, slug,
     air_day, air_time, air_timezone, start_date, end_date
 ) ON public.animes TO authenticated;
+
 GRANT DELETE ON public.animes TO authenticated;
 
-GRANT INSERT, UPDATE, DELETE ON public.episodes, public.episode_sources, public.anime_genres TO authenticated;
-GRANT INSERT, UPDATE, DELETE ON public.admin_notifications TO authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.episodes, public.episode_sources, public.genres, public.anime_genres, public.avatars, public.admin_notifications TO authenticated;
+
+GRANT EXECUTE ON FUNCTION public.is_active_user() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.is_moderator_or_admin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_anime(INT) TO authenticated;
+
+-- 5. Concesiones Explícitas a 'service_role' (Worker / Backend en Render)
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role;
+GRANT EXECUTE ON FUNCTION public.record_anime_view(INT) TO service_role;
 ```
 
 ---

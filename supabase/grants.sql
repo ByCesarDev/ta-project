@@ -118,3 +118,13 @@ GRANT EXECUTE ON FUNCTION public.is_active_user() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_moderator_or_admin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_anime(INT) TO authenticated;
+
+-- ========================================================
+-- 4. CONCESIONES EXPLÍCITAS PARA ROL 'service_role' (Backend / Render Worker)
+-- ========================================================
+-- Garantiza privilegios totales deterministas para operaciones de servidor con Secret Key
+GRANT USAGE ON SCHEMA public TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO service_role;
+GRANT EXECUTE ON FUNCTION public.record_anime_view(INT) TO service_role;
