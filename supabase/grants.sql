@@ -43,12 +43,11 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 
 -- 3.2 Interacción Personal de Usuarios (CRUD en datos propios protegido por RLS)
+-- Nota: Las tablas de staging (unresolved_*) son solo lectura para clientes y administradas por service_role
 GRANT INSERT, UPDATE, DELETE ON TABLE 
     public.user_history, 
     public.user_episode_status, 
-    public.watch_later,
-    public.unresolved_legacy_history,
-    public.unresolved_watch_later
+    public.watch_later
 TO authenticated;
 
 -- 3.3 Privilegios por Columna en 'profiles' (Evita modificación de ID o timestamps)

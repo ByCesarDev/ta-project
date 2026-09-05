@@ -353,6 +353,7 @@ CREATE INDEX IF NOT EXISTS idx_watch_later_user_id ON public.watch_later(user_id
 -- ========================================================
 CREATE TABLE IF NOT EXISTS public.unresolved_legacy_history (
     id BIGSERIAL PRIMARY KEY,
+    legacy_id INT UNIQUE NOT NULL,
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     legacy_anime_id VARCHAR(255) NOT NULL,
     anime_title VARCHAR(255) NOT NULL,
@@ -364,8 +365,12 @@ CREATE TABLE IF NOT EXISTS public.unresolved_legacy_history (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_unresolved_history_user_id ON public.unresolved_legacy_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_unresolved_history_legacy_id ON public.unresolved_legacy_history(legacy_id);
+
 CREATE TABLE IF NOT EXISTS public.unresolved_watch_later (
     id BIGSERIAL PRIMARY KEY,
+    legacy_id INT UNIQUE NOT NULL,
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     legacy_slug VARCHAR(255) NOT NULL,
@@ -376,6 +381,7 @@ CREATE TABLE IF NOT EXISTS public.unresolved_watch_later (
 );
 
 CREATE INDEX IF NOT EXISTS idx_unresolved_watch_later_user_id ON public.unresolved_watch_later(user_id);
+CREATE INDEX IF NOT EXISTS idx_unresolved_watch_later_legacy_id ON public.unresolved_watch_later(legacy_id);
 
 -- ========================================================
 -- 20. MAPA FORMAL DE MIGRACIÓN DE USUARIOS (public.migration_user_map)

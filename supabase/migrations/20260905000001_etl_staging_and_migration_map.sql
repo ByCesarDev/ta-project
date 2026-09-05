@@ -1,7 +1,8 @@
 -- ==============================================================================
 -- TOTALANIME 2.0 - MIGRATION 20260905000001
 -- Nombre: etl_staging_and_migration_map
--- Descripción: Tablas de staging para historial no resuelto, watchlist no resuelto
+-- Descripción: Tablas de staging protegidas para historial y watchlist no resueltos
+--              con trazabilidad legacy_id e inmutabilidad cliente (solo backend escribe),
 --              y formalización del mapa de migración de usuarios INT -> UUID.
 -- ==============================================================================
 
@@ -15,9 +16,10 @@ CREATE TABLE IF NOT EXISTS public.migration_user_map (
 );
 
 -- 2. STAGING DE HISTORIAL LEGACY NO RESUELTO
--- Preserva historial de animes/episodios que no están en el catálogo inicial de 17 animes
+-- Preserva historial de animes/episodios fuera de catálogo con trazabilidad e idempotencia
 CREATE TABLE IF NOT EXISTS public.unresolved_legacy_history (
     id BIGSERIAL PRIMARY KEY,
+    legacy_id INT UNIQUE NOT NULL,
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     legacy_anime_id VARCHAR(255) NOT NULL,
     anime_title VARCHAR(255) NOT NULL,
@@ -30,11 +32,13 @@ CREATE TABLE IF NOT EXISTS public.unresolved_legacy_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_unresolved_history_user_id ON public.unresolved_legacy_history(user_id);
+CREATE INDEX IF NOT EXISTS idx_unresolved_history_legacy_id ON public.unresolved_legacy_history(legacy_id);
 
 -- 3. STAGING DE WATCHLIST LEGACY NO RESUELTO
--- Preserva favoritos cuyo anime no está aún en el catálogo oficial (e.g. Bunny Girl, Re:ZERO, Naruto)
+-- Preserva favoritos cuyo anime no está aún en catálogo con trazabilidad e idempotencia
 CREATE TABLE IF NOT EXISTS public.unresolved_watch_later (
     id BIGSERIAL PRIMARY KEY,
+    legacy_id INT UNIQUE NOT NULL,
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     legacy_slug VARCHAR(255) NOT NULL,
@@ -45,41 +49,48 @@ CREATE TABLE IF NOT EXISTS public.unresolved_watch_later (
 );
 
 CREATE INDEX IF NOT EXISTS idx_unresolved_watch_later_user_id ON public.unresolved_watch_later(user_id);
+CREATE INDEX IF NOT EXISTS idx_unresolved_watch_later_legacy_id ON public.unresolved_watch_later(legacy_id);
 
 -- 4. ROW LEVEL SECURITY (RLS)
 ALTER TABLE public.migration_user_map ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.unresolved_legacy_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.unresolved_watch_later ENABLE ROW LEVEL SECURITY;
 
+-- 4.1 migration_user_map: Solo lectura para administradores
 DROP POLICY IF EXISTS "MigrationUserMap: Admin Read Only" ON public.migration_user_map;
 CREATE POLICY "MigrationUserMap: Admin Read Only" ON public.migration_user_map
     FOR SELECT
     USING ((select public.is_admin()));
 
+-- 4.2 Tablas de Staging: Solo lectura (SELECT) para el dueño de los datos (inmutabilidad desde cliente)
+DROP POLICY IF EXISTS "UnresolvedHistory: Read Own" ON public.unresolved_legacy_history;
 DROP POLICY IF EXISTS "UnresolvedHistory: Manage Own" ON public.unresolved_legacy_history;
-CREATE POLICY "UnresolvedHistory: Manage Own" ON public.unresolved_legacy_history 
-    FOR ALL 
-    USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
-    WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
+CREATE POLICY "UnresolvedHistory: Read Own" ON public.unresolved_legacy_history 
+    FOR SELECT 
+    USING ((select auth.uid()) = user_id AND (select public.is_active_user()));
 
+DROP POLICY IF EXISTS "UnresolvedWatchLater: Read Own" ON public.unresolved_watch_later;
 DROP POLICY IF EXISTS "UnresolvedWatchLater: Manage Own" ON public.unresolved_watch_later;
-CREATE POLICY "UnresolvedWatchLater: Manage Own" ON public.unresolved_watch_later 
-    FOR ALL 
-    USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
-    WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
+CREATE POLICY "UnresolvedWatchLater: Read Own" ON public.unresolved_watch_later 
+    FOR SELECT 
+    USING ((select auth.uid()) = user_id AND (select public.is_active_user()));
+
+-- 4.3 Administrador puede auditar staging
+DROP POLICY IF EXISTS "UnresolvedHistory: Admin Read Only" ON public.unresolved_legacy_history;
+CREATE POLICY "UnresolvedHistory: Admin Read Only" ON public.unresolved_legacy_history
+    FOR SELECT USING ((select public.is_admin()));
+
+DROP POLICY IF EXISTS "UnresolvedWatchLater: Admin Read Only" ON public.unresolved_watch_later;
+CREATE POLICY "UnresolvedWatchLater: Admin Read Only" ON public.unresolved_watch_later
+    FOR SELECT USING ((select public.is_admin()));
 
 -- 5. PERMISOS Y ROLES (GRANTs)
+-- Los usuarios regulares SOLO pueden leer sus datos no resueltos, NUNCA insertar/modificar/borrar en staging
 GRANT SELECT ON public.migration_user_map TO authenticated;
-GRANT INSERT, UPDATE, DELETE ON TABLE 
-    public.unresolved_legacy_history,
-    public.unresolved_watch_later
-TO authenticated;
+GRANT SELECT ON public.unresolved_legacy_history TO authenticated;
+GRANT SELECT ON public.unresolved_watch_later TO authenticated;
 
-GRANT USAGE, SELECT ON SEQUENCE 
-    public.unresolved_legacy_history_id_seq,
-    public.unresolved_watch_later_id_seq
-TO authenticated;
-
+-- Service Role (Backend / Workers en Render) posee control total
 GRANT ALL ON TABLE
     public.migration_user_map,
     public.unresolved_legacy_history,

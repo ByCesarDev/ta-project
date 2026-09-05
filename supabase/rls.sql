@@ -230,21 +230,29 @@ CREATE POLICY "WatchLater: Manage Own" ON public.watch_later
     USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
     WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
 
--- Staging de Historial y Watchlist No Resueltos
+-- Staging de Historial y Watchlist No Resueltos (Inmutables por clientes, solo lectura)
 ALTER TABLE public.unresolved_legacy_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.unresolved_watch_later ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "UnresolvedHistory: Read Own" ON public.unresolved_legacy_history;
 DROP POLICY IF EXISTS "UnresolvedHistory: Manage Own" ON public.unresolved_legacy_history;
-CREATE POLICY "UnresolvedHistory: Manage Own" ON public.unresolved_legacy_history 
-    FOR ALL 
-    USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
-    WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
+CREATE POLICY "UnresolvedHistory: Read Own" ON public.unresolved_legacy_history 
+    FOR SELECT 
+    USING ((select auth.uid()) = user_id AND (select public.is_active_user()));
 
+DROP POLICY IF EXISTS "UnresolvedWatchLater: Read Own" ON public.unresolved_watch_later;
 DROP POLICY IF EXISTS "UnresolvedWatchLater: Manage Own" ON public.unresolved_watch_later;
-CREATE POLICY "UnresolvedWatchLater: Manage Own" ON public.unresolved_watch_later 
-    FOR ALL 
-    USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
-    WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
+CREATE POLICY "UnresolvedWatchLater: Read Own" ON public.unresolved_watch_later 
+    FOR SELECT 
+    USING ((select auth.uid()) = user_id AND (select public.is_active_user()));
+
+DROP POLICY IF EXISTS "UnresolvedHistory: Admin Read Only" ON public.unresolved_legacy_history;
+CREATE POLICY "UnresolvedHistory: Admin Read Only" ON public.unresolved_legacy_history
+    FOR SELECT USING ((select public.is_admin()));
+
+DROP POLICY IF EXISTS "UnresolvedWatchLater: Admin Read Only" ON public.unresolved_watch_later;
+CREATE POLICY "UnresolvedWatchLater: Admin Read Only" ON public.unresolved_watch_later
+    FOR SELECT USING ((select public.is_admin()));
 
 -- Mapa de Migración de Usuarios
 ALTER TABLE public.migration_user_map ENABLE ROW LEVEL SECURITY;
