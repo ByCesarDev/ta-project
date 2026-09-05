@@ -1,10 +1,10 @@
 # 🏛️ Especificación Técnica y Plan Maestro Integral: TotalAnime 2.0 (v2.4.1 Final)
 
-> **Documento de Diseño Técnico Definitivo (Master RFC / Architecture Blueprint - Cerrado)**  
-> **Versión:** 2.4.1 (Production-Ready Final)  
-> **Fecha:** 2026-09-05  
-> **Estado:** ✅ **FASE 0 APROBADA - CERRADA PARA IMPLEMENTACIÓN**  
-> **Paradigma:** 100% JavaScript / TypeScript | BaaS-First Hybrid Architecture | Zero-PHP  
+> **Documento de Diseño Técnico Definitivo (Master RFC / Architecture Blueprint - Cerrado)**
+> **Versión:** 2.4.1 (Production-Ready Final)
+> **Fecha:** 2026-09-05
+> **Estado:** ✅ **FASE 0 APROBADA - CERRADA PARA IMPLEMENTACIÓN**
+> **Paradigma:** 100% JavaScript / TypeScript | BaaS-First Hybrid Architecture | Zero-PHP
 > **Stack:** React 19.2 + Vite (Web y Admin) | Node.js 22 LTS + Express (API/Workers en Render) | Supabase (PostgreSQL 16+ + Auth + Storage + RLS) | React Native 0.86+ + Expo SDK 57 (App Móvil)
 
 ---
@@ -19,7 +19,7 @@
 6. [Estrategia Determinista de GRANTs y Privilegios por Columna](#6-estrategia-determinista-de-grants-y-privilegios-por-columna)
 7. [Políticas de Seguridad en Supabase Storage (Ciclo de Vida Completo)](#7-políticas-de-seguridad-en-supabase-storage-ciclo-de-vida-completo)
 8. [Pipeline ETL de Migración de Datos y Mapeo de Usuarios (INT $\rightarrow$ UUID)](#8-pipeline-etl-de-migración-de-datos-y-mapeo-de-usuarios-int--uuid)
-9. [Especificación de la API/Workers en Render (`api/`) & Sistema de Jobs](#9-especificación-de-la-apiworkers-en-render-api--sistema-de-jobs)
+9. [Especificación de la API/Workers en Render (`api/`) &amp; Sistema de Jobs](#9-especificación-de-la-apiworkers-en-render-api--sistema-de-jobs)
 10. [Arquitectura del Panel de Administración (`admin/` en React 19 + Vite)](#10-arquitectura-del-panel-de-administración-admin-en-react-19--vite)
 11. [Arquitectura del Frontend Web (`web/` en React 19 + Vite)](#11-arquitectura-del-frontend-web-web-en-react-19--vite)
 12. [Arquitectura de la Aplicación Móvil (`app/` en Expo SDK 57 + RN 0.86)](#12-arquitectura-de-la-aplicación-móvil-app-en-expo-sdk-57--rn-086)
@@ -31,7 +31,9 @@
 ## 1. Visión General y Paradigma Arquitectónico
 
 ### 1.1 Naturaleza de la Arquitectura: BaaS-First Híbrida
+
 TotalAnime 2.0 adopta una arquitectura **BaaS-First Híbrida**:
+
 - **Supabase BaaS:** Fuente de verdad central. Clientes (Web, Admin y App Móvil) consumen directamente PostgreSQL vía PostgREST con políticas **Row Level Security (RLS)** y privilegios por columna (**Column-Level Security**). Sesiones gestionadas vía Supabase Auth (JWT) y CDN con Supabase Storage.
 - **API en Render (Workers & Scrapers):** Microservicio en Node.js 22 LTS exclusivo para scraping Base64 de servidores de video (`videos-api`), cola asíncrona de jobs (`scrape_jobs`), ingesta AniList GraphQL y mutaciones privilegiadas vía `SUPABASE_SECRET_KEY`.
 - **Zero-PHP:** El monolito legacy de Laragon se utiliza exclusivamente como backup histórico de datos.
@@ -40,26 +42,26 @@ TotalAnime 2.0 adopta una arquitectura **BaaS-First Híbrida**:
 
 ## 2. Matriz de Migración Legacy (`totalanime (2).sql` $\rightarrow$ TotalAnime 2.0)
 
-| Tabla Legacy (MySQL) | Destino en TotalAnime 2.0 | Acción | Justificación Técnica |
-| :--- | :--- | :--- | :--- |
-| `user_form` | `auth.users` + `public.profiles` + `public.user_roles` | **Transformar (ETL)** | Separación de identidad (Auth), perfil público (`profiles`) y autorización (`user_roles`). Requerirá reset de contraseña (eliminación de MD5). |
-| `user_sessions` | `auth.sessions` (Supabase nativo) | **Eliminar** | Supabase Auth maneja sesiones, refresh tokens y rotación JWT de forma nativa. |
-| `rate_limits` | Middleware API + Supabase Auth Rate Limiting | **Eliminar** | La base de datos no almacena rate-limiting volátil; se maneja en Edge/Redis. |
-| `security_logs` | `public.audit_logs` | **Rediseñar** | Registro de auditoría *append-only* para acciones críticas de moderadores y administradores. |
-| `system_config` | `public.app_settings` | **Transformar** | Clave/Valor para configuración global pública (**cero secretos**). |
-| `system_notifications` | `public.admin_notifications` | **Transformar** | Alertas operativas de próximos estrenos para moderadores/admins. |
-| `pageview` | `public.anime_views` + `views_count` | **Rediseñar** | `views_count` en `animes`/`episodes` para lectura O(1) y `anime_views` para agregación diaria particionada por fecha. |
-| `google` | *N/A* | **Eliminar** | Tabla residual legacy sin uso real. |
-| `genres` | `public.genres` | **Migrar (1:1)** | Catálogo oficial de 19 géneros. |
-| `avatars` | `public.avatars` + Supabase Storage | **Migrar** | 13 avatares predeterminados en bucket `avatars`. |
-| `animes` | `public.animes` | **Transformar** | Se elimina la columna redundante `genres TEXT` (la fuente de verdad es `anime_genres`). Se conservan campos de emisión y títulos multilingües. |
-| `anime_genres` | `public.anime_genres` | **Migrar (1:1)** | Tabla relacional N:M de animes y géneros. |
-| `episodes` | `public.episodes` | **Transformar** | Se eliminan las columnas rígidas `video_url1/2/3`. Se añade `air_at TIMESTAMPTZ`. |
-| *N/A (Nueva)* | `public.episode_sources` | **Crear** | **Soporte N-ario de servidores de video** con clave única para idempotencia (`episode_id, provider, language, quality`). |
-| *N/A (Nueva)* | `public.scrape_jobs` | **Crear** | Cola de tareas de scraping asíncrono para series largas. |
-| `user_history` | `public.user_history` | **Normalizar (ETL)** | Se eliminan columnas desnormalizadas (`anime_title`, `anime_image`, etc.). Mapeo de `user_id` de `INT` a `UUID`. |
-| `user_episode_status` | `public.user_episode_status` | **Transformar (ETL)** | Mapeo de `user_id` de `INT` a `UUID`. |
-| `watch_later` | `public.watch_later` | **Normalizar (ETL)** | Se eliminan columnas desnormalizadas (`name`, `image`, etc.). Mapeo de `user_id` de `INT` a `UUID`. |
+| Tabla Legacy (MySQL)     | Destino en TotalAnime 2.0                                    | Acción                     | Justificación Técnica                                                                                                                                  |
+| :----------------------- | :----------------------------------------------------------- | :-------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `user_form`            | `auth.users` + `public.profiles` + `public.user_roles` | **Transformar (ETL)** | Separación de identidad (Auth), perfil público (`profiles`) y autorización (`user_roles`). Requerirá reset de contraseña (eliminación de MD5). |
+| `user_sessions`        | `auth.sessions` (Supabase nativo)                          | **Eliminar**          | Supabase Auth maneja sesiones, refresh tokens y rotación JWT de forma nativa.                                                                           |
+| `rate_limits`          | Middleware API + Supabase Auth Rate Limiting                 | **Eliminar**          | La base de datos no almacena rate-limiting volátil; se maneja en Edge/Redis.                                                                            |
+| `security_logs`        | `public.audit_logs`                                        | **Rediseñar**        | Registro de auditoría*append-only* para acciones críticas de moderadores y administradores.                                                          |
+| `system_config`        | `public.app_settings`                                      | **Transformar**       | Clave/Valor para configuración global pública (**cero secretos**).                                                                               |
+| `system_notifications` | `public.admin_notifications`                               | **Transformar**       | Alertas operativas de próximos estrenos para moderadores/admins.                                                                                        |
+| `pageview`             | `public.anime_views` + `views_count`                     | **Rediseñar**        | `views_count` en `animes`/`episodes` para lectura O(1) y `anime_views` para agregación diaria particionada por fecha.                           |
+| `google`               | *N/A*                                                      | **Eliminar**          | Tabla residual legacy sin uso real.                                                                                                                      |
+| `genres`               | `public.genres`                                            | **Migrar (1:1)**      | Catálogo oficial de 19 géneros.                                                                                                                        |
+| `avatars`              | `public.avatars` + Supabase Storage                        | **Migrar**            | 13 avatares predeterminados en bucket`avatars`.                                                                                                        |
+| `animes`               | `public.animes`                                            | **Transformar**       | Se elimina la columna redundante`genres TEXT` (la fuente de verdad es `anime_genres`). Se conservan campos de emisión y títulos multilingües.     |
+| `anime_genres`         | `public.anime_genres`                                      | **Migrar (1:1)**      | Tabla relacional N:M de animes y géneros.                                                                                                               |
+| `episodes`             | `public.episodes`                                          | **Transformar**       | Se eliminan las columnas rígidas`video_url1/2/3`. Se añade `air_at TIMESTAMPTZ`.                                                                   |
+| *N/A (Nueva)*          | `public.episode_sources`                                   | **Crear**             | **Soporte N-ario de servidores de video** con clave única para idempotencia (`episode_id, provider, language, quality`).                        |
+| *N/A (Nueva)*          | `public.scrape_jobs`                                       | **Crear**             | Cola de tareas de scraping asíncrono para series largas.                                                                                                |
+| `user_history`         | `public.user_history`                                      | **Normalizar (ETL)**  | Se eliminan columnas desnormalizadas (`anime_title`, `anime_image`, etc.). Mapeo de `user_id` de `INT` a `UUID`.                               |
+| `user_episode_status`  | `public.user_episode_status`                               | **Transformar (ETL)** | Mapeo de`user_id` de `INT` a `UUID`.                                                                                                               |
+| `watch_later`          | `public.watch_later`                                       | **Normalizar (ETL)**  | Se eliminan columnas desnormalizadas (`name`, `image`, etc.). Mapeo de `user_id` de `INT` a `UUID`.                                            |
 
 ---
 
@@ -78,7 +80,7 @@ graph TB
         PG[("PostgreSQL Database\n(RLS Estricto + Grants)")]
         STOR["Supabase Storage CDN\n(posters, banners, avatars)"]
         RT["Supabase Realtime\n(Sync WebSockets)"]
-        
+      
         AUTH --> PG
         PG <--> RT
     end
@@ -88,7 +90,7 @@ graph TB
         VSCRAP["Base64 Video Scraper\n(videos-api engine)"]
         AL_SYNC["AniList Ingestion Worker"]
         JOBS["Scrape Job Queue Engine"]
-        
+      
         API --> VSCRAP
         API --> AL_SYNC
         API --> JOBS
@@ -674,12 +676,12 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIO
 
 ### 7.1 Configuración de Buckets
 
-| Bucket | Visibilidad | MIME Types | Tamaño Máx | Políticas |
-| :--- | :--- | :--- | :--- | :--- |
-| `posters` | Público | `image/webp, image/jpeg, image/png` | 5 MB | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()` |
-| `banners` | Público | `image/webp, image/jpeg, image/png` | 8 MB | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()` |
-| `thumbnails` | Público | `image/webp, image/jpeg, image/png` | 3 MB | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()` |
-| `avatars` | Público | `image/webp, image/jpeg, image/png` | 2 MB | **Lectura:** Pública \| **Sistema:** Solo Admin \| **Custom:** `{user_id}/avatar.webp` |
+| Bucket         | Visibilidad | MIME Types                            | Tamaño Máx | Políticas                                                                                                  |
+| :------------- | :---------- | :------------------------------------ | :----------- | :---------------------------------------------------------------------------------------------------------- |
+| `posters`    | Público    | `image/webp, image/jpeg, image/png` | 5 MB         | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                        |
+| `banners`    | Público    | `image/webp, image/jpeg, image/png` | 8 MB         | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                        |
+| `thumbnails` | Público    | `image/webp, image/jpeg, image/png` | 3 MB         | **Lectura:** Pública \| **Escritura:** Solo `is_moderator_or_admin()`                        |
+| `avatars`    | Público    | `image/webp, image/jpeg, image/png` | 2 MB         | **Lectura:** Pública \| **Sistema:** Solo Admin \| **Custom:** `{user_id}/avatar.webp` |
 
 ```sql
 -- Políticas en storage.objects
@@ -743,6 +745,7 @@ graph LR
 ## 9. Especificación de la API/Workers en Render (`api/`) & Sistema de Jobs
 
 ### 9.1 Árbol de Directorios
+
 ```
 c:\Users\Usuario\Desktop\Proyectos\totalanime\api/
 ├── package.json
@@ -776,6 +779,7 @@ c:\Users\Usuario\Desktop\Proyectos\totalanime\api/
 ```
 
 ### 9.2 CORS Allowlist Estricto
+
 ```typescript
 import cors from 'cors';
 
@@ -802,10 +806,11 @@ export const corsMiddleware = cors({
 
 ## 10. Arquitectura del Panel de Administración (`admin/` en React 19 + Vite)
 
-Ubicación: `c:\Users\Usuario\Desktop\Proyectos\totalanime\admin`  
+Ubicación: `c:\Users\Usuario\Desktop\Proyectos\totalanime\admin`
 Stack: **React 19.2 + Vite + TypeScript + Tailwind CSS + Lucide Icons + TanStack Query**
 
 ### 10.1 Vistas y Funcionalidades
+
 1. **Login de Personal (`/login`):** Valida credenciales contra Supabase Auth y bloquea acceso si `role NOT IN ('admin', 'moderator')` o `status !== 'active'`.
 2. **Dashboard (`/`):** Métricas de catálogo, conteo de fuentes activas vs caídas, cola de `scrape_jobs` y alertas de emisión.
 3. **Catálogo de Animes (`/animes`):**
@@ -821,10 +826,11 @@ Stack: **React 19.2 + Vite + TypeScript + Tailwind CSS + Lucide Icons + TanStack
 
 ## 11. Arquitectura del Frontend Web (`web/` en React 19 + Vite)
 
-Ubicación: `c:\Users\Usuario\Desktop\Proyectos\totalanime\web`  
+Ubicación: `c:\Users\Usuario\Desktop\Proyectos\totalanime\web`
 Stack: **React 19.2 + Vite + TypeScript + Tailwind CSS + HLS.js / Plyr**
 
 ### 11.1 Vistas Principales
+
 - `/`: **Home.** Carrusel hero, estrenos de hoy, animes más vistos y buscador en tiempo real.
 - `/anime/:slug`: **Ficha de Anime.** Sinopsis, géneros interactivos, banner panorámico y lista de episodios.
 - `/watch/:slug/:episodeNumber`: **Reproductor Multi-Servidor.**
@@ -838,10 +844,11 @@ Stack: **React 19.2 + Vite + TypeScript + Tailwind CSS + HLS.js / Plyr**
 
 ## 12. Arquitectura de la Aplicación Móvil (`app/` en Expo SDK 57 + RN 0.86)
 
-Ubicación: `c:\Users\Usuario\Desktop\Proyectos\totalanime\app`  
+Ubicación: `c:\Users\Usuario\Desktop\Proyectos\totalanime\app`
 Stack: **React Native 0.86+ + Expo SDK 57 + React 19.2 + TypeScript + Expo Router**
 
 ### 12.1 Estructura y Navegación
+
 - `(auth)`: Login y Registro nativo con `expo-secure-store`.
 - `(tabs)`: `index.tsx` (Home), `explore.tsx` (Buscador), `watchlist.tsx` (Favoritos), `profile.tsx` (Cuenta).
 - `watch/[episodeId].tsx`: Reproductor nativo a pantalla completa con bloqueo de rotación y selector de servidores dinámico.
@@ -1003,23 +1010,24 @@ gantt
 
 ### Checklist Exhaustivo de Tareas
 
-- [x] **FASE 0: Auditoría y Aprobación del Modelo Definitivo**
-  - [x] Matriz de migración legacy aprobada.
-  - [x] Modelo DDL final con `episode_sources`, `audit_logs`, `scrape_jobs`, `anime_views`.
-  - [x] Hardening de `SECURITY DEFINER` con `search_path = ''`.
-  - [x] Column-Level Privileges para evitar bypass de `claim_anime()`.
-  - [x] Normalización estricta de `user_history` y `watch_later`.
-  - [x] Definición de stack móvil: Expo SDK 57 + React Native 0.86 + React 19.2.
+- [X] **FASE 0: Auditoría y Aprobación del Modelo Definitivo**
 
-- [ ] **FASE 1: Configuración de Base de Datos y Seguridad en Supabase**
-  - [ ] Crear proyecto en [supabase.com](https://supabase.com).
-  - [ ] Crear directorio `Desktop/Proyectos/totalanime/supabase/`.
-  - [ ] Generar y ejecutar `schema.sql` (18 tablas/tipos/triggers).
-  - [ ] Generar y ejecutar `grants.sql` (Revocación y concesión determinista por columna).
-  - [ ] Generar y ejecutar `rls.sql` (Políticas con RBAC Admin/Moderador y función `is_active_user`).
-  - [ ] Configurar buckets de almacenamiento: `posters`, `banners`, `avatars`, `thumbnails` con sus políticas de acceso en `storage.sql`.
+  - [X] Matriz de migración legacy aprobada.
+  - [X] Modelo DDL final con `episode_sources`, `audit_logs`, `scrape_jobs`, `anime_views`.
+  - [X] Hardening de `SECURITY DEFINER` con `search_path = ''`.
+  - [X] Column-Level Privileges para evitar bypass de `claim_anime()`.
+  - [X] Normalización estricta de `user_history` y `watch_later`.
+  - [X] Definición de stack móvil: Expo SDK 57 + React Native 0.86 + React 19.2.
+- [X] **FASE 1: Configuración de Base de Datos y Seguridad en Supabase**
 
+  - [X] Crear proyecto en [supabase.com](https://supabase.com).
+  - [X] Crear directorio `Desktop/Proyectos/totalanime/supabase/`.
+  - [X] Generar y ejecutar `schema.sql` (18 tablas/tipos/triggers).
+  - [X] Generar y ejecutar `grants.sql` (Revocación y concesión determinista por columna).
+  - [X] Generar y ejecutar `rls.sql` (Políticas con RBAC Admin/Moderador y función `is_active_user`).
+  - [X] Configurar buckets de almacenamiento: `posters`, `banners`, `avatars`, `thumbnails` con sus políticas de acceso en `storage.sql`.
 - [ ] **FASE 2: Pipeline ETL y Migración de Datos**
+
   - [ ] Generar y ejecutar `seed_migration.sql` para:
     - [ ] 19 Géneros oficiales.
     - [ ] 13 Avatares del sistema.
@@ -1027,28 +1035,28 @@ gantt
     - [ ] 400+ Episodios migrados a `public.episodes` con `air_at`.
     - [ ] Transformación de URLs de video existentes a la tabla `public.episode_sources`.
     - [ ] Mapeo de usuarios legacy con `migration_user_map`.
-
 - [ ] **FASE 3: API y Workers en Render (`api/`)**
+
   - [ ] Inicializar proyecto Node.js 22 LTS / TypeScript en `Desktop/Proyectos/totalanime/api/`.
   - [ ] Integrar motor de scraping Base64 de `videos-api` en `videoScraper.service.ts`.
   - [ ] Integrar cliente GraphQL de AniList en `anilist.service.ts`.
   - [ ] Implementar sistema de colas de scraping asíncrono (`scrapeWorker.ts`).
   - [ ] Implementar `jwtAuthGuard.ts` con validación de roles y estado activo de Supabase.
   - [ ] Configurar `render.yaml` y desplegar en Render con `SUPABASE_SECRET_KEY` y CORS allowlist.
-
 - [ ] **FASE 4: Panel de Administración (`admin/`)**
+
   - [ ] Inicializar SPA en `Desktop/Proyectos/totalanime/admin/` (`npm create vite@latest admin -- --template react-ts`).
   - [ ] Configurar `VITE_SUPABASE_PUBLISHABLE_KEY`, `@tanstack/react-query`, Tailwind CSS y Lucide Icons.
   - [ ] Crear autenticación de administrador protegida por RBAC.
   - [ ] Implementar modal de importación AniList + barra de progreso de `scrape_jobs` en tiempo real.
   - [ ] Implementar editor masivo de servidores de streaming (`episode_sources`).
-
 - [ ] **FASE 5: Frontend Web (`web/`)**
+
   - [ ] Inicializar SPA en `Desktop/Proyectos/totalanime/web/` (`npm create vite@latest web -- --template react-ts`).
   - [ ] Desarrollar Home, Ficha de Anime y Reproductor de video HLS con selector dinámico de servidores (`[Mega] [StreamWish] [Streamtape] [FileMoon]`).
   - [ ] Integrar autenticación, historial de usuario y lista de favoritos con Supabase.
-
 - [ ] **FASE 6: Aplicación Móvil (`app/`)**
+
   - [ ] Inicializar Expo App en `Desktop/Proyectos/totalanime/app/` (`npx create-expo-app app -t tabs`).
   - [ ] Conectar cliente Supabase con `expo-secure-store` y `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
   - [ ] Desarrollar pantallas nativas (Home, Explorador, Favoritos, Perfil).

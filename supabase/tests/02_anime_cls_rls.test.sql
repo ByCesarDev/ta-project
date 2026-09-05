@@ -17,17 +17,17 @@ VALUES
 
 UPDATE public.user_roles SET role = 'moderator' WHERE user_id IN ('33333333-3333-3333-3333-333333333333', '44444444-4444-4444-4444-444444444444');
 
--- Crear anime de prueba
+-- Crear anime de prueba con slug único
 INSERT INTO public.animes (id, name, slug)
-VALUES (100, 'Attack on Titan', 'attack-on-titan');
+VALUES (999, 'Test Anime Fixture', 'test-anime-fixture');
 
 -- -----------------------------------------------------------------------------
 -- 2. TEST: Lectura pública del catálogo de animes (Rol: anon)
 -- -----------------------------------------------------------------------------
 SET LOCAL ROLE anon;
 SELECT is(
-    (SELECT name FROM public.animes WHERE id = 100),
-    'Attack on Titan',
+    (SELECT name FROM public.animes WHERE id = 999),
+    'Test Anime Fixture',
     'El catálogo de animes debe ser de acceso público para lectura'
 );
 
@@ -60,7 +60,7 @@ SELECT throws_ok(
 -- 5. TEST: Bloqueo de Column-Level Security en UPDATE sobre claimed_by
 -- -----------------------------------------------------------------------------
 SELECT throws_ok(
-    $$ UPDATE public.animes SET claimed_by = '33333333-3333-3333-3333-333333333333' WHERE id = 100 $$,
+    $$ UPDATE public.animes SET claimed_by = '33333333-3333-3333-3333-333333333333' WHERE id = 999 $$,
     NULL,
     'UPDATE directo sobre la columna claimed_by debe fallar por Column-Level Security (GRANT)'
 );
@@ -69,12 +69,12 @@ SELECT throws_ok(
 -- 6. TEST: Moderator 1 reclama el anime legítimamente con claim_anime()
 -- -----------------------------------------------------------------------------
 SELECT lives_ok(
-    $$ SELECT public.claim_anime(100) $$,
+    $$ SELECT public.claim_anime(999) $$,
     'Moderator 1 puede reclamar el anime disponible usando public.claim_anime()'
 );
 
 SELECT is(
-    (SELECT claimed_by FROM public.animes WHERE id = 100),
+    (SELECT claimed_by FROM public.animes WHERE id = 999),
     '33333333-3333-3333-3333-333333333333'::uuid,
     'El anime debe quedar asignado al UUID del moderador que invocó la función RPC'
 );
@@ -86,7 +86,7 @@ SET LOCAL ROLE authenticated;
 SET LOCAL "request.jwt.claim.sub" = '44444444-4444-4444-4444-444444444444'; -- Moderator 2
 
 SELECT throws_ok(
-    $$ SELECT public.claim_anime(100) $$,
+    $$ SELECT public.claim_anime(999) $$,
     'El anime ya ha sido reclamado por otro moderador o no existe.',
     'claim_anime() debe rechazar reclamos concurrentes de otros moderadores'
 );
