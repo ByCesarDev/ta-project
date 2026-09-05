@@ -42,3 +42,9 @@ jobs:
         run: |
           npm run migrate:users:dry
           npm run migrate:users
+
+      - name: Test Backend API & Scraper Microservice
+        run: |
+          npm run api:test
+          npm run api:build
+

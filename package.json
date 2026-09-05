@@ -7,8 +7,13 @@
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "migrate:users": "tsx scripts/migrate-users.ts",
-    "migrate:users:dry": "tsx scripts/migrate-users.ts --dry-run"
+    "migrate:users:dry": "tsx scripts/migrate-users.ts --dry-run",
+    "api:dev": "npm --prefix api run dev",
+    "api:build": "npm --prefix api run build",
+    "api:test": "npm --prefix api run test",
+    "api:worker": "npm --prefix api run worker:dev"
   },
+
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "dotenv": "^16.4.7"

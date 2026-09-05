@@ -1,0 +1,45 @@
+services:
+  # Web Service: Express API
+  - type: web
+    name: totalanime-api
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: cd api && npm install && npm run build
+    startCommand: cd api && npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SCRAPER_BASE_URL
+        value: https://tioanime.com/
+      - key: CORS_ORIGINS
+        value: https://totalanime.com,https://admin.totalanime.com
+
+  # Background Worker: Scrape Job Processor
+  - type: worker
+    name: totalanime-scrape-worker
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: cd api && npm install && npm run build
+    startCommand: cd api && npm run worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SCRAPER_BASE_URL
+        value: https://tioanime.com/
+      - key: WORKER_POLL_INTERVAL_MS
+        value: 3000

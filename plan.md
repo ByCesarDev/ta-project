@@ -1035,15 +1035,16 @@ gantt
     - [X] 400+ Episodios migrados a `public.episodes` con `air_at`.
     - [X] Transformación de URLs de video existentes a la tabla `public.episode_sources`.
     - [X] Mapeo de usuarios legacy con `migration_user_map`.
-- [ ] **FASE 3: API y Workers en Render (`api/`)**
+- [X] **FASE 3: API y Workers en Render (`api/`)**
 
-  - [ ] Inicializar proyecto Node.js 22 LTS / TypeScript en `Desktop/Proyectos/totalanime/api/`.
-  - [ ] Integrar motor de scraping Base64 de `videos-api` en `videoScraper.service.ts`.
-  - [ ] Integrar cliente GraphQL de AniList en `anilist.service.ts`.
-  - [ ] Implementar sistema de colas de scraping asíncrono (`scrapeWorker.ts`).
-  - [ ] Implementar `jwtAuthGuard.ts` con validación de roles y estado activo de Supabase.
-  - [ ] Configurar `render.yaml` y desplegar en Render con `SUPABASE_SECRET_KEY` y CORS allowlist.
+  - [X] Inicializar proyecto Node.js 22 LTS / TypeScript en `Desktop/Proyectos/totalanime/api/`.
+  - [X] Integrar motor de scraping Base64 de `videos-api` en `videoScraper.service.ts`.
+  - [X] Integrar cliente GraphQL de AniList en `anilist.service.ts`.
+  - [X] Implementar sistema de colas de scraping asíncrono (`scrapeWorker.ts`).
+  - [X] Implementar `jwtAuthGuard.ts` con validación de roles y estado activo de Supabase.
+  - [X] Configurar `render.yaml` y desplegar en Render con `SUPABASE_SECRET_KEY` y CORS allowlist.
 - [ ] **FASE 4: Panel de Administración (`admin/`)**
+
 
   - [ ] Inicializar SPA en `Desktop/Proyectos/totalanime/admin/` (`npm create vite@latest admin -- --template react-ts`).
   - [ ] Configurar `VITE_SUPABASE_PUBLISHABLE_KEY`, `@tanstack/react-query`, Tailwind CSS y Lucide Icons.
