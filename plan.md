@@ -80,7 +80,7 @@ graph TB
         PG[("PostgreSQL Database\n(RLS Estricto + Grants)")]
         STOR["Supabase Storage CDN\n(posters, banners, avatars)"]
         RT["Supabase Realtime\n(Sync WebSockets)"]
-      
+    
         AUTH --> PG
         PG <--> RT
     end
@@ -90,7 +90,7 @@ graph TB
         VSCRAP["Base64 Video Scraper\n(videos-api engine)"]
         AL_SYNC["AniList Ingestion Worker"]
         JOBS["Scrape Job Queue Engine"]
-      
+    
         API --> VSCRAP
         API --> AL_SYNC
         API --> JOBS
@@ -1026,15 +1026,15 @@ gantt
   - [X] Generar y ejecutar `grants.sql` (Revocación y concesión determinista por columna).
   - [X] Generar y ejecutar `rls.sql` (Políticas con RBAC Admin/Moderador y función `is_active_user`).
   - [X] Configurar buckets de almacenamiento: `posters`, `banners`, `avatars`, `thumbnails` con sus políticas de acceso en `storage.sql`.
-- [ ] **FASE 2: Pipeline ETL y Migración de Datos**
+- [X] **FASE 2: Pipeline ETL y Migración de Datos**
 
-  - [ ] Generar y ejecutar `seed_migration.sql` para:
-    - [ ] 19 Géneros oficiales.
-    - [ ] 13 Avatares del sistema.
-    - [ ] 17+ Animes del backup con títulos multilingües y datos de emisión.
-    - [ ] 400+ Episodios migrados a `public.episodes` con `air_at`.
-    - [ ] Transformación de URLs de video existentes a la tabla `public.episode_sources`.
-    - [ ] Mapeo de usuarios legacy con `migration_user_map`.
+  - [X] Generar y ejecutar `seed_migration.sql` para:
+    - [X] 19 Géneros oficiales.
+    - [X] 13 Avatares del sistema.
+    - [X] 17+ Animes del backup con títulos multilingües y datos de emisión.
+    - [X] 400+ Episodios migrados a `public.episodes` con `air_at`.
+    - [X] Transformación de URLs de video existentes a la tabla `public.episode_sources`.
+    - [X] Mapeo de usuarios legacy con `migration_user_map`.
 - [ ] **FASE 3: API y Workers en Render (`api/`)**
 
   - [ ] Inicializar proyecto Node.js 22 LTS / TypeScript en `Desktop/Proyectos/totalanime/api/`.
