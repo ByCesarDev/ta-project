@@ -18,6 +18,7 @@ build/
 .output/
 .vercel
 .turbo
+*.tsbuildinfo
 
 # Supabase Local
 .temp/
