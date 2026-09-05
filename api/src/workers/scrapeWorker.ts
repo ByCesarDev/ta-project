@@ -102,8 +102,14 @@ export class ScrapeWorker {
           break;
         }
 
-        // Renew heartbeat lease while working on this job
-        await jobsService.updateHeartbeat(job.id, this.workerId);
+        // Renew heartbeat lease while working on this job with pre-side-effect fencing
+        const heartbeatOk = await jobsService.updateHeartbeat(job.id, this.workerId);
+        if (!heartbeatOk) {
+          console.warn(
+            `[ScrapeWorker] Lease lost for Job ${job.id} before episode ${ep.episode_number} processing. Aborting without side-effects.`
+          );
+          return;
+        }
 
         try {
           const servers = await videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number);

@@ -26,13 +26,13 @@ DECLARE
     v_job_id UUID;
 BEGIN
     -- 3.1 Rescatar jobs zombis: 'processing' sin actividad por más de 10 minutos
-    -- Se evalúa COALESCE(heartbeat_at, locked_at): si hay heartbeat reciente, el worker está vivo
+    -- Se evalúa COALESCE(heartbeat_at, locked_at, updated_at, created_at) para máxima resiliencia
     UPDATE public.scrape_jobs
     SET status = 'pending',
         locked_at = NULL,
         locked_by = NULL
     WHERE status = 'processing'
-      AND COALESCE(heartbeat_at, locked_at) < NOW() - INTERVAL '10 minutes'
+      AND COALESCE(heartbeat_at, locked_at, updated_at, created_at) < NOW() - INTERVAL '10 minutes'
       AND attempts < max_attempts;
 
     -- Si attempts >= max_attempts, marcar permanentemente como 'failed'
@@ -45,7 +45,7 @@ BEGIN
             )
         )
     WHERE status = 'processing'
-      AND COALESCE(heartbeat_at, locked_at) < NOW() - INTERVAL '10 minutes'
+      AND COALESCE(heartbeat_at, locked_at, updated_at, created_at) < NOW() - INTERVAL '10 minutes'
       AND attempts >= max_attempts;
 
     -- 3.2 Reclamar el siguiente job disponible de forma atómica y no bloqueante
