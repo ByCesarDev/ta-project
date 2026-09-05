@@ -13,6 +13,7 @@ supabase/
 ├── grants.sql           # Permisos: REVOKE ALL y concesiones explícitas a nivel de tabla y columna (CLS)
 ├── storage.sql          # Storage: Creación de 4 buckets y políticas de subida/reemplazo/borrado
 ├── tests/               # Pruebas de seguridad SQL / pgTAP
+│   ├── 000_setup.test.sql
 │   ├── 01_profiles_rls.test.sql
 │   ├── 02_anime_cls_rls.test.sql
 │   ├── 03_jobs_views_rls.test.sql
@@ -47,7 +48,8 @@ Si estás configurando una base de datos en **Supabase Cloud (Dashboard -> SQL E
 - Ejecuta `REVOKE ALL` inicial para anular privilegios excesivos por defecto.
 - Asigna permisos mínimos de lectura a `anon`.
 - Asigna permisos de interacción a `authenticated`.
-- Aplica **Column-Level Security** en `public.animes`, impidiendo la modificación directa de `claimed_by`, `claimed_at` y `views_count`.
+- Concede permisos de escritura a `authenticated` sobre `user_roles` y `app_settings` (restringidos por RLS a `admin`).
+- Aplica **Column-Level Security** en `public.animes` tanto para `INSERT` como para `UPDATE`, impidiendo la manipulación directa de `claimed_by`, `claimed_at` y `views_count`.
 
 ### 4. `storage.sql`
 - Crea los buckets `posters`, `banners`, `thumbnails` y `avatars`.
@@ -75,7 +77,7 @@ supabase test db
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Leer Catálogo (Animes/Episodios)** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Ver Fuentes de Video Activas** | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Registrar Vistas (`record_anime_view`)** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Registrar Vistas (`record_anime_view`)** | ❌ (Anti-Spam) | ❌ (Anti-Spam) | ❌ (Anti-Spam) | ❌ (Anti-Spam) | ✅ (Backend / Secret Key) |
 | **Historial / Watchlist Propio** | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **Actualizar Perfil Propio** | ❌ | ✅ | ✅ | ✅ | ✅ |
 | **Reclamar Anime (`claim_anime`)** | ❌ | ❌ | ✅ (si está libre) | ✅ (cualquiera) | ✅ |
@@ -83,4 +85,5 @@ supabase test db
 | **Eliminar Animes y Episodios** | ❌ | ❌ | ❌ | ✅ | ✅ |
 | **Consultar `audit_logs`** | ❌ | ❌ | ❌ | ✅ | ✅ |
 | **Gestionar Roles de Usuarios** | ❌ | ❌ | ❌ | ✅ | ✅ |
+| **Gestionar `app_settings`** | ❌ | ❌ | ❌ | ✅ | ✅ |
 | **Crear/Actualizar `scrape_jobs`** | ❌ | ❌ | ❌ (Solo lectura) | ❌ (Solo lectura) | ✅ (Secret Key) |

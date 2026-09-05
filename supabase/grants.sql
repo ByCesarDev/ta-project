@@ -30,8 +30,9 @@ GRANT SELECT ON TABLE
     public.profiles 
 TO anon;
 
--- 2.2 Ejecución de RPC Pública para Analítica de Vistas
-GRANT EXECUTE ON FUNCTION public.record_anime_view(INT) TO anon;
+-- Nota de Seguridad: record_anime_view NO se concede a anon ni a authenticated
+-- para evitar manipulación o spam de métricas desde DevTools.
+-- Las vistas se procesan exclusivamente vía API/Worker en Render con Secret Key / Service Role.
 
 -- ========================================================
 -- 3. CONCESIONES PARA ROL 'authenticated' (Usuarios y Moderadores/Admins)
@@ -51,10 +52,34 @@ TO authenticated;
 -- 3.3 Privilegios por Columna en 'profiles' (Evita modificación de ID o timestamps)
 GRANT UPDATE (username, avatar_url, bio) ON TABLE public.profiles TO authenticated;
 
--- 3.4 Privilegios por Columna en 'animes' (BLOQUEO DE BYPASS DE claimed_by, claimed_at Y views_count)
+-- 3.4 Gestión Administrativa de Roles y Settings (Restringido por RLS a Admin)
+GRANT INSERT, UPDATE, DELETE ON TABLE public.user_roles TO authenticated;
+GRANT INSERT, UPDATE, DELETE ON TABLE public.app_settings TO authenticated;
+
+-- 3.5 Privilegios por Columna en 'animes' (BLOQUEO DE BYPASS EN INSERT Y UPDATE)
 -- Nota: claimed_by y claimed_at solo pueden asignarse a través de public.claim_anime()
---       views_count solo puede incrementarse a través de public.record_anime_view()
-GRANT INSERT ON TABLE public.animes TO authenticated;
+--       views_count solo puede incrementarse por el backend / workers autorizados
+GRANT INSERT (
+    name, 
+    title_romaji, 
+    title_english, 
+    title_native, 
+    cover_image, 
+    banner_image, 
+    status, 
+    episodes, 
+    description, 
+    anilist_id, 
+    season_year, 
+    format, 
+    slug, 
+    air_day, 
+    air_time, 
+    air_timezone, 
+    start_date, 
+    end_date
+) ON TABLE public.animes TO authenticated;
+
 GRANT UPDATE (
     name, 
     title_romaji, 
@@ -75,9 +100,10 @@ GRANT UPDATE (
     start_date, 
     end_date
 ) ON TABLE public.animes TO authenticated;
+
 GRANT DELETE ON TABLE public.animes TO authenticated;
 
--- 3.5 Gestión de Catálogo y Recursos (Mod/Admin regulado por RLS)
+-- 3.6 Gestión de Catálogo y Recursos (Mod/Admin regulado por RLS)
 GRANT INSERT, UPDATE, DELETE ON TABLE 
     public.episodes, 
     public.episode_sources, 
@@ -87,9 +113,8 @@ GRANT INSERT, UPDATE, DELETE ON TABLE
     public.admin_notifications 
 TO authenticated;
 
--- 3.6 Ejecución de Funciones de Seguridad y RPCs
+-- 3.7 Ejecución de Funciones de Seguridad y RPCs
 GRANT EXECUTE ON FUNCTION public.is_active_user() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_moderator_or_admin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_anime(INT) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.record_anime_view(INT) TO authenticated;
