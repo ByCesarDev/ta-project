@@ -88,6 +88,52 @@ export const authenticateUser = async (
 };
 
 /**
+ * Middleware: Optionally attaches authenticated user context if valid token provided
+ */
+export const optionalAuthenticateUser = async (
+  req: AuthenticatedRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return next();
+  }
+
+  const token = authHeader.split(' ')[1]?.trim();
+  if (!token) return next();
+
+  try {
+    const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !userData?.user) return next();
+
+    const userId = userData.user.id;
+    const { data: roleData } = await supabaseAdmin
+      .from('user_roles')
+      .select('role, status')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    const role: UserRole = roleData?.role || 'user';
+    const status: UserStatus = roleData?.status || 'active';
+
+    if (status === 'active') {
+      req.user = {
+        id: userId,
+        email: userData.user.email,
+        role,
+        status,
+        username: userData.user.user_metadata?.username,
+      };
+    }
+  } catch {
+    // Ignore error in optional auth
+  }
+
+  next();
+};
+
+/**
  * Middleware: Requires any authenticated active user
  */
 export const requireAuth = [authenticateUser];

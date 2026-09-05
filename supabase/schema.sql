@@ -253,6 +253,11 @@ CREATE TABLE IF NOT EXISTS public.scrape_jobs (
     total_episodes INT DEFAULT 0 NOT NULL,
     processed_episodes INT DEFAULT 0 NOT NULL,
     failed_episodes INT DEFAULT 0 NOT NULL,
+    attempts INT DEFAULT 0 NOT NULL,
+    max_attempts INT DEFAULT 3 NOT NULL,
+    locked_at TIMESTAMPTZ,
+    locked_by TEXT,
+    heartbeat_at TIMESTAMPTZ,
     error_log JSONB DEFAULT '[]'::jsonb,
     requested_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
@@ -260,6 +265,7 @@ CREATE TABLE IF NOT EXISTS public.scrape_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scrape_jobs_status ON public.scrape_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_scrape_jobs_recovery ON public.scrape_jobs(status, locked_at, heartbeat_at);
 
 -- ========================================================
 -- 13. TABLA DE AUDITORÍA APPEND-ONLY (public.audit_logs)

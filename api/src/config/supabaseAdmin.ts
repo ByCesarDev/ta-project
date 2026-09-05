@@ -5,7 +5,8 @@ let supabaseAdminInstance: SupabaseClient | null = null;
 
 export const getSupabaseAdmin = (): SupabaseClient => {
   if (!supabaseAdminInstance) {
-    supabaseAdminInstance = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    const key = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
+    supabaseAdminInstance = createClient(env.SUPABASE_URL, key, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,

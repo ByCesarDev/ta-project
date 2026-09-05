@@ -197,7 +197,10 @@ async function runDataMigration() {
             console.log(' ✅ MIGRACIÓN DE DATOS PRODUCTIVA COMPLETADA AL 100%');
             console.log('='.repeat(80) + '\n');
         } else {
-            console.warn('\n⚠️ Advertencia: Algunos conteos difieren de lo esperado. Revise la tabla anterior.');
+            console.error('\n❌ ERROR: Falla de integridad referencial o conteos incompletos.');
+            console.error(`Esperado: 484 episodios, 17 animes, 19 géneros.`);
+            console.error(`Obtenido: ${counts['episodes'] ?? 0} episodios, ${counts['animes'] ?? 0} animes, ${counts['genres'] ?? 0} géneros.`);
+            process.exit(1);
         }
     }
 }

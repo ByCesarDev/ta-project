@@ -21,6 +21,23 @@ describe('Server Parsers & Normalizer', () => {
       expect(sanitized).toBeNull();
     });
 
+    it('should reject localhost and loopback IP SSRF attempts', () => {
+      expect(sanitizeEmbedUrl('http://localhost:8080/embed')).toBeNull();
+      expect(sanitizeEmbedUrl('http://127.0.0.1:3000/embed')).toBeNull();
+      expect(sanitizeEmbedUrl('http://127.0.0.2/embed')).toBeNull();
+      expect(sanitizeEmbedUrl('http://[::1]:8080/embed')).toBeNull();
+    });
+
+    it('should reject private network IP (RFC 1918) SSRF attempts', () => {
+      expect(sanitizeEmbedUrl('http://10.0.0.1/video.mp4')).toBeNull();
+      expect(sanitizeEmbedUrl('http://192.168.1.100/video.mp4')).toBeNull();
+      expect(sanitizeEmbedUrl('http://172.16.0.5/video.mp4')).toBeNull();
+    });
+
+    it('should reject AWS / cloud metadata service IP SSRF attempts', () => {
+      expect(sanitizeEmbedUrl('http://169.254.169.254/latest/meta-data/')).toBeNull();
+    });
+
     it('should accept valid https URLs', () => {
       const url = 'https://mega.nz/embed/abcdef';
       const sanitized = sanitizeEmbedUrl(url);
@@ -37,6 +54,7 @@ describe('Server Parsers & Normalizer', () => {
       expect(server?.priority).toBe(10);
       expect(server?.quality).toBe('1080p');
       expect(server?.language).toBe('sub');
+      expect(server?.is_active).toBe(true);
     });
 
     it('should correctly identify StreamWish provider with priority 20', () => {
@@ -45,6 +63,7 @@ describe('Server Parsers & Normalizer', () => {
       expect(server?.provider).toBe('streamwish');
       expect(server?.server_name).toBe('StreamWish');
       expect(server?.priority).toBe(20);
+      expect(server?.is_active).toBe(true);
     });
 
     it('should correctly identify FileMoon provider with priority 30', () => {
@@ -53,6 +72,7 @@ describe('Server Parsers & Normalizer', () => {
       expect(server?.provider).toBe('filemoon');
       expect(server?.server_name).toBe('FileMoon');
       expect(server?.priority).toBe(30);
+      expect(server?.is_active).toBe(true);
     });
 
     it('should correctly identify Streamtape provider with priority 40', () => {
@@ -61,6 +81,7 @@ describe('Server Parsers & Normalizer', () => {
       expect(server?.provider).toBe('streamtape');
       expect(server?.server_name).toBe('Streamtape');
       expect(server?.priority).toBe(40);
+      expect(server?.is_active).toBe(true);
     });
 
     it('should correctly identify Mp4Upload provider with priority 50', () => {
@@ -69,20 +90,23 @@ describe('Server Parsers & Normalizer', () => {
       expect(server?.provider).toBe('mp4upload');
       expect(server?.server_name).toBe('Mp4Upload');
       expect(server?.priority).toBe(50);
+      expect(server?.is_active).toBe(true);
     });
 
-    it('should handle custom/unknown domains gracefully as fallback', () => {
+    it('should quarantine custom/unknown domains with is_active = false for review', () => {
       const server = normalizeServer('https://custom-host.tv/embed/video1', 'CustomHost');
       expect(server).not.toBeNull();
       expect(server?.provider).toBe('custom-host');
       expect(server?.server_name).toBe('CustomHost');
       expect(server?.priority).toBe(100);
+      expect(server?.is_active).toBe(false);
     });
 
     it('should support dub stream language flag', () => {
       const server = normalizeServer('https://mega.nz/embed/abc123', 'Mega', 'dub');
       expect(server).not.toBeNull();
       expect(server?.language).toBe('dub');
+      expect(server?.is_active).toBe(true);
     });
   });
 });

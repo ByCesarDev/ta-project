@@ -75,7 +75,43 @@ const KNOWN_PROVIDERS: ProviderDefinition[] = [
 ];
 
 /**
- * Sanitizes and cleans an embed URL
+ * Checks if a hostname belongs to loopback, private RFC 1918 subnets, or cloud metadata IP
+ */
+export const isPrivateOrLoopbackHost = (hostname: string): boolean => {
+  const lower = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+
+  if (
+    lower === 'localhost' ||
+    lower === '127.0.0.1' ||
+    lower === '::1' ||
+    lower === '0.0.0.0' ||
+    lower.endsWith('.localhost') ||
+    lower.endsWith('.local')
+  ) {
+    return true;
+  }
+
+  // AWS / Cloud Provider Instance Metadata Service
+  if (lower === '169.254.169.254') {
+    return true;
+  }
+
+  // IPv4 Private Address Ranges (RFC 1918 & Loopback)
+  const parts = lower.split('.').map(Number);
+  if (parts.length === 4 && parts.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
+    if (parts[0] === 127) return true; // 127.0.0.0/8
+    if (parts[0] === 10) return true;  // 10.0.0.0/8
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12
+    if (parts[0] === 192 && parts[1] === 168) return true; // 192.168.0.0/16
+    if (parts[0] === 169 && parts[1] === 254) return true; // Link-local / metadata
+    if (parts[0] === 0) return true;   // 0.0.0.0/8
+  }
+
+  return false;
+};
+
+/**
+ * Sanitizes and cleans an embed URL with SSRF protection
  */
 export const sanitizeEmbedUrl = (rawUrl: string): string | null => {
   if (!rawUrl || typeof rawUrl !== 'string') return null;
@@ -97,6 +133,12 @@ export const sanitizeEmbedUrl = (rawUrl: string): string | null => {
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       return null;
     }
+
+    // SSRF Hardening: Reject loopback, private networks, and cloud metadata endpoints
+    if (isPrivateOrLoopbackHost(parsed.hostname)) {
+      return null;
+    }
+
     return parsed.href;
   } catch {
     return null;
@@ -117,7 +159,7 @@ export const normalizeServer = (
   const lowerUrl = sanitizedUrl.toLowerCase();
   const lowerHint = (hintName || '').toLowerCase();
 
-  // Find matching provider
+  // Find matching provider from known allowlist
   let matchedProvider: ProviderDefinition | null = null;
 
   for (const prov of KNOWN_PROVIDERS) {
@@ -142,10 +184,11 @@ export const normalizeServer = (
       language,
       quality: matchedProvider.quality,
       priority: matchedProvider.priority,
+      is_active: true, // Known providers are active by default
     };
   }
 
-  // Fallback for custom or unknown provider
+  // Unknown provider: Quarantine with is_active = false for moderator review
   let domain = 'custom';
   try {
     const host = new URL(sanitizedUrl).hostname;
@@ -163,5 +206,6 @@ export const normalizeServer = (
     language,
     quality: '720p',
     priority: 100,
+    is_active: false, // Unknown providers are quarantined until reviewed by staff
   };
 };

@@ -59,10 +59,40 @@ export class JobsService {
   }
 
   /**
-   * Retrieves next pending job and marks it as processing
+   * Retrieves next pending job and marks it as processing with atomic lease and zombie recovery
    */
-  public async claimNextPendingJob(): Promise<ScrapeJob | null> {
-    // Select oldest pending job
+  public async claimNextPendingJob(workerId: string = 'worker-default'): Promise<ScrapeJob | null> {
+    try {
+      // 1. Try PostgreSQL RPC with atomic FOR UPDATE SKIP LOCKED & zombie rescue
+      const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('claim_next_scrape_job', {
+        p_worker_id: workerId,
+      });
+
+      if (!rpcError && Array.isArray(rpcData) && rpcData.length > 0) {
+        return rpcData[0] as ScrapeJob;
+      }
+    } catch {
+      // Fall through to resilient fallback if RPC is not available
+    }
+
+    // 2. Fallback: Recover zombies older than 10 minutes
+    try {
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      await supabaseAdmin
+        .from('scrape_jobs')
+        .update({
+          status: 'pending' as JobStatus,
+          locked_at: null,
+          locked_by: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('status', 'processing')
+        .lt('locked_at', tenMinutesAgo);
+    } catch {
+      // ignore fallback error
+    }
+
+    // 3. Select oldest pending job
     const { data: pendingJobs, error: selectError } = await supabaseAdmin
       .from('scrape_jobs')
       .select('*')
@@ -76,12 +106,17 @@ export class JobsService {
 
     const job = pendingJobs[0];
 
-    // Atomically transition status from pending to processing
+    // Atomically transition status from pending to processing with lease
+    const now = new Date().toISOString();
     const { data: updatedJob, error: updateError } = await supabaseAdmin
       .from('scrape_jobs')
       .update({
         status: 'processing' as JobStatus,
-        updated_at: new Date().toISOString(),
+        locked_at: now,
+        locked_by: workerId,
+        heartbeat_at: now,
+        attempts: (job.attempts || 0) + 1,
+        updated_at: now,
       })
       .eq('id', job.id)
       .eq('status', 'pending')
@@ -93,6 +128,30 @@ export class JobsService {
     }
 
     return updatedJob as ScrapeJob;
+  }
+
+  /**
+   * Updates worker heartbeat for an in-flight job lease
+   */
+  public async updateHeartbeat(jobId: string, workerId: string = 'worker-default'): Promise<void> {
+    try {
+      const { error: rpcError } = await supabaseAdmin.rpc('record_job_heartbeat', {
+        p_job_id: jobId,
+        p_worker_id: workerId,
+      });
+
+      if (!rpcError) return;
+    } catch {
+      // Fall through to direct update
+    }
+
+    await supabaseAdmin
+      .from('scrape_jobs')
+      .update({
+        heartbeat_at: new Date().toISOString(),
+      })
+      .eq('id', jobId)
+      .eq('status', 'processing');
   }
 
   /**

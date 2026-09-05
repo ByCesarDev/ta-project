@@ -26,6 +26,7 @@ export interface ScrapedServer {
   language: StreamLanguage;
   quality: string;
   priority: number;
+  is_active?: boolean;
 }
 
 export interface ScrapedAnimeSummary {
@@ -114,6 +115,11 @@ export interface ScrapeJob {
   total_episodes: number;
   processed_episodes: number;
   failed_episodes: number;
+  attempts?: number;
+  max_attempts?: number;
+  locked_at?: string | null;
+  locked_by?: string | null;
+  heartbeat_at?: string | null;
   error_log: unknown[];
   requested_by?: string | null;
   created_at: string;

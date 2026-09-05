@@ -21,8 +21,14 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Install Dependencies
-        run: npm install
+      - name: Install Root Dependencies
+        run: npm ci
+
+      - name: Install API Dependencies
+        run: npm ci --prefix api
+
+      - name: Install Admin Dependencies
+        run: npm ci --prefix admin
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
@@ -48,4 +54,9 @@ jobs:
         run: |
           npm run api:test
           npm run api:build
+
+      - name: Validate Admin Panel
+        run: |
+          npm run admin:lint
+          npm run admin:build
 

@@ -1,21 +1,23 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
 import { videoScraper } from '../scrapers/videoScraper.service.js';
-import { StreamLanguage } from '../types/index.js';
+import { AuthenticatedRequest, StreamLanguage } from '../types/index.js';
 
 export class StreamController {
   /**
    * GET /api/v1/stream/:animeSlug/:episodeNumber
    * Fetches active stream sources from database, falling back to live scraper if missing.
    */
-  public async getStreamSources(req: Request, res: Response): Promise<void> {
+  public async getStreamSources(req: AuthenticatedRequest, res: Response): Promise<void> {
     const rawSlug = Array.isArray(req.params.animeSlug) ? req.params.animeSlug[0] : req.params.animeSlug;
     const rawEp = Array.isArray(req.params.episodeNumber) ? req.params.episodeNumber[0] : req.params.episodeNumber;
 
     const animeSlug = String(rawSlug || '').trim();
     const episodeNumber = String(rawEp || '').trim();
     const lang = (req.query.lang as StreamLanguage) || 'sub';
-    const forceRefresh = req.query.refresh === 'true';
+    // Security: only authenticated staff (moderators/admins) can force live scraping bypass
+    const isStaff = req.user?.role === 'admin' || req.user?.role === 'moderator';
+    const forceRefresh = req.query.refresh === 'true' && isStaff;
 
     if (!animeSlug || !episodeNumber) {
       res.status(400).json({

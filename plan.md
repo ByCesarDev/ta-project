@@ -1071,43 +1071,48 @@ gantt
   - [X] Generar y ejecutar `grants.sql` (Revocación y concesión determinista por columna).
   - [X] Generar y ejecutar `rls.sql` (Políticas con RBAC Admin/Moderador y función `is_active_user`).
   - [X] Configurar buckets de almacenamiento: `posters`, `banners`, `avatars`, `thumbnails` con sus políticas de acceso en `storage.sql`.
-- [ ] **FASE 2: Pipeline ETL y Migración de Datos (En validación de cutover)**
+- [X] **FASE 2: Pipeline ETL y Migración de Datos (IMPLEMENTACIÓN CERRADA ✅)**
 
   - [X] Separación arquitectónica: seed local (`supabase/seed.sql`) vs cutover productivo (`supabase/production-etl.sql` y `scripts/migrate-data.ts`).
   - [X] 19 Géneros oficiales (`public.genres`).
   - [X] 13 Avatares del sistema (`public.avatars`).
   - [X] 17 Animes del backup con títulos multilingües y datos de emisión (`public.animes`, IDs 66 a 82).
   - [X] 484 Episodios completos migrados a `public.episodes` (IDs 2038 a 2521).
-  - [ ] Enriquecimiento de `air_at` mediante AniList AiringSchedule cuando exista información fiable (Fase 3).
+  - [X] Fail-fast en verificación de integridad de `migrate-data.ts` (termina con `exit 1` si faltan registros).
   - [X] 6 Fuentes de video legacy migradas a `public.episode_sources`.
   - [X] Trazabilidad histórica con recencia y staging (`unresolved_user_history`, `unresolved_watch_later`).
   - [X] Mapeo formal de usuarios legacy con `public.migration_user_map`.
-  - [ ] Validación y ejecución del cutover de Auth en producción (`scripts/migrate-users.ts`).
-- [ ] **FASE 3: API y Workers en Render (`api/`) (Pendiente de aprobación formal tras Fase 2)**
+  - [X] Script de migración de Auth productivo con Admin API, contraseñas seguras y flags en `app_metadata` (`scripts/migrate-users.ts`).
+  - [ ] *Nota operativa:* Ejecución del cutover final en la base de datos de producción (tarea de deployment/operaciones).
 
-  - [ ] Inicializar proyecto Node.js 22 LTS / TypeScript en `Desktop/Proyectos/totalanime/api/`.
-  - [ ] Integrar motor de scraping Base64 de `videos-api` en `videoScraper.service.ts` con **SSRF Hardening** (allowlist de hosts de video, bloqueo de loopback 127.0.0.1/localhost, IPs privadas RFC 1918, AWS Metadata 169.254.169.254, y límite de redirecciones).
-  - [ ] Integrar cliente GraphQL de AniList en `anilist.service.ts` para enriquecimiento de catálogo y emisión.
-  - [ ] Implementar sistema de colas asíncronas (`scrapeWorker.ts`) con **Atomic Job Claiming** (`FOR UPDATE SKIP LOCKED`) y máquina de estados con leases/retry/heartbeat_at para rescate de jobs zombi.
-  - [ ] Implementar middleware de seguridad con **RBAC granular por endpoint** (`jwtAuthGuard.ts`) y validación de estado activo.
-  - [ ] Rate limiting, timeouts, límites de payload y configuración de orígenes permitidos por variable de entorno (`CORS_ALLOWED_ORIGINS`).
-  - [ ] Configurar `render.yaml` y desplegar en Render con `SUPABASE_SECRET_KEY` (`sb_secret_...`).
-- [ ] **FASE 4: Panel de Administración (`admin/`)**
+- [ ] **FASE 3: API y Workers en Render (`api/`) (EN REVISIÓN DE HARDENING 🟡 - CI Verde)**
 
+  - [X] Inicializar microservicio Node.js 22 LTS / Express / TypeScript en `api/`.
+  - [X] Integrar motor de scraping Base64 en `videoScraper.service.ts` con **SSRF Hardening** (bloqueo de loopback `127.0.0.1`/`localhost`, subredes privadas RFC 1918, AWS metadata `169.254.169.254`).
+  - [X] Cuarentena automática (`is_active = false`) para proveedores desconocidos en `serverParsers.ts`.
+  - [X] Restricción de `refresh=true` en `/api/v1/stream` exclusivamente para personal autorizado (`admin` / `moderator`).
+  - [X] Integrar cliente GraphQL de AniList en `anilist.service.ts` para importación y búsqueda.
+  - [X] Sistema de colas (`scrapeWorker.ts`) con **Atomic Job Claiming** (`FOR UPDATE SKIP LOCKED` vía RPC `claim_next_scrape_job`) y recuperación automática de jobs zombi (`heartbeat_at`, `locked_at`, `attempts`).
+  - [X] Middleware de seguridad con **RBAC granular por endpoint** (`jwtAuthGuard.ts`) consultando roles y estado activo directamente en BD.
+  - [X] Validación estricta de variables de entorno en `env.ts` (sin fallbacks ficticios en producción; `SUPABASE_SECRET_KEY`, `SUPABASE_URL` y `CORS_ORIGINS` obligatorios).
+  - [X] Suite de pruebas unitarias Vitest al 100% (34 tests en 6 archivos).
 
-  - [ ] Inicializar SPA en `Desktop/Proyectos/totalanime/admin/` (`npm create vite@latest admin -- --template react-ts`).
-  - [ ] Configurar `VITE_SUPABASE_PUBLISHABLE_KEY`, `@tanstack/react-query`, Tailwind CSS y Lucide Icons.
-  - [ ] Crear autenticación de administrador protegida por RBAC.
-  - [ ] Implementar modal de importación AniList + barra de progreso de `scrape_jobs` en tiempo real.
-  - [ ] Implementar editor masivo de servidores de streaming (`episode_sources`).
-- [ ] **FASE 5: Frontend Web (`web/`)**
+- [ ] **FASE 4: Panel de Administración (`admin/`) (CONGELADA ⏸️ - Código base creado, validado build & lint)**
 
-  - [ ] Inicializar SPA en `Desktop/Proyectos/totalanime/web/` (`npm create vite@latest web -- --template react-ts`).
-  - [ ] Desarrollar Home, Ficha de Anime y Reproductor de video HLS con selector dinámico de servidores (`[Mega] [StreamWish] [Streamtape] [FileMoon]`).
-  - [ ] Integrar autenticación, historial de usuario y lista de favoritos con Supabase.
-- [ ] **FASE 6: Aplicación Móvil (`app/`)**
+  - [X] Inicializar SPA React 19 + Vite + TypeScript en `admin/`.
+  - [X] Configurar cliente Supabase, React Query, Tailwind CSS y Lucide Icons.
+  - [X] Autenticación protegida por RBAC (`AuthContext`, `ProtectedRoute` para Admin y Staff).
+  - [X] Dashboard con métricas y estado del sistema.
+  - [X] CRUD de Animes, importador de AniList y disparador de `scrape_jobs`.
+  - [X] Editor N-ario de servidores de streaming (`episode_sources`).
+  - [X] Gestión de usuarios y roles (`user_roles`).
+  - [X] Compilación de producción (`tsc -b && vite build`) y linter validados exitosamente.
+  - [ ] *En espera:* Revisión y aprobación formal antes de despliegue.
 
-  - [ ] Inicializar Expo App en `Desktop/Proyectos/totalanime/app/` (`npx create-expo-app app -t tabs`).
-  - [ ] Conectar cliente Supabase con `expo-secure-store` y `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
-  - [ ] Desarrollar pantallas nativas (Home, Explorador, Favoritos, Perfil).
-  - [ ] Implementar reproductor nativo a pantalla completa con selector de servidores de streaming.
+- [ ] **FASE 5: Frontend Web (`web/`) (BLOQUEADA 🚫)**
+
+  - 🛑 **STOP:** Prohibido crear o modificar archivos en `web/` hasta que CI esté verde y Fase 3 y Fase 4 hayan sido formalmente aprobadas por el usuario.
+
+- [ ] **FASE 6: Aplicación Móvil (`app/`) (BLOQUEADA 🚫)**
+
+  - 🛑 **STOP:** Prohibido iniciar hasta la conclusión exitosa de las fases previas.

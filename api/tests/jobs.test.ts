@@ -40,59 +40,90 @@ describe('JobsService Queue Management', () => {
     expect(job.total_episodes).toBe(12);
   });
 
-  it('should atomically claim the next pending job', async () => {
-    const pendingJob = {
+  it('should atomically claim the next pending job via RPC', async () => {
+    const claimedJob = {
       id: 'job-uuid-999',
       anime_id: 2,
-      status: 'pending',
+      status: 'processing',
       total_episodes: 24,
+      locked_by: 'worker-1',
+    };
+
+    vi.spyOn(supabaseAdmin, 'rpc').mockResolvedValueOnce({
+      data: [claimedJob],
+      error: null,
+    } as any);
+
+    const job = await jobsService.claimNextPendingJob('worker-1');
+
+    expect(job).not.toBeNull();
+    expect(job?.id).toBe('job-uuid-999');
+    expect(job?.status).toBe('processing');
+    expect(job?.locked_by).toBe('worker-1');
+  });
+
+  it('should fallback gracefully to resilient query-and-update if RPC fails', async () => {
+    const pendingJob = {
+      id: 'job-uuid-888',
+      anime_id: 3,
+      status: 'pending',
+      total_episodes: 12,
+      attempts: 0,
     };
 
     const claimedJob = {
       ...pendingJob,
       status: 'processing',
+      locked_by: 'worker-2',
+      attempts: 1,
     };
 
-    let callCount = 0;
-    vi.spyOn(supabaseAdmin, 'from').mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        // Query oldest pending job
-        return {
-          select: () => ({
+    // RPC fails
+    vi.spyOn(supabaseAdmin, 'rpc').mockRejectedValueOnce(new Error('RPC function missing'));
+
+    // Zombie recovery update -> select pending -> claim update
+    let updateCount = 0;
+    vi.spyOn(supabaseAdmin, 'from').mockImplementation(() => ({
+      update: () => {
+        updateCount++;
+        if (updateCount === 1) {
+          // Zombie recovery update
+          return {
             eq: () => ({
-              order: () => ({
-                limit: async () => ({
-                  data: [pendingJob],
+              lt: async () => ({ error: null }),
+            }),
+          };
+        }
+        // Claim update
+        return {
+          eq: () => ({
+            eq: () => ({
+              select: () => ({
+                maybeSingle: async () => ({
+                  data: claimedJob,
                   error: null,
                 }),
               }),
             }),
           }),
-        } as any;
-      } else {
-        // Atomic update to processing
-        return {
-          update: () => ({
-            eq: () => ({
-              eq: () => ({
-                select: () => ({
-                  maybeSingle: async () => ({
-                    data: claimedJob,
-                    error: null,
-                  }),
-                }),
-              }),
+        };
+      },
+      select: () => ({
+        eq: () => ({
+          order: () => ({
+            limit: async () => ({
+              data: [pendingJob],
+              error: null,
             }),
           }),
-        } as any;
-      }
-    });
+        }),
+      }),
+    }) as any);
 
-    const job = await jobsService.claimNextPendingJob();
+    const job = await jobsService.claimNextPendingJob('worker-2');
 
     expect(job).not.toBeNull();
-    expect(job?.id).toBe('job-uuid-999');
+    expect(job?.id).toBe('job-uuid-888');
     expect(job?.status).toBe('processing');
   });
 

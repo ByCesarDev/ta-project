@@ -8,9 +8,11 @@ export class ScrapeWorker {
   private isRunning: boolean = false;
   private shouldStop: boolean = false;
   private pollIntervalMs: number;
+  private workerId: string;
 
   constructor(pollIntervalMs: number = env.WORKER_POLL_INTERVAL_MS) {
     this.pollIntervalMs = pollIntervalMs;
+    this.workerId = `worker-${process.pid}-${Math.random().toString(36).substring(2, 8)}`;
   }
 
   /**
@@ -21,11 +23,11 @@ export class ScrapeWorker {
     this.isRunning = true;
     this.shouldStop = false;
 
-    console.log(`[ScrapeWorker] Worker started. Polling every ${this.pollIntervalMs}ms...`);
+    console.log(`[ScrapeWorker] Worker started with ID '${this.workerId}'. Polling every ${this.pollIntervalMs}ms...`);
 
     while (!this.shouldStop) {
       try {
-        const job = await jobsService.claimNextPendingJob();
+        const job = await jobsService.claimNextPendingJob(this.workerId);
         if (job) {
           console.log(`[ScrapeWorker] Claimed Job ${job.id} for Anime ID: ${job.anime_id}`);
           await this.processJob(job);
@@ -100,6 +102,9 @@ export class ScrapeWorker {
           break;
         }
 
+        // Renew heartbeat lease while working on this job
+        await jobsService.updateHeartbeat(job.id, this.workerId);
+
         try {
           const servers = await videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number);
 
@@ -124,7 +129,7 @@ export class ScrapeWorker {
                     language: s.language,
                     quality: s.quality,
                     priority: s.priority,
-                    is_active: true,
+                    is_active: s.is_active ?? true,
                     last_verified_at: new Date().toISOString(),
                   },
                   {
