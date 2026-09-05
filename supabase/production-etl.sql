@@ -1,16 +1,14 @@
 -- ==============================================================================
--- TOTALANIME 2.0 - LOCAL & CI TEST FIXTURES SEED (pgTAP COMPLIANT)
--- Archivo: supabase/seed.sql
--- 
--- ADVERTENCIA DE ARQUITECTURA:
--- Este archivo está diseñado EXCLUSIVAMENTE para desarrollo local y suites de
--- pruebas automatizadas (supabase start / supabase db reset / supabase test db).
--- Contiene usuarios fixtures en auth.users (UUIDs a0000000-...).
+-- TOTALANIME 2.0 - PRODUCTION ETL RELATIONAL DATASET (CLEAN & ZERO-FIXTURES)
+-- Archivo: supabase/production-etl.sql
 --
--- PARA PRODUCCIÓN:
--- NO ejecutar este archivo. Ejecutar el pipeline de cutover independiente:
---   1. npm run migrate:users   (GoTrue Admin API - provisiona usuarios reales)
---   2. npm run migrate:data    (Carga catálogo, 484 episodios y relaciones FK)
+-- ADVERTENCIA DE SEGURIDAD Y PRE-REQUISITO:
+-- Este archivo es para el despliegue de datos en PRODUCCIÓN.
+-- NUNCA toca ni inserta en auth.users (evita duplicidad de claves y UUIDs fakes).
+-- Requiere que 'public.migration_user_map' ya esté poblado mediante:
+--   npm run migrate:users
+-- Todas las claves foráneas (claimed_by, created_by, user_id) se resuelven
+-- dinámicamente desde migration_user_map garantizando integridad referencial.
 -- ==============================================================================
 
 -- ========================================================
@@ -57,56 +55,6 @@ INSERT INTO public.avatars (id, filename, is_default, created_at, updated_at) VA
 (27, 'user-12.jpeg', false, '2025-09-24 22:49:27+00', '2025-09-24 22:49:27+00')
 ON CONFLICT (id) DO NOTHING;
 
--- ========================================================
--- 3. CREACIÓN / FIXTURES DE USUARIOS EN AUTH (auth.users)
--- Inserta usuarios solo si no existen previamente en Supabase Auth
--- ========================================================
-INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, phone_change, phone_change_token, reauthentication_token, raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous, created_at, updated_at)
-SELECT 'a0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'admin@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-08-14 06:58:22+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "cesardev"}'::jsonb, false, false, false, '2025-08-14 06:58:22+00', '2025-08-14 06:58:22+00'
-WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'admin@totalanime.com');
-
-INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, phone_change, phone_change_token, reauthentication_token, raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous, created_at, updated_at)
-SELECT 'a0000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'freilyn@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-09-25 03:32:49+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "freilyn"}'::jsonb, false, false, false, '2025-09-25 03:32:49+00', '2025-09-25 03:32:49+00'
-WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'freilyn@totalanime.com');
-
-INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, phone_change, phone_change_token, reauthentication_token, raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous, created_at, updated_at)
-SELECT 'a0000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jesus@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-09-26 04:13:31+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "Jesus"}'::jsonb, false, false, false, '2025-09-26 04:13:31+00', '2025-09-26 04:13:31+00'
-WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'jesus@totalanime.com');
-
--- ========================================================
--- 4. MAPA FORMAL DE MIGRACIÓN DE USUARIOS (public.migration_user_map)
--- Vincula el legacy_id al UUID real de auth.users (o fallback fixture)
--- ========================================================
-INSERT INTO public.migration_user_map (legacy_id, supabase_uuid, username, email, migrated_at) VALUES
-(2, COALESCE((SELECT id FROM auth.users WHERE email = 'admin@totalanime.com' LIMIT 1), 'a0000000-0000-0000-0000-000000000002'), 'cesardev', 'admin@totalanime.com', '2025-08-14 06:58:22+00'),
-(4, COALESCE((SELECT id FROM auth.users WHERE email = 'freilyn@totalanime.com' LIMIT 1), 'a0000000-0000-0000-0000-000000000004'), 'freilyn', 'freilyn@totalanime.com', '2025-09-25 03:32:49+00'),
-(5, COALESCE((SELECT id FROM auth.users WHERE email = 'jesus@totalanime.com' LIMIT 1), 'a0000000-0000-0000-0000-000000000005'), 'Jesus', 'jesus@totalanime.com', '2025-09-26 04:13:31+00')
-ON CONFLICT (legacy_id) DO UPDATE SET
-    supabase_uuid = EXCLUDED.supabase_uuid,
-    username = EXCLUDED.username,
-    email = EXCLUDED.email;
-
--- ========================================================
--- 5. PERFILES Y ROLES ASOCIADOS DESDE EL MAPA
--- ========================================================
-INSERT INTO public.profiles (id, username, avatar_url, bio, created_at, updated_at) VALUES
-((SELECT supabase_uuid FROM public.migration_user_map WHERE legacy_id = 2), 'cesardev', 'user-4.jpeg', 'Administrador de TotalAnime', '2025-08-14 06:58:22+00', '2025-08-14 06:58:22+00'),
-((SELECT supabase_uuid FROM public.migration_user_map WHERE legacy_id = 4), 'freilyn', 'user-5.jpeg', 'Moderador de TotalAnime', '2025-09-25 03:32:49+00', '2025-09-25 03:32:49+00'),
-((SELECT supabase_uuid FROM public.migration_user_map WHERE legacy_id = 5), 'Jesus', 'user-5.jpeg', '', '2025-09-26 04:13:31+00', '2025-09-26 04:13:31+00')
-ON CONFLICT (id) DO UPDATE SET 
-    username = EXCLUDED.username,
-    avatar_url = EXCLUDED.avatar_url,
-    bio = EXCLUDED.bio,
-    updated_at = EXCLUDED.updated_at;
-
-INSERT INTO public.user_roles (user_id, role, status, updated_at) VALUES
-((SELECT supabase_uuid FROM public.migration_user_map WHERE legacy_id = 2), 'admin', 'active', '2025-08-14 06:58:22+00'),
-((SELECT supabase_uuid FROM public.migration_user_map WHERE legacy_id = 4), 'moderator', 'active', '2025-09-25 03:32:49+00'),
-((SELECT supabase_uuid FROM public.migration_user_map WHERE legacy_id = 5), 'user', 'active', '2025-09-26 04:13:31+00')
-ON CONFLICT (user_id) DO UPDATE SET
-    role = EXCLUDED.role,
-    status = EXCLUDED.status,
-    updated_at = EXCLUDED.updated_at;
 
 -- ========================================================
 -- 6. CATÁLOGO DE ANIMES (public.animes) - 17 animes (IDs 66-82)

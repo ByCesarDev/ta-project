@@ -38,10 +38,11 @@ jobs:
       - name: Run pgTAP Test Suites
         run: supabase test db
 
-      - name: Test Auth Migration Script (Dry Run & Live)
+      - name: Test Auth & Data Migration Scripts (Dry Run & Live)
         run: |
           npm run migrate:users:dry
           npm run migrate:users
+          npm run migrate:data:dry
 
       - name: Test Backend API & Scraper Microservice
         run: |

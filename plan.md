@@ -740,6 +740,20 @@ graph LR
     W_OLD --> MAP --> W_NEW
 ```
 
+### 8.1 Separación Arquitectónica: Local/Test vs Pipeline de Producción
+
+Para garantizar integridad y evitar colisiones de claves únicas o foreign keys residuales:
+
+1. **Entorno Local & CI (`supabase/seed.sql`):**
+   - Diseñado para pruebas reproducibles (`supabase db reset`, `supabase test db`).
+   - Carga usuarios fixtures controlados en `auth.users` (`a0000000-0000-0000-0000-000000000002/4/5`) y llena `migration_user_map` con estos fixtures.
+   - **Prohibido ejecutar en producción.**
+
+2. **Pipeline de Producción (`scripts/migrate-users.ts` y `scripts/migrate-data.ts`):**
+   - **Paso 1 (DDL & RLS):** `supabase db push` aplica migraciones sin datos ficticios.
+   - **Paso 2 (Auth Cutover):** `npm run migrate:users` interactúa con GoTrue vía Admin API (`SUPABASE_SECRET_KEY`), crea/vincula usuarios reales con contraseñas seguras, almacena flags (`password_reset_required`, `legacy_id`) en `app_metadata` (protegido contra edición del usuario), y llena `public.migration_user_map` con los UUIDs reales definitivos.
+   - **Paso 3 (Data ETL):** `npm run migrate:data` verifica que `migration_user_map` exista, y ejecuta `supabase/production-etl.sql`. Cero inserciones directas en `auth.users`. Todas las relaciones FK (`claimed_by`, `created_by`, `user_id`) se resuelven exclusivamente contra los UUIDs del mapa.
+
 ---
 
 ## 9. Especificación de la API/Workers en Render (`api/`) & Sistema de Jobs
@@ -801,6 +815,37 @@ export const corsMiddleware = cors({
   credentials: true,
 });
 ```
+
+### 9.3 Requisitos de Hardening y Resiliencia (Fase 3)
+
+1. **SSRF Hardening en Scrapers:**
+   - Allowlist estricto de hostnames autorizados (`mega.nz`, `streamwish.to`, `filemoon.sx`, `streamtape.com`, etc.).
+   - Bloqueo absoluto de localhost y loopback (`127.0.0.1`, `::1`, `localhost`).
+   - Bloqueo de subredes privadas RFC 1918 (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) y enlaces locales / AWS Metadata (`169.254.169.254`).
+   - Limitación estricta de redirecciones HTTP (máx. 3) y validación de URL en cada salto.
+
+2. **Atomic Job Claiming:**
+   - Dos o más workers no deben colisionar al tomar el mismo job.
+   - Claiming concurrente mediante RPC de PostgreSQL o consulta con `FOR UPDATE SKIP LOCKED`:
+     `pending` $\rightarrow$ `processing` + `locked_at = NOW()` + `worker_id`.
+
+3. **Retry, Lease y Rescate de Jobs Zombi:**
+   - Parámetros de resiliencia: `attempts INT`, `max_attempts INT DEFAULT 3`, `locked_at TIMESTAMPTZ`.
+   - Heartbeat periódico del worker (`heartbeat_at`).
+   - Mecanismo de recuperación de jobs abandonados cuando un proceso o contenedor de Render muere intempestivamente (`status = 'processing' AND locked_at < NOW() - INTERVAL '10 minutes'`).
+
+4. **RBAC Granular por Endpoint:**
+   - La seguridad de la API no se limita a un guard genérico:
+     - `GET /api/v1/stream/:animeSlug/:episodeNumber` $\rightarrow$ Acceso público con Rate Limiting estricto por IP.
+     - `GET /api/v1/anilist/search` $\rightarrow$ Acceso público cacheado en memoria.
+     - `POST /api/v1/jobs/scrape` $\rightarrow$ Restringido a rol `moderator` o `admin` con `status = 'active'`.
+     - `POST /api/v1/anilist/import` $\rightarrow$ Restringido a rol `moderator` o `admin` con `status = 'active'`.
+     - Acciones de configuración o eliminación crítica $\rightarrow$ Exclusivo rol `admin`.
+
+5. **Rate Limits, Timeouts y Configuración por Entorno:**
+   - Orígenes de CORS configurables dinámicamente mediante variable de entorno `CORS_ALLOWED_ORIGINS` (con fallback seguro).
+   - Timeouts de red estrictos para llamadas a AniList y scrapers externos (máx. 8s).
+   - Límites de payload JSON (100kb para payloads estándar) y sanitización estricta de entrada con esquemas Zod.
 
 ---
 
@@ -1026,23 +1071,27 @@ gantt
   - [X] Generar y ejecutar `grants.sql` (Revocación y concesión determinista por columna).
   - [X] Generar y ejecutar `rls.sql` (Políticas con RBAC Admin/Moderador y función `is_active_user`).
   - [X] Configurar buckets de almacenamiento: `posters`, `banners`, `avatars`, `thumbnails` con sus políticas de acceso en `storage.sql`.
-- [X] **FASE 2: Pipeline ETL y Migración de Datos**
+- [ ] **FASE 2: Pipeline ETL y Migración de Datos (En validación de cutover)**
 
-  - [X] Generar y ejecutar `seed_migration.sql` para:
-    - [X] 19 Géneros oficiales.
-    - [X] 13 Avatares del sistema.
-    - [X] 17+ Animes del backup con títulos multilingües y datos de emisión.
-    - [X] 400+ Episodios migrados a `public.episodes` con `air_at`.
-    - [X] Transformación de URLs de video existentes a la tabla `public.episode_sources`.
-    - [X] Mapeo de usuarios legacy con `migration_user_map`.
-- [X] **FASE 3: API y Workers en Render (`api/`)**
+  - [X] Separación arquitectónica: seed local (`supabase/seed.sql`) vs cutover productivo (`supabase/production-etl.sql` y `scripts/migrate-data.ts`).
+  - [X] 19 Géneros oficiales (`public.genres`).
+  - [X] 13 Avatares del sistema (`public.avatars`).
+  - [X] 17 Animes del backup con títulos multilingües y datos de emisión (`public.animes`, IDs 66 a 82).
+  - [X] 484 Episodios completos migrados a `public.episodes` (IDs 2038 a 2521).
+  - [ ] Enriquecimiento de `air_at` mediante AniList AiringSchedule cuando exista información fiable (Fase 3).
+  - [X] 6 Fuentes de video legacy migradas a `public.episode_sources`.
+  - [X] Trazabilidad histórica con recencia y staging (`unresolved_user_history`, `unresolved_watch_later`).
+  - [X] Mapeo formal de usuarios legacy con `public.migration_user_map`.
+  - [ ] Validación y ejecución del cutover de Auth en producción (`scripts/migrate-users.ts`).
+- [ ] **FASE 3: API y Workers en Render (`api/`) (Pendiente de aprobación formal tras Fase 2)**
 
-  - [X] Inicializar proyecto Node.js 22 LTS / TypeScript en `Desktop/Proyectos/totalanime/api/`.
-  - [X] Integrar motor de scraping Base64 de `videos-api` en `videoScraper.service.ts`.
-  - [X] Integrar cliente GraphQL de AniList en `anilist.service.ts`.
-  - [X] Implementar sistema de colas de scraping asíncrono (`scrapeWorker.ts`).
-  - [X] Implementar `jwtAuthGuard.ts` con validación de roles y estado activo de Supabase.
-  - [X] Configurar `render.yaml` y desplegar en Render con `SUPABASE_SECRET_KEY` y CORS allowlist.
+  - [ ] Inicializar proyecto Node.js 22 LTS / TypeScript en `Desktop/Proyectos/totalanime/api/`.
+  - [ ] Integrar motor de scraping Base64 de `videos-api` en `videoScraper.service.ts` con **SSRF Hardening** (allowlist de hosts de video, bloqueo de loopback 127.0.0.1/localhost, IPs privadas RFC 1918, AWS Metadata 169.254.169.254, y límite de redirecciones).
+  - [ ] Integrar cliente GraphQL de AniList en `anilist.service.ts` para enriquecimiento de catálogo y emisión.
+  - [ ] Implementar sistema de colas asíncronas (`scrapeWorker.ts`) con **Atomic Job Claiming** (`FOR UPDATE SKIP LOCKED`) y máquina de estados con leases/retry/heartbeat_at para rescate de jobs zombi.
+  - [ ] Implementar middleware de seguridad con **RBAC granular por endpoint** (`jwtAuthGuard.ts`) y validación de estado activo.
+  - [ ] Rate limiting, timeouts, límites de payload y configuración de orígenes permitidos por variable de entorno (`CORS_ALLOWED_ORIGINS`).
+  - [ ] Configurar `render.yaml` y desplegar en Render con `SUPABASE_SECRET_KEY` (`sb_secret_...`).
 - [ ] **FASE 4: Panel de Administración (`admin/`)**
 
 
