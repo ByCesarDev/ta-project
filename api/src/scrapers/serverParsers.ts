@@ -3,7 +3,7 @@ import { ScrapedServer, StreamLanguage } from '../types/index.js';
 interface ProviderDefinition {
   provider: string;
   name: string;
-  patterns: (string | RegExp)[];
+  allowedHostnames: string[];
   priority: number;
   quality: string;
 }
@@ -12,63 +12,63 @@ const KNOWN_PROVIDERS: ProviderDefinition[] = [
   {
     provider: 'mega',
     name: 'Mega',
-    patterns: ['mega.nz', 'mega.io'],
+    allowedHostnames: ['mega.nz', 'mega.io'],
     priority: 10,
     quality: '1080p',
   },
   {
     provider: 'streamwish',
     name: 'StreamWish',
-    patterns: ['streamwish', 'wishembed', 'streamwish.to', 'streamwish.com', 'swish'],
+    allowedHostnames: ['streamwish.to', 'streamwish.com', 'wishembed.pro', 'swish.to', 'strwish.com'],
     priority: 20,
     quality: '720p',
   },
   {
     provider: 'filemoon',
     name: 'FileMoon',
-    patterns: ['filemoon', 'filemoon.sx', 'filemoon.to'],
+    allowedHostnames: ['filemoon.sx', 'filemoon.to', 'filemoon.in'],
     priority: 30,
     quality: '720p',
   },
   {
     provider: 'streamtape',
     name: 'Streamtape',
-    patterns: ['streamtape.com', 'streamtape.net', 'streamtape'],
+    allowedHostnames: ['streamtape.com', 'streamtape.net', 'streamtape.to'],
     priority: 40,
     quality: '720p',
   },
   {
     provider: 'mp4upload',
     name: 'Mp4Upload',
-    patterns: ['mp4upload.com', 'mp4upload'],
+    allowedHostnames: ['mp4upload.com'],
     priority: 50,
     quality: '720p',
   },
   {
     provider: 'yourupload',
     name: 'YourUpload',
-    patterns: ['yourupload.com', 'yourupload'],
+    allowedHostnames: ['yourupload.com'],
     priority: 60,
     quality: '720p',
   },
   {
     provider: 'okru',
     name: 'Okru',
-    patterns: ['ok.ru', 'odnoklassniki'],
+    allowedHostnames: ['ok.ru', 'odnoklassniki.ru'],
     priority: 70,
     quality: '720p',
   },
   {
     provider: 'doodstream',
     name: 'DoodStream',
-    patterns: ['doodstream', 'dood.to', 'dood.watch', 'dood.so', 'dood.ws'],
+    allowedHostnames: ['doodstream.com', 'dood.to', 'dood.watch', 'dood.so', 'dood.ws'],
     priority: 80,
     quality: '720p',
   },
   {
     provider: 'voe',
     name: 'Voe',
-    patterns: ['voe.sx', 'voe-network', 'voe.to'],
+    allowedHostnames: ['voe.sx', 'voe-network.net', 'voe.to'],
     priority: 90,
     quality: '720p',
   },
@@ -146,7 +146,7 @@ export const sanitizeEmbedUrl = (rawUrl: string): string | null => {
 };
 
 /**
- * Normalizes a raw embed URL into a ScrapedServer structure
+ * Normalizes a raw embed URL into a ScrapedServer structure with strict hostname validation
  */
 export const normalizeServer = (
   rawUrl: string,
@@ -156,21 +156,24 @@ export const normalizeServer = (
   const sanitizedUrl = sanitizeEmbedUrl(rawUrl);
   if (!sanitizedUrl) return null;
 
-  const lowerUrl = sanitizedUrl.toLowerCase();
-  const lowerHint = (hintName || '').toLowerCase();
+  let hostname = '';
+  try {
+    hostname = new URL(sanitizedUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
 
-  // Find matching provider from known allowlist
+  // Security: Trust is based EXCLUSIVELY on strict hostname or subdomain match against allowedHostnames.
+  // hintName is NEVER used to determine provider trust.
   let matchedProvider: ProviderDefinition | null = null;
 
   for (const prov of KNOWN_PROVIDERS) {
-    const matchesPattern = prov.patterns.some((pattern) => {
-      if (typeof pattern === 'string') {
-        return lowerUrl.includes(pattern.toLowerCase()) || lowerHint.includes(pattern.toLowerCase());
-      }
-      return pattern.test(lowerUrl) || pattern.test(lowerHint);
+    const matches = prov.allowedHostnames.some((allowed) => {
+      const target = allowed.toLowerCase();
+      return hostname === target || hostname.endsWith(`.${target}`);
     });
 
-    if (matchesPattern) {
+    if (matches) {
       matchedProvider = prov;
       break;
     }
@@ -179,22 +182,27 @@ export const normalizeServer = (
   if (matchedProvider) {
     return {
       provider: matchedProvider.provider,
-      server_name: matchedProvider.name,
+      server_name: hintName && hintName.trim().length > 0 ? hintName.trim() : matchedProvider.name,
       embed_url: sanitizedUrl,
       language,
       quality: matchedProvider.quality,
       priority: matchedProvider.priority,
-      is_active: true, // Known providers are active by default
+      is_active: true, // Known providers matching allowed hostnames are active
     };
   }
 
   // Unknown provider: Quarantine with is_active = false for moderator review
   let domain = 'custom';
   try {
-    const host = new URL(sanitizedUrl).hostname;
-    domain = host.replace(/^www\./, '').split('.')[0] || 'custom';
+    const parts = hostname.replace(/^www\./, '').split('.');
+    domain = parts.length >= 2 ? parts[parts.length - 2] : parts[0] || 'custom';
   } catch {
     // ignore
+  }
+
+  // Prevent identity spoofing: an unverified custom provider cannot use a known provider slug
+  if (KNOWN_PROVIDERS.some((p) => p.provider === domain.toLowerCase())) {
+    domain = `unverified-${domain}`;
   }
 
   const fallbackName = hintName && hintName.trim().length > 0 ? hintName.trim() : domain.toUpperCase();

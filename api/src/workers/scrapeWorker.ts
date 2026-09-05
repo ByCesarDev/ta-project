@@ -89,7 +89,7 @@ export class ScrapeWorker {
 
       if (episodeList.length === 0) {
         console.warn(`[ScrapeWorker] No episodes found in database for anime ${anime.slug}.`);
-        await jobsService.finishJob(job.id, 'completed', 0, 0, [
+        await jobsService.finishJob(job.id, this.workerId, 'completed', 0, 0, [
           { message: 'No episodes to scrape in database', timestamp: new Date().toISOString() },
         ]);
         return;
@@ -165,23 +165,51 @@ export class ScrapeWorker {
           });
         }
 
-        // Periodically update progress
-        await jobsService.updateProgress(job.id, processed, failed, errorLog);
+        // Periodically update progress with worker fencing check
+        const progressOk = await jobsService.updateProgress(
+          job.id,
+          this.workerId,
+          processed,
+          failed,
+          errorLog
+        );
+
+        if (!progressOk) {
+          console.warn(
+            `[ScrapeWorker] Lease lost for Job ${job.id}. Another worker took ownership or job was reset. Aborting.`
+          );
+          return;
+        }
 
         // Friendly throttle between requests
         await this.sleep(400);
       }
 
-      // 4. Mark job completion status
+      // 4. Mark job completion status with worker fencing
       const finalStatus = processed > 0 ? 'completed' : 'failed';
-      await jobsService.finishJob(job.id, finalStatus, processed, failed, errorLog);
+      const finishOk = await jobsService.finishJob(
+        job.id,
+        this.workerId,
+        finalStatus,
+        processed,
+        failed,
+        errorLog
+      );
+
+      if (!finishOk) {
+        console.warn(
+          `[ScrapeWorker] Could not finalize Job ${job.id}: lease lost or already completed by another worker.`
+        );
+        return;
+      }
+
       console.log(
         `[ScrapeWorker] Finished Job ${job.id} (${finalStatus}). Processed: ${processed}, Failed: ${failed}`
       );
     } catch (jobErr: unknown) {
       const message = jobErr instanceof Error ? jobErr.message : 'Job execution failed';
       console.error(`[ScrapeWorker] Critical failure on Job ${job.id}:`, message);
-      await jobsService.finishJob(job.id, 'failed', processed, failed, [
+      await jobsService.finishJob(job.id, this.workerId, 'failed', processed, failed, [
         ...errorLog,
         { error: message, timestamp: new Date().toISOString() },
       ]);

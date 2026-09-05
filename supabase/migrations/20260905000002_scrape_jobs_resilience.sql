@@ -25,17 +25,14 @@ AS $$
 DECLARE
     v_job_id UUID;
 BEGIN
-    -- 3.1 Rescatar jobs zombis: 'processing' sin heartbeat por más de 10 minutos
-    -- Si attempts < max_attempts, devolver a 'pending' para reintento automático
+    -- 3.1 Rescatar jobs zombis: 'processing' sin actividad por más de 10 minutos
+    -- Se evalúa COALESCE(heartbeat_at, locked_at): si hay heartbeat reciente, el worker está vivo
     UPDATE public.scrape_jobs
     SET status = 'pending',
         locked_at = NULL,
         locked_by = NULL
     WHERE status = 'processing'
-      AND (
-        (locked_at IS NOT NULL AND locked_at < NOW() - INTERVAL '10 minutes')
-        OR (heartbeat_at IS NOT NULL AND heartbeat_at < NOW() - INTERVAL '10 minutes')
-      )
+      AND COALESCE(heartbeat_at, locked_at) < NOW() - INTERVAL '10 minutes'
       AND attempts < max_attempts;
 
     -- Si attempts >= max_attempts, marcar permanentemente como 'failed'
@@ -43,15 +40,12 @@ BEGIN
     SET status = 'failed',
         error_log = COALESCE(error_log, '[]'::jsonb) || jsonb_build_array(
             jsonb_build_object(
-                'error', 'Job abandonado por worker inactivo (timeout de heartbeat)',
+                'error', 'Job abandonado por worker inactivo (timeout de heartbeat/lease)',
                 'timestamp', NOW()
             )
         )
     WHERE status = 'processing'
-      AND (
-        (locked_at IS NOT NULL AND locked_at < NOW() - INTERVAL '10 minutes')
-        OR (heartbeat_at IS NOT NULL AND heartbeat_at < NOW() - INTERVAL '10 minutes')
-      )
+      AND COALESCE(heartbeat_at, locked_at) < NOW() - INTERVAL '10 minutes'
       AND attempts >= max_attempts;
 
     -- 3.2 Reclamar el siguiente job disponible de forma atómica y no bloqueante
@@ -102,9 +96,85 @@ BEGIN
 END;
 $$;
 
--- 5. Privilegios de seguridad (Exclusivo Service Role / Worker backend)
+-- 5. RPC: Actualizar progreso de scrape job con verificación de worker (Fencing)
+CREATE OR REPLACE FUNCTION public.update_scrape_job_progress(
+    p_job_id UUID,
+    p_worker_id TEXT,
+    p_processed INT,
+    p_failed INT,
+    p_error_log JSONB
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_updated BOOLEAN := FALSE;
+BEGIN
+    UPDATE public.scrape_jobs
+    SET processed_episodes = p_processed,
+        failed_episodes = p_failed,
+        error_log = p_error_log,
+        heartbeat_at = NOW(),
+        updated_at = NOW()
+    WHERE id = p_job_id
+      AND status = 'processing'
+      AND locked_by = p_worker_id;
+
+    IF FOUND THEN
+        v_updated := TRUE;
+    END IF;
+
+    RETURN v_updated;
+END;
+$$;
+
+-- 6. RPC: Finalizar scrape job con verificación de worker y limpieza de lease (Fencing)
+CREATE OR REPLACE FUNCTION public.finish_scrape_job(
+    p_job_id UUID,
+    p_worker_id TEXT,
+    p_status job_status,
+    p_processed INT,
+    p_failed INT,
+    p_error_log JSONB
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_updated BOOLEAN := FALSE;
+BEGIN
+    UPDATE public.scrape_jobs
+    SET status = p_status,
+        processed_episodes = p_processed,
+        failed_episodes = p_failed,
+        error_log = p_error_log,
+        locked_at = NULL,
+        locked_by = NULL,
+        heartbeat_at = NULL,
+        updated_at = NOW()
+    WHERE id = p_job_id
+      AND status = 'processing'
+      AND locked_by = p_worker_id;
+
+    IF FOUND THEN
+        v_updated := TRUE;
+    END IF;
+
+    RETURN v_updated;
+END;
+$$;
+
+-- 7. Privilegios de seguridad (Exclusivo Service Role / Worker backend)
 REVOKE EXECUTE ON FUNCTION public.claim_next_scrape_job(TEXT) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.record_job_heartbeat(UUID, TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.update_scrape_job_progress(UUID, TEXT, INT, INT, JSONB) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.finish_scrape_job(UUID, TEXT, job_status, INT, INT, JSONB) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.claim_next_scrape_job(TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.record_job_heartbeat(UUID, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.update_scrape_job_progress(UUID, TEXT, INT, INT, JSONB) TO service_role;
+GRANT EXECUTE ON FUNCTION public.finish_scrape_job(UUID, TEXT, job_status, INT, INT, JSONB) TO service_role;

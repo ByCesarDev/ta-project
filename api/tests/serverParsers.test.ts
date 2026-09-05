@@ -102,6 +102,28 @@ describe('Server Parsers & Normalizer', () => {
       expect(server?.is_active).toBe(false);
     });
 
+    it('should NOT be tricked by known provider name in URL path (path spoofing)', () => {
+      const server = normalizeServer('https://evil.example/streamwish.to/video1');
+      expect(server).not.toBeNull();
+      expect(server?.provider).not.toBe('streamwish');
+      expect(server?.is_active).toBe(false);
+    });
+
+    it('should NOT be tricked by known provider in subdomain prefix (domain deception)', () => {
+      const server = normalizeServer('https://streamwish.to.evil.example/embed/video');
+      expect(server).not.toBeNull();
+      expect(server?.provider).not.toBe('streamwish');
+      expect(server?.is_active).toBe(false);
+    });
+
+    it('should NOT grant trust based on hintName alone if hostname is unknown', () => {
+      const server = normalizeServer('https://evil.example/embed/video', 'StreamWish');
+      expect(server).not.toBeNull();
+      expect(server?.provider).not.toBe('streamwish');
+      expect(server?.is_active).toBe(false);
+      expect(server?.server_name).toBe('StreamWish');
+    });
+
     it('should support dub stream language flag', () => {
       const server = normalizeServer('https://mega.nz/embed/abc123', 'Mega', 'dub');
       expect(server).not.toBeNull();

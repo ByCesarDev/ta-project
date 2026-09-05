@@ -127,32 +127,56 @@ describe('JobsService Queue Management', () => {
     expect(job?.status).toBe('processing');
   });
 
-  it('should update job progress and finish job', async () => {
-    const updateSpy = vi.fn().mockReturnValue({
-      eq: async () => ({ error: null }),
-    });
-
-    vi.spyOn(supabaseAdmin, 'from').mockReturnValue({
-      update: updateSpy,
+  it('should update job progress with worker fencing via RPC', async () => {
+    vi.spyOn(supabaseAdmin, 'rpc').mockResolvedValueOnce({
+      data: true,
+      error: null,
     } as any);
 
-    await jobsService.updateProgress('job-123', 5, 1, [{ episode_number: 6, error: 'Not found', timestamp: '' }]);
-
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        processed_episodes: 5,
-        failed_episodes: 1,
-      })
+    const success = await jobsService.updateProgress(
+      'job-123',
+      'worker-1',
+      5,
+      1,
+      [{ episode_number: 6, error: 'Not found', timestamp: '' }]
     );
 
-    await jobsService.finishJob('job-123', 'completed', 10, 1, []);
+    expect(success).toBe(true);
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('update_scrape_job_progress', {
+      p_job_id: 'job-123',
+      p_worker_id: 'worker-1',
+      p_processed: 5,
+      p_failed: 1,
+      p_error_log: [{ episode_number: 6, error: 'Not found', timestamp: '' }],
+    });
+  });
 
-    expect(updateSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'completed',
-        processed_episodes: 10,
-        failed_episodes: 1,
-      })
-    );
+  it('should finish job with worker fencing and clear lease via RPC', async () => {
+    vi.spyOn(supabaseAdmin, 'rpc').mockResolvedValueOnce({
+      data: true,
+      error: null,
+    } as any);
+
+    const success = await jobsService.finishJob('job-123', 'worker-1', 'completed', 10, 1, []);
+
+    expect(success).toBe(true);
+    expect(supabaseAdmin.rpc).toHaveBeenCalledWith('finish_scrape_job', {
+      p_job_id: 'job-123',
+      p_worker_id: 'worker-1',
+      p_status: 'completed',
+      p_processed: 10,
+      p_failed: 1,
+      p_error_log: [],
+    });
+  });
+
+  it('should detect lease loss (fencing) when updateProgress returns false', async () => {
+    vi.spyOn(supabaseAdmin, 'rpc').mockResolvedValueOnce({
+      data: false,
+      error: null,
+    } as any);
+
+    const success = await jobsService.updateProgress('job-123', 'worker-stale', 1, 0, []);
+    expect(success).toBe(false);
   });
 });
