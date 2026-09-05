@@ -230,6 +230,29 @@ CREATE POLICY "WatchLater: Manage Own" ON public.watch_later
     USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
     WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
 
+-- Staging de Historial y Watchlist No Resueltos
+ALTER TABLE public.unresolved_legacy_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.unresolved_watch_later ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "UnresolvedHistory: Manage Own" ON public.unresolved_legacy_history;
+CREATE POLICY "UnresolvedHistory: Manage Own" ON public.unresolved_legacy_history 
+    FOR ALL 
+    USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
+    WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
+
+DROP POLICY IF EXISTS "UnresolvedWatchLater: Manage Own" ON public.unresolved_watch_later;
+CREATE POLICY "UnresolvedWatchLater: Manage Own" ON public.unresolved_watch_later 
+    FOR ALL 
+    USING ((select auth.uid()) = user_id AND (select public.is_active_user()))
+    WITH CHECK ((select auth.uid()) = user_id AND (select public.is_active_user()));
+
+-- Mapa de Migración de Usuarios
+ALTER TABLE public.migration_user_map ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "MigrationUserMap: Admin Read Only" ON public.migration_user_map;
+CREATE POLICY "MigrationUserMap: Admin Read Only" ON public.migration_user_map
+    FOR SELECT USING ((select public.is_admin()));
+
 -- --- 3.5 AUDITORÍA, VISTAS, JOBS Y NOTIFICACIONES ---
 DROP POLICY IF EXISTS "AuditLogs: Admin Read Only" ON public.audit_logs;
 CREATE POLICY "AuditLogs: Admin Read Only" ON public.audit_logs 

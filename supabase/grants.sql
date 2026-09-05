@@ -46,7 +46,9 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON TABLE 
     public.user_history, 
     public.user_episode_status, 
-    public.watch_later 
+    public.watch_later,
+    public.unresolved_legacy_history,
+    public.unresolved_watch_later
 TO authenticated;
 
 -- 3.3 Privilegios por Columna en 'profiles' (Evita modificación de ID o timestamps)

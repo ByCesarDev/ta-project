@@ -348,7 +348,48 @@ CREATE TABLE IF NOT EXISTS public.watch_later (
 CREATE INDEX IF NOT EXISTS idx_watch_later_user_id ON public.watch_later(user_id);
 
 -- ========================================================
--- 19. CONFIGURACIÓN GLOBAL PÚBLICA (public.app_settings)
+-- 19. STAGING DE HISTORIAL Y WATCHLIST NO RESUELTOS
+-- Preserva registros legacy cuyos animes aún no están en el catálogo oficial
+-- ========================================================
+CREATE TABLE IF NOT EXISTS public.unresolved_legacy_history (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    legacy_anime_id VARCHAR(255) NOT NULL,
+    anime_title VARCHAR(255) NOT NULL,
+    anime_ep VARCHAR(50) NOT NULL,
+    anime_image TEXT NOT NULL,
+    anime_release VARCHAR(50),
+    dub_or_sub VARCHAR(10) DEFAULT 'sub',
+    anime_type VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.unresolved_watch_later (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    legacy_slug VARCHAR(255) NOT NULL,
+    image TEXT NOT NULL,
+    type VARCHAR(50),
+    released VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_unresolved_watch_later_user_id ON public.unresolved_watch_later(user_id);
+
+-- ========================================================
+-- 20. MAPA FORMAL DE MIGRACIÓN DE USUARIOS (public.migration_user_map)
+-- ========================================================
+CREATE TABLE IF NOT EXISTS public.migration_user_map (
+    legacy_id INT PRIMARY KEY,
+    supabase_uuid UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    username VARCHAR(50) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    migrated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- ========================================================
+-- 21. CONFIGURACIÓN GLOBAL PÚBLICA (public.app_settings)
 -- ⚠️ ADVERTENCIA: SOLO CONFIGURACIONES PÚBLICAS (CERO SECRETOS)
 -- ========================================================
 CREATE TABLE IF NOT EXISTS public.app_settings (

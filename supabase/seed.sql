@@ -1,15 +1,12 @@
 -- ==============================================================================
--- TOTALANIME 2.0 - SEED DATA / PIPELINE ETL DE MIGRACIÓN
+-- TOTALANIME 2.0 - COMPLETE ETL DATA SEED (PRODUCTION-READY & VERIFIED)
 -- Archivo: supabase/seed.sql
 -- Fuente: totalanime (2).sql
--- Versión: 2.4.1 Production-Ready
+-- Integridad: FK estrictas activas (CERO session_replication_role = 'replica')
 -- ==============================================================================
 
--- Desactivar triggers temporalmente para carga masiva ETL si es necesario
-SET session_replication_role = 'replica';
-
 -- ========================================================
--- 1. CATÁLOGO DE GÉNEROS (public.genres)
+-- 1. CATÁLOGO DE GÉNEROS (public.genres) - 19 géneros
 -- ========================================================
 INSERT INTO public.genres (id, name, slug) VALUES
 (1, 'Action', 'action'),
@@ -34,7 +31,7 @@ INSERT INTO public.genres (id, name, slug) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ========================================================
--- 2. CATÁLOGO DE AVATARES PREDEFINIDOS (public.avatars)
+-- 2. CATÁLOGO DE AVATARES PREDEFINIDOS (public.avatars) - 13 avatares
 -- ========================================================
 INSERT INTO public.avatars (id, filename, is_default, created_at, updated_at) VALUES
 (1, 'default-avatar.png', true, '2025-09-24 20:16:42+00', '2025-09-24 20:16:42+00'),
@@ -65,16 +62,32 @@ INSERT INTO public.profiles (id, username, avatar_url, bio, created_at, updated_
 ('a0000000-0000-0000-0000-000000000002', 'cesardev', 'user-4.jpeg', 'Administrador de TotalAnime', '2025-08-14 06:58:22+00', '2025-08-14 06:58:22+00'),
 ('a0000000-0000-0000-0000-000000000004', 'freilyn', 'user-5.jpeg', 'Moderador de TotalAnime', '2025-09-25 03:32:49+00', '2025-09-25 03:32:49+00'),
 ('a0000000-0000-0000-0000-000000000005', 'Jesus', 'user-5.jpeg', '', '2025-09-26 04:13:31+00', '2025-09-26 04:13:31+00')
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET 
+    username = EXCLUDED.username,
+    avatar_url = EXCLUDED.avatar_url,
+    bio = EXCLUDED.bio,
+    updated_at = EXCLUDED.updated_at;
 
 INSERT INTO public.user_roles (user_id, role, status, updated_at) VALUES
 ('a0000000-0000-0000-0000-000000000002', 'admin', 'active', '2025-08-14 06:58:22+00'),
 ('a0000000-0000-0000-0000-000000000004', 'moderator', 'active', '2025-09-25 03:32:49+00'),
 ('a0000000-0000-0000-0000-000000000005', 'user', 'active', '2025-09-26 04:13:31+00')
-ON CONFLICT (user_id) DO NOTHING;
+ON CONFLICT (user_id) DO UPDATE SET
+    role = EXCLUDED.role,
+    status = EXCLUDED.status,
+    updated_at = EXCLUDED.updated_at;
 
 -- ========================================================
--- 4. CATÁLOGO DE ANIMES (public.animes)
+-- 4. MAPA FORMAL DE MIGRACIÓN (public.migration_user_map)
+-- ========================================================
+INSERT INTO public.migration_user_map (legacy_id, supabase_uuid, username, email) VALUES
+(2, 'a0000000-0000-0000-0000-000000000002', 'cesardev', 'admin@totalanime.com'),
+(4, 'a0000000-0000-0000-0000-000000000004', 'freilyn', 'freilyn@totalanime.com'),
+(5, 'a0000000-0000-0000-0000-000000000005', 'Jesus', 'jesus@totalanime.com')
+ON CONFLICT (legacy_id) DO NOTHING;
+
+-- ========================================================
+-- 5. CATÁLOGO DE ANIMES (public.animes) - 17 animes (IDs 66-82)
 -- ========================================================
 INSERT INTO public.animes (id, name, title_romaji, title_english, title_native, cover_image, banner_image, status, episodes, description, anilist_id, claimed_by, claimed_at, season_year, format, slug, air_day, air_time, air_timezone, start_date, end_date, views_count, created_at, updated_at) VALUES
 (66, 'Attack on Titan', 'Shingeki no Kyojin', 'Attack on Titan', '進撃の巨人', 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-buvcRTBx4NSm.jpg', 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/16498-8jpFCOcDmneX.jpg', 'FINISHED', 25, 'Several hundred years ago, humans were nearly exterminated by titans. Titans are typically several stories tall, seem to have no intelligence, devour human beings and, worst of all, seem to do it for the pleasure rather than as a food source. A small percentage of humanity survived by walling themselves in a city protected by extremely high walls, even taller than the biggest of titans.
@@ -151,7 +164,7 @@ Kimi no Na wa. revolves around Mitsuha and Taki''s actions, which begin to have 
 ON CONFLICT (id) DO NOTHING;
 
 -- ========================================================
--- 5. RELACIÓN ANIME - GÉNEROS (public.anime_genres)
+-- 6. RELACIÓN ANIME - GÉNEROS (public.anime_genres)
 -- ========================================================
 INSERT INTO public.anime_genres (anime_id, genre_id) VALUES
 (66, 1),
@@ -226,7 +239,7 @@ INSERT INTO public.anime_genres (anime_id, genre_id) VALUES
 ON CONFLICT (anime_id, genre_id) DO NOTHING;
 
 -- ========================================================
--- 6. TABLA DE EPISODIOS (public.episodes)
+-- 7. TABLA DE EPISODIOS (public.episodes) - 484 episodios (IDs 2038-2521)
 -- ========================================================
 INSERT INTO public.episodes (id, anime_id, episode_number, title, description, duration, thumbnail, air_at, status, views, created_by, created_at, updated_at) VALUES
 (2038, 66, 1, 'Attack on Titan - Episodio 1', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 00:49:32+00', '2025-09-04 00:49:32+00'),
@@ -280,14 +293,14 @@ INSERT INTO public.episodes (id, anime_id, episode_number, title, description, d
 (2086, 67, 24, 'Demon Slayer: Kimetsu no Yaiba - Episodio 24', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 00:57:07+00', '2025-09-04 00:57:07+00'),
 (2087, 67, 25, 'Demon Slayer: Kimetsu no Yaiba - Episodio 25', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 00:57:07+00', '2025-09-04 00:57:07+00'),
 (2088, 67, 26, 'Demon Slayer: Kimetsu no Yaiba - Episodio 26', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 00:57:07+00', '2025-09-04 00:57:07+00'),
-(2089, 68, 1, 'TOUGEN ANKI - Episodio 1', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:57:56+00'),
+(2089, 68, 1, 'TOUGEN ANKI - Episodio 1', '', NULL, NULL, NULL, 'available', 8, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:57:56+00'),
 (2090, 68, 2, 'TOUGEN ANKI - Episodio 2', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:22+00'),
 (2091, 68, 3, 'TOUGEN ANKI - Episodio 3', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:26+00'),
 (2092, 68, 4, 'TOUGEN ANKI - Episodio 4', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:33+00'),
 (2093, 68, 5, 'TOUGEN ANKI - Episodio 5', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:39+00'),
 (2094, 68, 6, 'TOUGEN ANKI - Episodio 6', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:43+00'),
-(2095, 68, 7, 'TOUGEN ANKI - Episodio 7', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:48+00'),
-(2096, 68, 8, 'TOUGEN ANKI - Episodio 8', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:52+00'),
+(2095, 68, 7, 'TOUGEN ANKI - Episodio 7', '', NULL, NULL, NULL, 'available', 2, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:48+00'),
+(2096, 68, 8, 'TOUGEN ANKI - Episodio 8', '', NULL, NULL, NULL, 'available', 7, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:49:52+00'),
 (2097, 68, 9, 'TOUGEN ANKI - Episodio 9', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:42+00', '2025-09-04 01:48:42+00'),
 (2098, 68, 10, 'TOUGEN ANKI - Episodio 10', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:43+00', '2025-09-04 01:48:43+00'),
 (2099, 68, 11, 'TOUGEN ANKI - Episodio 11', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:48:43+00', '2025-09-04 01:48:43+00'),
@@ -538,7 +551,7 @@ INSERT INTO public.episodes (id, anime_id, episode_number, title, description, d
 (2344, 73, 23, 'Sword Art Online - Episodio 23', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:53:56+00', '2025-09-04 01:53:56+00'),
 (2345, 73, 24, 'Sword Art Online - Episodio 24', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:53:56+00', '2025-09-04 01:53:56+00'),
 (2346, 73, 25, 'Sword Art Online - Episodio 25', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-04 01:53:56+00', '2025-09-04 01:53:56+00'),
-(2347, 74, 1, 'Lord of Mysteries - Episodio 1', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 17:36:56+00', '2025-09-24 17:37:44+00'),
+(2347, 74, 1, 'Lord of Mysteries - Episodio 1', '', NULL, NULL, NULL, 'available', 8, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 17:36:56+00', '2025-09-24 17:37:44+00'),
 (2348, 74, 2, 'Lord of Mysteries - Episodio 2', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 17:36:56+00', '2025-09-24 17:36:56+00'),
 (2349, 74, 3, 'Lord of Mysteries - Episodio 3', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 17:36:56+00', '2025-09-24 17:36:56+00'),
 (2350, 74, 4, 'Lord of Mysteries - Episodio 4', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 17:36:56+00', '2025-09-24 17:36:56+00'),
@@ -556,11 +569,167 @@ INSERT INTO public.episodes (id, anime_id, episode_number, title, description, d
 (2362, 75, 3, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 3', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
 (2363, 75, 4, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 4', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
 (2364, 75, 5, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 5', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
-(2365, 75, 6, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 6', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00')
+(2365, 75, 6, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 6', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
+(2366, 75, 7, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 7', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
+(2367, 75, 8, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 8', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
+(2368, 75, 9, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 9', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
+(2369, 75, 10, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 10', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
+(2370, 75, 11, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 11', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
+(2371, 75, 12, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability - Episodio 12', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:20+00', '2025-09-24 21:59:20+00'),
+(2372, 76, 1, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 1', '', NULL, NULL, NULL, 'available', 4, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 22:00:49+00'),
+(2373, 76, 2, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 2', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2374, 76, 3, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 3', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2375, 76, 4, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 4', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2376, 76, 5, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 5', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2377, 76, 6, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 6', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2378, 76, 7, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 7', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2379, 76, 8, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 8', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2380, 76, 9, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 9', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2381, 76, 10, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 10', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2382, 76, 11, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 11', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2383, 76, 12, 'I Was Reincarnated as the 7th Prince so I Can Take My Time Perfecting My Magical Ability Season 2 - Episodio 12', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-24 21:59:31+00', '2025-09-24 21:59:31+00'),
+(2384, 77, 1, 'The Seven Deadly Sins - Episodio 1', '', NULL, NULL, NULL, 'pending', 4, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:33:59+00'),
+(2385, 77, 2, 'The Seven Deadly Sins - Episodio 2', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2386, 77, 3, 'The Seven Deadly Sins - Episodio 3', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2387, 77, 4, 'The Seven Deadly Sins - Episodio 4', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2388, 77, 5, 'The Seven Deadly Sins - Episodio 5', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2389, 77, 6, 'The Seven Deadly Sins - Episodio 6', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2390, 77, 7, 'The Seven Deadly Sins - Episodio 7', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2391, 77, 8, 'The Seven Deadly Sins - Episodio 8', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2392, 77, 9, 'The Seven Deadly Sins - Episodio 9', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2393, 77, 10, 'The Seven Deadly Sins - Episodio 10', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2394, 77, 11, 'The Seven Deadly Sins - Episodio 11', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2395, 77, 12, 'The Seven Deadly Sins - Episodio 12', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2396, 77, 13, 'The Seven Deadly Sins - Episodio 13', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2397, 77, 14, 'The Seven Deadly Sins - Episodio 14', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2398, 77, 15, 'The Seven Deadly Sins - Episodio 15', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2399, 77, 16, 'The Seven Deadly Sins - Episodio 16', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2400, 77, 17, 'The Seven Deadly Sins - Episodio 17', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2401, 77, 18, 'The Seven Deadly Sins - Episodio 18', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2402, 77, 19, 'The Seven Deadly Sins - Episodio 19', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2403, 77, 20, 'The Seven Deadly Sins - Episodio 20', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2404, 77, 21, 'The Seven Deadly Sins - Episodio 21', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2405, 77, 22, 'The Seven Deadly Sins - Episodio 22', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2406, 77, 23, 'The Seven Deadly Sins - Episodio 23', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2407, 77, 24, 'The Seven Deadly Sins - Episodio 24', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000004', '2025-09-26 04:32:11+00', '2025-09-26 04:32:11+00'),
+(2408, 78, 1, 'JUJUTSU KAISEN - Episodio 1', '', NULL, NULL, NULL, 'available', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-10-16 00:43:03+00'),
+(2409, 78, 2, 'JUJUTSU KAISEN - Episodio 2', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2410, 78, 3, 'JUJUTSU KAISEN - Episodio 3', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2411, 78, 4, 'JUJUTSU KAISEN - Episodio 4', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2412, 78, 5, 'JUJUTSU KAISEN - Episodio 5', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2413, 78, 6, 'JUJUTSU KAISEN - Episodio 6', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2414, 78, 7, 'JUJUTSU KAISEN - Episodio 7', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2415, 78, 8, 'JUJUTSU KAISEN - Episodio 8', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2416, 78, 9, 'JUJUTSU KAISEN - Episodio 9', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2417, 78, 10, 'JUJUTSU KAISEN - Episodio 10', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2418, 78, 11, 'JUJUTSU KAISEN - Episodio 11', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2419, 78, 12, 'JUJUTSU KAISEN - Episodio 12', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2420, 78, 13, 'JUJUTSU KAISEN - Episodio 13', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2421, 78, 14, 'JUJUTSU KAISEN - Episodio 14', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2422, 78, 15, 'JUJUTSU KAISEN - Episodio 15', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2423, 78, 16, 'JUJUTSU KAISEN - Episodio 16', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2424, 78, 17, 'JUJUTSU KAISEN - Episodio 17', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2425, 78, 18, 'JUJUTSU KAISEN - Episodio 18', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2426, 78, 19, 'JUJUTSU KAISEN - Episodio 19', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2427, 78, 20, 'JUJUTSU KAISEN - Episodio 20', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2428, 78, 21, 'JUJUTSU KAISEN - Episodio 21', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2429, 78, 22, 'JUJUTSU KAISEN - Episodio 22', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2430, 78, 23, 'JUJUTSU KAISEN - Episodio 23', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2431, 78, 24, 'JUJUTSU KAISEN - Episodio 24', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:23:59+00', '2025-09-26 05:23:59+00'),
+(2432, 79, 1, 'My Hero Academia - Episodio 1', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2433, 79, 2, 'My Hero Academia - Episodio 2', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2434, 79, 3, 'My Hero Academia - Episodio 3', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2435, 79, 4, 'My Hero Academia - Episodio 4', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2436, 79, 5, 'My Hero Academia - Episodio 5', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2437, 79, 6, 'My Hero Academia - Episodio 6', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2438, 79, 7, 'My Hero Academia - Episodio 7', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2439, 79, 8, 'My Hero Academia - Episodio 8', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2440, 79, 9, 'My Hero Academia - Episodio 9', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:21+00', '2025-09-26 05:25:21+00'),
+(2441, 79, 10, 'My Hero Academia - Episodio 10', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:22+00', '2025-09-26 05:25:22+00'),
+(2442, 79, 11, 'My Hero Academia - Episodio 11', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:22+00', '2025-09-26 05:25:22+00'),
+(2443, 79, 12, 'My Hero Academia - Episodio 12', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:23+00', '2025-09-26 05:25:23+00'),
+(2444, 79, 13, 'My Hero Academia - Episodio 13', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:25:23+00', '2025-09-26 05:25:23+00'),
+(2445, 80, 1, 'Attack on Titan Season 2 - Episodio 1', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2446, 80, 2, 'Attack on Titan Season 2 - Episodio 2', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2447, 80, 3, 'Attack on Titan Season 2 - Episodio 3', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2448, 80, 4, 'Attack on Titan Season 2 - Episodio 4', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2449, 80, 5, 'Attack on Titan Season 2 - Episodio 5', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2450, 80, 6, 'Attack on Titan Season 2 - Episodio 6', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2451, 80, 7, 'Attack on Titan Season 2 - Episodio 7', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2452, 80, 8, 'Attack on Titan Season 2 - Episodio 8', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2453, 80, 9, 'Attack on Titan Season 2 - Episodio 9', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2454, 80, 10, 'Attack on Titan Season 2 - Episodio 10', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2455, 80, 11, 'Attack on Titan Season 2 - Episodio 11', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2456, 80, 12, 'Attack on Titan Season 2 - Episodio 12', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:28:38+00', '2025-09-26 05:28:38+00'),
+(2457, 81, 1, 'Fullmetal Alchemist: Brotherhood - Episodio 1', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2458, 81, 2, 'Fullmetal Alchemist: Brotherhood - Episodio 2', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2459, 81, 3, 'Fullmetal Alchemist: Brotherhood - Episodio 3', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2460, 81, 4, 'Fullmetal Alchemist: Brotherhood - Episodio 4', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2461, 81, 5, 'Fullmetal Alchemist: Brotherhood - Episodio 5', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2462, 81, 6, 'Fullmetal Alchemist: Brotherhood - Episodio 6', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2463, 81, 7, 'Fullmetal Alchemist: Brotherhood - Episodio 7', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2464, 81, 8, 'Fullmetal Alchemist: Brotherhood - Episodio 8', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2465, 81, 9, 'Fullmetal Alchemist: Brotherhood - Episodio 9', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2466, 81, 10, 'Fullmetal Alchemist: Brotherhood - Episodio 10', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2467, 81, 11, 'Fullmetal Alchemist: Brotherhood - Episodio 11', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2468, 81, 12, 'Fullmetal Alchemist: Brotherhood - Episodio 12', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2469, 81, 13, 'Fullmetal Alchemist: Brotherhood - Episodio 13', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2470, 81, 14, 'Fullmetal Alchemist: Brotherhood - Episodio 14', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2471, 81, 15, 'Fullmetal Alchemist: Brotherhood - Episodio 15', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2472, 81, 16, 'Fullmetal Alchemist: Brotherhood - Episodio 16', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2473, 81, 17, 'Fullmetal Alchemist: Brotherhood - Episodio 17', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2474, 81, 18, 'Fullmetal Alchemist: Brotherhood - Episodio 18', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2475, 81, 19, 'Fullmetal Alchemist: Brotherhood - Episodio 19', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2476, 81, 20, 'Fullmetal Alchemist: Brotherhood - Episodio 20', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2477, 81, 21, 'Fullmetal Alchemist: Brotherhood - Episodio 21', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2478, 81, 22, 'Fullmetal Alchemist: Brotherhood - Episodio 22', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2479, 81, 23, 'Fullmetal Alchemist: Brotherhood - Episodio 23', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2480, 81, 24, 'Fullmetal Alchemist: Brotherhood - Episodio 24', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2481, 81, 25, 'Fullmetal Alchemist: Brotherhood - Episodio 25', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2482, 81, 26, 'Fullmetal Alchemist: Brotherhood - Episodio 26', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2483, 81, 27, 'Fullmetal Alchemist: Brotherhood - Episodio 27', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2484, 81, 28, 'Fullmetal Alchemist: Brotherhood - Episodio 28', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2485, 81, 29, 'Fullmetal Alchemist: Brotherhood - Episodio 29', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2486, 81, 30, 'Fullmetal Alchemist: Brotherhood - Episodio 30', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2487, 81, 31, 'Fullmetal Alchemist: Brotherhood - Episodio 31', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2488, 81, 32, 'Fullmetal Alchemist: Brotherhood - Episodio 32', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2489, 81, 33, 'Fullmetal Alchemist: Brotherhood - Episodio 33', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2490, 81, 34, 'Fullmetal Alchemist: Brotherhood - Episodio 34', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2491, 81, 35, 'Fullmetal Alchemist: Brotherhood - Episodio 35', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2492, 81, 36, 'Fullmetal Alchemist: Brotherhood - Episodio 36', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2493, 81, 37, 'Fullmetal Alchemist: Brotherhood - Episodio 37', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2494, 81, 38, 'Fullmetal Alchemist: Brotherhood - Episodio 38', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2495, 81, 39, 'Fullmetal Alchemist: Brotherhood - Episodio 39', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2496, 81, 40, 'Fullmetal Alchemist: Brotherhood - Episodio 40', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2497, 81, 41, 'Fullmetal Alchemist: Brotherhood - Episodio 41', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2498, 81, 42, 'Fullmetal Alchemist: Brotherhood - Episodio 42', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2499, 81, 43, 'Fullmetal Alchemist: Brotherhood - Episodio 43', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2500, 81, 44, 'Fullmetal Alchemist: Brotherhood - Episodio 44', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2501, 81, 45, 'Fullmetal Alchemist: Brotherhood - Episodio 45', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2502, 81, 46, 'Fullmetal Alchemist: Brotherhood - Episodio 46', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2503, 81, 47, 'Fullmetal Alchemist: Brotherhood - Episodio 47', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2504, 81, 48, 'Fullmetal Alchemist: Brotherhood - Episodio 48', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2505, 81, 49, 'Fullmetal Alchemist: Brotherhood - Episodio 49', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2506, 81, 50, 'Fullmetal Alchemist: Brotherhood - Episodio 50', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2507, 81, 51, 'Fullmetal Alchemist: Brotherhood - Episodio 51', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2508, 81, 52, 'Fullmetal Alchemist: Brotherhood - Episodio 52', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2509, 81, 53, 'Fullmetal Alchemist: Brotherhood - Episodio 53', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2510, 81, 54, 'Fullmetal Alchemist: Brotherhood - Episodio 54', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2511, 81, 55, 'Fullmetal Alchemist: Brotherhood - Episodio 55', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2512, 81, 56, 'Fullmetal Alchemist: Brotherhood - Episodio 56', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2513, 81, 57, 'Fullmetal Alchemist: Brotherhood - Episodio 57', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2514, 81, 58, 'Fullmetal Alchemist: Brotherhood - Episodio 58', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2515, 81, 59, 'Fullmetal Alchemist: Brotherhood - Episodio 59', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2516, 81, 60, 'Fullmetal Alchemist: Brotherhood - Episodio 60', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2517, 81, 61, 'Fullmetal Alchemist: Brotherhood - Episodio 61', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2518, 81, 62, 'Fullmetal Alchemist: Brotherhood - Episodio 62', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2519, 81, 63, 'Fullmetal Alchemist: Brotherhood - Episodio 63', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2520, 81, 64, 'Fullmetal Alchemist: Brotherhood - Episodio 64', NULL, NULL, NULL, NULL, 'pending', 0, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:31:18+00', '2025-09-26 05:31:18+00'),
+(2521, 82, 1, 'Your Name. - Episodio 1', NULL, NULL, NULL, NULL, 'pending', 3, 'a0000000-0000-0000-0000-000000000002', '2025-09-26 05:34:28+00', '2025-09-26 05:34:28+00')
 ON CONFLICT (id) DO NOTHING;
 
 -- ========================================================
--- 7. FUENTES DE VIDEO (public.episode_sources)
+-- 8. FUENTES DE VIDEO (public.episode_sources) - 6 fuentes legacy
 -- ========================================================
 INSERT INTO public.episode_sources (episode_id, provider, server_name, embed_url, language, quality, priority, is_active) VALUES
 (2089, 'legacy_primary', 'Servidor 1', 'https://www.youtube.com/embed/deUHydCzo08?si=MRgLv7OT2Vzkp8_1', 'sub', '1080p', 1, true),
@@ -572,7 +741,7 @@ INSERT INTO public.episode_sources (episode_id, provider, server_name, embed_url
 ON CONFLICT (episode_id, provider, language, quality) DO NOTHING;
 
 -- ========================================================
--- 8. ESTADO DE EPISODIOS VISTOS (public.user_episode_status)
+-- 9. ESTADO DE EPISODIOS VISTOS (public.user_episode_status) - 8 registros
 -- ========================================================
 INSERT INTO public.user_episode_status (user_id, episode_id, is_watched, watched_at, created_at, updated_at) VALUES
 ('a0000000-0000-0000-0000-000000000002', 2089, true, '2025-09-04 01:56:05+00', '2025-09-04 01:56:05+00', '2025-09-04 01:56:05+00'),
@@ -586,7 +755,40 @@ INSERT INTO public.user_episode_status (user_id, episode_id, is_watched, watched
 ON CONFLICT (user_id, episode_id) DO NOTHING;
 
 -- ========================================================
--- 9. WATCHLIST (public.watch_later)
+-- 10. HISTORIAL RESUELTO (public.user_history)
+-- ========================================================
+INSERT INTO public.user_history (user_id, episode_id, progress_seconds, total_seconds, is_completed, created_at, updated_at) VALUES
+('a0000000-0000-0000-0000-000000000002', 2385, 0, 1440, false, '2025-08-27 13:45:48+00', '2025-08-27 13:45:48+00'),
+('a0000000-0000-0000-0000-000000000002', 2386, 0, 1440, false, '2025-08-27 13:45:50+00', '2025-08-27 13:45:50+00'),
+('a0000000-0000-0000-0000-000000000002', 2389, 0, 1440, false, '2025-08-27 13:53:34+00', '2025-08-27 13:53:34+00'),
+('a0000000-0000-0000-0000-000000000002', 2384, 0, 1440, false, '2025-08-27 13:53:52+00', '2025-08-27 13:53:52+00'),
+('a0000000-0000-0000-0000-000000000002', 2387, 0, 1440, false, '2025-08-30 23:25:09+00', '2025-08-30 23:25:09+00'),
+('a0000000-0000-0000-0000-000000000002', 2089, 0, 1440, false, '2025-09-04 01:56:05+00', '2025-09-04 01:56:05+00'),
+('a0000000-0000-0000-0000-000000000002', 2090, 0, 1440, false, '2025-09-04 01:56:06+00', '2025-09-04 01:56:06+00'),
+('a0000000-0000-0000-0000-000000000002', 2091, 0, 1440, false, '2025-09-04 01:56:06+00', '2025-09-04 01:56:06+00'),
+('a0000000-0000-0000-0000-000000000002', 2092, 0, 1440, false, '2025-09-04 01:56:07+00', '2025-09-04 01:56:07+00'),
+('a0000000-0000-0000-0000-000000000002', 2093, 0, 1440, false, '2025-09-04 01:56:08+00', '2025-09-04 01:56:08+00'),
+('a0000000-0000-0000-0000-000000000002', 2094, 0, 1440, false, '2025-09-04 01:56:09+00', '2025-09-04 01:56:09+00'),
+('a0000000-0000-0000-0000-000000000002', 2095, 0, 1440, false, '2025-09-04 01:56:10+00', '2025-09-04 01:56:10+00'),
+('a0000000-0000-0000-0000-000000000002', 2096, 0, 1440, false, '2025-09-04 01:56:57+00', '2025-09-04 01:56:57+00'),
+('a0000000-0000-0000-0000-000000000002', 2372, 0, 1440, false, '2025-09-24 22:02:56+00', '2025-09-24 22:02:56+00'),
+('a0000000-0000-0000-0000-000000000004', 2384, 0, 1440, false, '2025-09-26 04:33:35+00', '2025-09-26 04:33:35+00'),
+('a0000000-0000-0000-0000-000000000002', 2521, 0, 1440, false, '2025-09-26 16:51:58+00', '2025-09-26 16:51:58+00'),
+('a0000000-0000-0000-0000-000000000002', 2347, 0, 1440, false, '2025-09-26 17:24:18+00', '2025-09-26 17:24:18+00')
+ON CONFLICT (user_id, episode_id) DO NOTHING;
+
+-- ========================================================
+-- 11. HISTORIAL NO RESUELTO / STAGING (public.unresolved_legacy_history)
+-- ========================================================
+INSERT INTO public.unresolved_legacy_history (user_id, legacy_anime_id, anime_title, anime_ep, anime_image, anime_release, dub_or_sub, anime_type, created_at) VALUES
+('a0000000-0000-0000-0000-000000000002', 'black-clover-tv-episode-1', '', '', '', '', 'sub', '', '2025-08-20 23:17:05+00'),
+('a0000000-0000-0000-0000-000000000002', 'private-tutor-to-the-duke-s-daughter-1', 'Private Tutor to the Duke''s Daughter', '1', 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx170113-dk9h9ybZnGnZ.jpg', '2025', 'sub', 'ONA', '2025-09-03 22:59:44+00'),
+('a0000000-0000-0000-0000-000000000002', 'private-tutor-to-the-duke-s-daughter-2', 'Private Tutor to the Duke''s Daughter', '2', 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx170113-dk9h9ybZnGnZ.jpg', '2025', 'sub', 'ONA', '2025-09-03 23:00:53+00'),
+('a0000000-0000-0000-0000-000000000002', 'black-clover-1', 'Black Clover', '1', 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx97940-fyh8o7gNbha0.png', '2017', 'sub', 'TV', '2025-09-04 00:22:10+00'),
+('a0000000-0000-0000-0000-000000000004', '7seeds-1', '7SEEDS', '1', 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx105807-Ivd7xc40XdGF.jpg', '2019', 'sub', 'ONA', '2025-09-26 17:30:17+00');
+
+-- ========================================================
+-- 12. WATCHLIST RESUELTO (public.watch_later) - 3 elementos
 -- ========================================================
 INSERT INTO public.watch_later (user_id, anime_id, created_at) VALUES
 ('a0000000-0000-0000-0000-000000000002', 69, '2025-09-04 00:08:37+00'),
@@ -595,7 +797,15 @@ INSERT INTO public.watch_later (user_id, anime_id, created_at) VALUES
 ON CONFLICT (user_id, anime_id) DO NOTHING;
 
 -- ========================================================
--- 10. CONFIGURACIÓN GLOBAL PÚBLICA (public.app_settings)
+-- 13. WATCHLIST NO RESUELTO / STAGING (public.unresolved_watch_later) - 3 elementos
+-- ========================================================
+INSERT INTO public.unresolved_watch_later (user_id, name, legacy_slug, image, type, released, created_at) VALUES
+('a0000000-0000-0000-0000-000000000002', 'Rascal Does Not Dream of Bunny Girl Senpai', 'rascal-does-not-dream-of-bunny-girl-senpai', 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101291-wfEdgPqtfU0l.jpg', 'TV', '2018', '2025-09-04 00:08:53+00'),
+('a0000000-0000-0000-0000-000000000002', 'Re:ZERO -Starting Life in Another World-', 're-zero-starting-life-in-another-world', 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx21355-wRVUrGxpvIQQ.jpg', 'TV', '2016', '2025-09-04 00:08:55+00'),
+('a0000000-0000-0000-0000-000000000002', 'Naruto: Shippuden', 'naruto-shippuden', 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx1735-kGfVm0YqCPcu.png', 'TV', '2007', '2025-09-04 00:09:18+00');
+
+-- ========================================================
+-- 14. CONFIGURACIÓN GLOBAL PÚBLICA (public.app_settings)
 -- ========================================================
 INSERT INTO public.app_settings (key, value, description) VALUES
 ('maintenance_mode', 'false'::jsonb, 'Activar modo mantenimiento'),
@@ -611,12 +821,14 @@ INSERT INTO public.app_settings (key, value, description) VALUES
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 -- ========================================================
--- 11. SINCRONIZACIÓN DE SECUENCIAS POSTGRESQL
+-- 15. SINCRONIZACIÓN DE SECUENCIAS POSTGRESQL
 -- ========================================================
 SELECT setval('public.genres_id_seq', COALESCE((SELECT MAX(id) FROM public.genres), 1));
 SELECT setval('public.avatars_id_seq', COALESCE((SELECT MAX(id) FROM public.avatars), 1));
 SELECT setval('public.animes_id_seq', COALESCE((SELECT MAX(id) FROM public.animes), 1));
 SELECT setval('public.episodes_id_seq', COALESCE((SELECT MAX(id) FROM public.episodes), 1));
-
--- Restaurar modo normal de replicación
-SET session_replication_role = 'origin';
+SELECT setval('public.episode_sources_id_seq', COALESCE((SELECT MAX(id) FROM public.episode_sources), 1));
+SELECT setval('public.user_history_id_seq', COALESCE((SELECT MAX(id) FROM public.user_history), 1));
+SELECT setval('public.unresolved_legacy_history_id_seq', COALESCE((SELECT MAX(id) FROM public.unresolved_legacy_history), 1));
+SELECT setval('public.watch_later_id_seq', COALESCE((SELECT MAX(id) FROM public.watch_later), 1));
+SELECT setval('public.unresolved_watch_later_id_seq', COALESCE((SELECT MAX(id) FROM public.unresolved_watch_later), 1));
