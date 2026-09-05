@@ -1,0 +1,44 @@
+name: CI Database & ETL Integrity
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  supabase-tests:
+    name: Supabase DDL, Security & ETL Integrity Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase Local Stack
+        run: supabase start
+
+      - name: Run Database Reset & Seed
+        run: supabase db reset
+
+      - name: Run pgTAP Test Suites
+        run: supabase test db
+
+      - name: Test Auth Migration Script (Dry Run & Live)
+        run: |
+          npm run migrate:users:dry
+          npm run migrate:users
