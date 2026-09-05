@@ -52,21 +52,28 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ========================================================
 -- 3. CREACIÓN / FIXTURES DE USUARIOS EN AUTH (auth.users)
+-- Inserta usuarios solo si no existen previamente en Supabase Auth
 -- ========================================================
-INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, phone_change, phone_change_token, reauthentication_token, raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous, created_at, updated_at) VALUES
-('a0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'admin@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-08-14 06:58:22+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "cesardev"}'::jsonb, false, false, false, '2025-08-14 06:58:22+00', '2025-08-14 06:58:22+00'),
-('a0000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'freilyn@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-09-25 03:32:49+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "freilyn"}'::jsonb, false, false, false, '2025-09-25 03:32:49+00', '2025-09-25 03:32:49+00'),
-('a0000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jesus@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-09-26 04:13:31+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "Jesus"}'::jsonb, false, false, false, '2025-09-26 04:13:31+00', '2025-09-26 04:13:31+00')
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, phone_change, phone_change_token, reauthentication_token, raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous, created_at, updated_at)
+SELECT 'a0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'admin@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-08-14 06:58:22+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "cesardev"}'::jsonb, false, false, false, '2025-08-14 06:58:22+00', '2025-08-14 06:58:22+00'
+WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'admin@totalanime.com');
+
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, phone_change, phone_change_token, reauthentication_token, raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous, created_at, updated_at)
+SELECT 'a0000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'freilyn@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-09-25 03:32:49+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "freilyn"}'::jsonb, false, false, false, '2025-09-25 03:32:49+00', '2025-09-25 03:32:49+00'
+WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'freilyn@totalanime.com');
+
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, phone_change, phone_change_token, reauthentication_token, raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous, created_at, updated_at)
+SELECT 'a0000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'jesus@totalanime.com', '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopqr', '2025-09-26 04:13:31+00', '', '', '', '', '', '', '', '', '{"provider": "email", "providers": ["email"]}'::jsonb, '{"username": "Jesus"}'::jsonb, false, false, false, '2025-09-26 04:13:31+00', '2025-09-26 04:13:31+00'
+WHERE NOT EXISTS (SELECT 1 FROM auth.users WHERE email = 'jesus@totalanime.com');
 
 -- ========================================================
 -- 4. MAPA FORMAL DE MIGRACIÓN DE USUARIOS (public.migration_user_map)
--- Esta tabla es la ÚNICA FUENTE DE VERDAD para traducir legacy INT -> Supabase UUID
+-- Vincula el legacy_id al UUID real de auth.users (o fallback fixture)
 -- ========================================================
 INSERT INTO public.migration_user_map (legacy_id, supabase_uuid, username, email, migrated_at) VALUES
-(2, 'a0000000-0000-0000-0000-000000000002', 'cesardev', 'admin@totalanime.com', '2025-08-14 06:58:22+00'),
-(4, 'a0000000-0000-0000-0000-000000000004', 'freilyn', 'freilyn@totalanime.com', '2025-09-25 03:32:49+00'),
-(5, 'a0000000-0000-0000-0000-000000000005', 'Jesus', 'jesus@totalanime.com', '2025-09-26 04:13:31+00')
+(2, COALESCE((SELECT id FROM auth.users WHERE email = 'admin@totalanime.com' LIMIT 1), 'a0000000-0000-0000-0000-000000000002'), 'cesardev', 'admin@totalanime.com', '2025-08-14 06:58:22+00'),
+(4, COALESCE((SELECT id FROM auth.users WHERE email = 'freilyn@totalanime.com' LIMIT 1), 'a0000000-0000-0000-0000-000000000004'), 'freilyn', 'freilyn@totalanime.com', '2025-09-25 03:32:49+00'),
+(5, COALESCE((SELECT id FROM auth.users WHERE email = 'jesus@totalanime.com' LIMIT 1), 'a0000000-0000-0000-0000-000000000005'), 'Jesus', 'jesus@totalanime.com', '2025-09-26 04:13:31+00')
 ON CONFLICT (legacy_id) DO UPDATE SET
     supabase_uuid = EXCLUDED.supabase_uuid,
     username = EXCLUDED.username,
