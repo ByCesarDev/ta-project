@@ -162,79 +162,29 @@ export const EpisodeSourcesModal: React.FC<EpisodeSourcesModalProps> = ({
     }
 
     try {
-      // 1. Try centralized backend API synchronization
-      try {
-        await apiClient.put(`/stream/episodes/${episode.id}/sources`, {
-          sources: sources.map((s) => ({
-            ...(s.id ? { id: s.id } : {}),
-            episode_id: episode.id,
-            provider: s.provider,
-            server_name: s.server_name,
-            embed_url: sanitizeEmbedUrl(s.embed_url) || s.embed_url.trim(),
-            language: s.language,
-            quality: s.quality,
-            priority: s.priority,
-            is_active: s.is_active,
-          })),
-          deleted_ids: deletedIds,
-        });
-
-        if (onSuccess) onSuccess();
-        onClose();
-        return;
-      } catch (apiErr: any) {
-        // If API returned a 400 or 403 error (e.g. SSRF block or RBAC error), display it directly
-        if (apiErr.response?.data?.message) {
-          throw new Error(apiErr.response.data.message);
-        }
-        // Fallback to Supabase client if API server is offline or unreachable
-        console.warn('API sync failed, falling back to direct Supabase RLS client:', apiErr.message);
-      }
-
-      // 2. Direct Supabase Fallback
-      if (deletedIds.length > 0 && isAdmin) {
-        const { error: delError } = await supabase
-          .from('episode_sources')
-          .delete()
-          .in('id', deletedIds);
-        if (delError) throw delError;
-      }
-
-      if (sources.length > 0) {
-        const payload = sources.map((s) => {
-          const sanitized = sanitizeEmbedUrl(s.embed_url) || s.embed_url.trim();
-          return {
-            ...(s.id ? { id: s.id } : {}),
-            episode_id: episode.id,
-            provider: s.provider,
-            server_name: s.server_name,
-            embed_url: sanitized,
-            language: s.language,
-            quality: s.quality,
-            priority: s.priority,
-            is_active: s.is_active,
-            last_verified_at: new Date().toISOString(),
-          };
-        });
-
-        const { error: upsertError } = await supabase
-          .from('episode_sources')
-          .upsert(payload, { onConflict: 'episode_id,provider,language,quality' });
-
-        if (upsertError) throw upsertError;
-      }
-
-      if (sources.length > 0) {
-        await supabase
-          .from('episodes')
-          .update({ status: 'available', updated_at: new Date().toISOString() })
-          .eq('id', episode.id);
-      }
+      // Centralized backend API synchronization (Fail-Closed: mutations only via Render API service role)
+      await apiClient.put(`/stream/episodes/${episode.id}/sources`, {
+        sources: sources.map((s) => ({
+          ...(s.id ? { id: s.id } : {}),
+          episode_id: episode.id,
+          provider: s.provider,
+          server_name: s.server_name,
+          embed_url: sanitizeEmbedUrl(s.embed_url) || s.embed_url.trim(),
+          language: s.language,
+          quality: s.quality,
+          priority: s.priority,
+          is_active: s.is_active,
+        })),
+        deleted_ids: deletedIds,
+      });
 
       if (onSuccess) onSuccess();
       onClose();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Error al guardar fuentes';
+    } catch (err: any) {
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        'No se pudo sincronizar las fuentes con la API centralizada. El servicio de Render no está disponible en este momento.';
       setErrorMsg(message);
     } finally {
       setIsSaving(false);

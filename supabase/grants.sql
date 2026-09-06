@@ -107,12 +107,15 @@ GRANT DELETE ON TABLE public.animes TO authenticated;
 -- 3.6 Gestión de Catálogo y Recursos (Mod/Admin regulado por RLS)
 GRANT INSERT, UPDATE, DELETE ON TABLE 
     public.episodes, 
-    public.episode_sources, 
     public.genres, 
     public.anime_genres, 
     public.avatars, 
     public.admin_notifications 
 TO authenticated;
+
+-- Hardening: episode_sources mutaciones están reservadas exclusivamente para service_role (API backend)
+REVOKE INSERT, UPDATE, DELETE ON TABLE public.episode_sources FROM authenticated, anon, PUBLIC;
+GRANT SELECT ON TABLE public.episode_sources TO anon, authenticated;
 
 -- 3.7 Ejecución de Funciones de Seguridad y RPCs
 GRANT EXECUTE ON FUNCTION public.is_active_user() TO anon, authenticated;

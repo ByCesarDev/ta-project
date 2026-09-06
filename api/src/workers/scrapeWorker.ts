@@ -152,12 +152,14 @@ export class ScrapeWorker {
               }
             }
 
-            // Update episode status to available if it was pending
+            // Synchronize episode status: available ONLY if there are active, verified sources
+            const hasActiveSource = servers.some((s) => s.is_active);
+            const targetStatus = hasActiveSource ? 'available' : 'pending';
+
             await supabaseAdmin
               .from('episodes')
-              .update({ status: 'available', updated_at: new Date().toISOString() })
-              .eq('id', ep.id)
-              .eq('status', 'pending');
+              .update({ status: targetStatus, updated_at: new Date().toISOString() })
+              .eq('id', ep.id);
 
             processed++;
           }

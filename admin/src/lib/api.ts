@@ -1,7 +1,13 @@
 import axios from 'axios';
 import { supabase } from './supabase.js';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const rawApiUrl = import.meta.env.VITE_API_URL;
+if (import.meta.env.PROD && !rawApiUrl) {
+  throw new Error(
+    'Missing required environment variable in production: VITE_API_URL. Please configure it in your deployment environment.'
+  );
+}
+const API_BASE_URL = rawApiUrl || 'http://localhost:4000';
 
 export const apiClient = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,

@@ -444,3 +444,54 @@ CREATE TRIGGER update_user_episode_status_updated_at BEFORE UPDATE ON public.use
 
 DROP TRIGGER IF EXISTS update_app_settings_updated_at ON public.app_settings;
 CREATE TRIGGER update_app_settings_updated_at BEFORE UPDATE ON public.app_settings FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- ========================================================
+-- 21. TRIGGER DE SINCRONIZACIÓN DE DISPONIBILIDAD DE EPISODIOS
+-- Deriva episodes.status = 'available' si count(active_sources) > 0, sino 'pending'
+-- ========================================================
+CREATE OR REPLACE FUNCTION public.trg_sync_episode_availability()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_target_ep_id INT;
+    v_active_count INT;
+BEGIN
+    v_target_ep_id := COALESCE(NEW.episode_id, OLD.episode_id);
+
+    IF v_target_ep_id IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    SELECT COUNT(*)
+    INTO v_active_count
+    FROM public.episode_sources
+    WHERE episode_id = v_target_ep_id
+      AND is_active = true;
+
+    IF v_active_count > 0 THEN
+        UPDATE public.episodes
+        SET status = 'available',
+            updated_at = NOW()
+        WHERE id = v_target_ep_id
+          AND status != 'available';
+    ELSE
+        UPDATE public.episodes
+        SET status = 'pending',
+            updated_at = NOW()
+        WHERE id = v_target_ep_id
+          AND status = 'available';
+    END IF;
+
+    RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_episode_sources_sync_availability ON public.episode_sources;
+CREATE TRIGGER trg_episode_sources_sync_availability
+    AFTER INSERT OR UPDATE OF is_active, episode_id OR DELETE ON public.episode_sources
+    FOR EACH ROW
+    EXECUTE FUNCTION public.trg_sync_episode_availability();
+

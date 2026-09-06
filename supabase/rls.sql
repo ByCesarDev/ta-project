@@ -184,17 +184,11 @@ DROP POLICY IF EXISTS "ModAdmin: EpisodeSources SELECT All" ON public.episode_so
 CREATE POLICY "ModAdmin: EpisodeSources SELECT All" ON public.episode_sources
     FOR SELECT USING ((select public.is_moderator_or_admin()));
 
+-- Hardening: episode_sources mutaciones están reservadas exclusivamente para service_role (Render API).
+-- Las políticas directas INSERT/UPDATE/DELETE quedan eliminadas para cerrar el bypass de RLS.
 DROP POLICY IF EXISTS "ModAdmin: EpisodeSources INSERT" ON public.episode_sources;
-CREATE POLICY "ModAdmin: EpisodeSources INSERT" ON public.episode_sources
-    FOR INSERT WITH CHECK ((select public.is_moderator_or_admin()));
-
 DROP POLICY IF EXISTS "ModAdmin: EpisodeSources UPDATE" ON public.episode_sources;
-CREATE POLICY "ModAdmin: EpisodeSources UPDATE" ON public.episode_sources
-    FOR UPDATE USING ((select public.is_moderator_or_admin()));
-
 DROP POLICY IF EXISTS "Admin: EpisodeSources DELETE" ON public.episode_sources;
-CREATE POLICY "Admin: EpisodeSources DELETE" ON public.episode_sources
-    FOR DELETE USING ((select public.is_admin()));
 
 -- --- 3.3 METADATOS ESTÁTICOS ---
 DROP POLICY IF EXISTS "Public: Genres SELECT" ON public.genres;

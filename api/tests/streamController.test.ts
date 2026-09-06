@@ -117,6 +117,7 @@ describe('Stream Controller', () => {
         language: 'sub' as const,
         quality: '720p',
         priority: 20,
+        is_active: true,
       },
     ];
 

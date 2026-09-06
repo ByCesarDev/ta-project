@@ -94,6 +94,9 @@ export class StreamController {
       // 4. Live Scraper Fallback
       const scrapedServers = await videoScraper.scrapeEpisodeServers(animeSlug, epNum, lang);
 
+      // Security: Filter active (verified) servers for public playback
+      const activeScrapedServers = scrapedServers.filter((s) => s.is_active);
+
       if (scrapedServers.length === 0) {
         res.status(404).json({
           error: 'NotFound',
@@ -103,7 +106,7 @@ export class StreamController {
         return;
       }
 
-      // Asynchronously persist discovered servers to DB if episode row exists
+      // Asynchronously persist discovered servers to DB respecting s.is_active quarantine flag
       if (episodeId) {
         for (const s of scrapedServers) {
           supabaseAdmin
@@ -117,15 +120,29 @@ export class StreamController {
                 language: s.language,
                 quality: s.quality,
                 priority: s.priority,
-                is_active: true,
+                is_active: Boolean(s.is_active),
                 last_verified_at: new Date().toISOString(),
               },
               { onConflict: 'episode_id,provider,language,quality' }
             )
-            .then(({ error }) => {
-              if (error) console.warn('[StreamController] Error persisting source:', error.message);
+            .then(async ({ error }) => {
+              if (error) {
+                console.warn('[StreamController] Error persisting source:', error.message);
+              } else {
+                await streamController.syncEpisodeAvailability(episodeId);
+              }
             });
         }
+      }
+
+      // If all scraped servers are unverified/quarantined, do not leak them to the public response
+      if (activeScrapedServers.length === 0) {
+        res.status(404).json({
+          error: 'NotFound',
+          message: `Streaming sources for ${animeSlug} episode ${epNum} are currently under quarantine/review.`,
+          servers: [],
+        });
+        return;
       }
 
       res.status(200).json({
@@ -133,7 +150,7 @@ export class StreamController {
         anime: { id: anime?.id, name: anime?.name || animeSlug, slug: animeSlug },
         episode_number: epNum,
         language: lang,
-        servers: scrapedServers,
+        servers: activeScrapedServers,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown stream error';
@@ -281,23 +298,53 @@ export class StreamController {
         return;
       }
 
-      // Mark episode available
-      await supabaseAdmin
-        .from('episodes')
-        .update({ status: 'available', updated_at: new Date().toISOString() })
-        .eq('id', episodeId);
+      // Automatically synchronize episode availability status based on real active sources count
+      const updatedStatus = await this.syncEpisodeAvailability(episodeId);
 
       res.status(200).json({
         message: 'Fuentes sincronizadas exitosamente.',
         sources: upsertedData,
+        episode_status: updatedStatus,
       });
       return;
     }
 
+    // When sources array was empty (e.g. only deleted_ids were supplied)
+    const updatedStatus = await this.syncEpisodeAvailability(episodeId);
+
     res.status(200).json({
       message: 'Operación completada sin fuentes adicionales.',
       sources: [],
+      episode_status: updatedStatus,
     });
+  }
+
+  /**
+   * Synchronizes public.episodes.status based on count of active sources.
+   * > 0 active sources -> 'available'
+   * 0 active sources -> 'pending'
+   */
+  public async syncEpisodeAvailability(episodeId: number): Promise<'available' | 'pending'> {
+    try {
+      const { count, error } = await supabaseAdmin
+        .from('episode_sources')
+        .select('*', { count: 'exact', head: true })
+        .eq('episode_id', episodeId)
+        .eq('is_active', true);
+
+      const activeCount = !error && typeof count === 'number' ? count : 0;
+      const targetStatus = activeCount > 0 ? 'available' : 'pending';
+
+      await supabaseAdmin
+        .from('episodes')
+        .update({ status: targetStatus, updated_at: new Date().toISOString() })
+        .eq('id', episodeId);
+
+      return targetStatus;
+    } catch (err) {
+      console.warn(`[StreamController] Failed to sync availability for episode ${episodeId}:`, err);
+      return 'pending';
+    }
   }
 }
 

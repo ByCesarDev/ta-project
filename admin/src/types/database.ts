@@ -440,6 +440,87 @@ export interface Database {
         };
         Relationships: [];
       };
+      anime_genres: {
+        Row: {
+          anime_id: number;
+          genre_id: number;
+          created_at: string;
+        };
+        Insert: {
+          anime_id: number;
+          genre_id: number;
+          created_at?: string;
+        };
+        Update: {
+          anime_id?: number;
+          genre_id?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "anime_genres_anime_id_fkey";
+            columns: ["anime_id"];
+            isOneToOne: false;
+            referencedRelation: "animes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "anime_genres_genre_id_fkey";
+            columns: ["genre_id"];
+            isOneToOne: false;
+            referencedRelation: "genres";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      avatars: {
+        Row: {
+          id: number;
+          name: string;
+          image_url: string;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          name: string;
+          image_url: string;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          name?: string;
+          image_url?: string;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      app_settings: {
+        Row: {
+          key: string;
+          value: Json;
+          description: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value: Json;
+          description?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: Json;
+          description?: string | null;
+          updated_by?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

@@ -123,28 +123,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
         {/* Footer Link to Web Client */}
         <div className="p-4 border-t border-slate-800/80 bg-[#07090e]/60">
-          <a
-            href={import.meta.env.VITE_WEB_URL || 'http://localhost:5173'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <ExternalLink className="w-3.5 h-3.5" />
-              Ver Portal Web
-            </span>
-            <span className="text-[10px] font-mono text-slate-500">
-              {(() => {
-                try {
-                  const target = import.meta.env.VITE_WEB_URL || 'http://localhost:5173';
-                  const parsed = new URL(target);
-                  return parsed.port ? `:${parsed.port}` : parsed.hostname;
-                } catch {
-                  return 'Web';
-                }
-              })()}
-            </span>
-          </a>
+          {(() => {
+            const rawWeb = import.meta.env.VITE_WEB_URL;
+            if (import.meta.env.PROD && !rawWeb) {
+              throw new Error('Missing required environment variable in production: VITE_WEB_URL.');
+            }
+            const target = rawWeb || 'http://localhost:5173';
+            let portOrHost = 'Web';
+            try {
+              const parsed = new URL(target);
+              portOrHost = parsed.port ? `:${parsed.port}` : parsed.hostname;
+            } catch {
+              portOrHost = 'Web';
+            }
+
+            return (
+              <a
+                href={target}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Ver Portal Web
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">{portOrHost}</span>
+              </a>
+            );
+          })()}
         </div>
       </aside>
     </>
