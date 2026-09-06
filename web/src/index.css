@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-[#07090e] text-slate-100 font-sans;
+    overflow-x: hidden;
+  }
+
+  /* Custom Sleek Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #07090e;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+  }
+}
+
+@layer components {
+  /* Glassmorphic elements */
+  .glass-header {
+    @apply bg-[#07090e]/80 backdrop-blur-xl border-b border-slate-800/60 shadow-lg shadow-black/40;
+  }
+
+  .glass-panel {
+    @apply bg-slate-900/60 backdrop-blur-xl border border-slate-800/80 shadow-2xl;
+  }
+
+  .glass-card {
+    @apply bg-[#0b0f19]/70 backdrop-blur-md border border-slate-800/60 shadow-md hover:border-indigo-500/40 transition-all duration-300;
+  }
+
+  .glass-input {
+    @apply bg-[#0b0f19]/90 border border-slate-700/60 text-slate-100 placeholder-slate-500 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all duration-150;
+  }
+
+  /* Card Hover Effects */
+  .anime-card-zoom {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
+  }
+
+  .anime-card-zoom:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 16px 32px -8px rgba(99, 102, 241, 0.25);
+  }
+
+  /* Shimmer / Skeleton */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.03) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.03) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Aspect ratio 16:9 for streaming player */
+.aspect-video-player {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 */
+}
+
+.aspect-video-player > iframe,
+.aspect-video-player > video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

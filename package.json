@@ -18,7 +18,11 @@
     "admin:dev": "npm --prefix admin run dev",
     "admin:build": "npm --prefix admin run build",
     "admin:lint": "npm --prefix admin run lint",
-    "admin:test": "npm --prefix admin run test"
+    "admin:test": "npm --prefix admin run test",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "web:lint": "npm --prefix web run lint",
+    "web:test": "npm --prefix web run test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
