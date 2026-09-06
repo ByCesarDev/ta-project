@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimeWithGenres } from '../../types/index.js';
-import { Play, Bookmark, ChevronLeft, ChevronRight, Star } from 'lucide-react';
+import { Play, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../common/Button.js';
 import { Badge } from '../common/Badge.js';
 import { useToggleWatchlist, useIsInWatchlist } from '../../hooks/useWatchlist.js';
@@ -62,9 +62,6 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
               {currentAnime.season_year}
             </Badge>
           )}
-          <span className="flex items-center gap-1 text-amber-400 text-xs font-bold bg-black/60 px-2 py-0.5 rounded-md backdrop-blur-md">
-            <Star className="w-3.5 h-3.5 fill-amber-400" /> 4.9
-          </span>
         </div>
 
         {/* Title */}

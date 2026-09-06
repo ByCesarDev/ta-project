@@ -5,13 +5,14 @@ import { useAnimeCatalog, useGenres } from '../hooks/useAnime.js';
 import { AnimeCard } from '../components/common/AnimeCard.js';
 import { AnimeCardSkeleton } from '../components/common/Skeleton.js';
 import { Search, SlidersHorizontal, Film } from 'lucide-react';
+import { normalizeAnimeStatus } from '../lib/utils.js';
 
 export const CatalogPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [selectedGenre, setSelectedGenre] = useState(searchParams.get('genre') || '');
-  const [status, setStatus] = useState(searchParams.get('status') || '');
+  const [status, setStatus] = useState(normalizeAnimeStatus(searchParams.get('status') || ''));
   const [format, setFormat] = useState(searchParams.get('format') || '');
   const [sortBy, setSortBy] = useState<'views' | 'recent' | 'name' | 'episodes'>(
     (searchParams.get('sort') as any) || 'views'
@@ -23,7 +24,7 @@ export const CatalogPage: React.FC = () => {
   useEffect(() => {
     const qParam = searchParams.get('q') || '';
     const genreParam = searchParams.get('genre') || '';
-    const statusParam = searchParams.get('status') || '';
+    const statusParam = normalizeAnimeStatus(searchParams.get('status') || '');
     setSearch(qParam);
     setSelectedGenre(genreParam);
     setStatus(statusParam);
@@ -91,9 +92,9 @@ export const CatalogPage: React.FC = () => {
             className="glass-input text-xs py-2"
           >
             <option value="">Todos los Estados</option>
-            <option value="emision">En Emisión</option>
-            <option value="finalizado">Finalizado</option>
-            <option value="proximamente">Próximamente</option>
+            <option value="RELEASING">En Emisión</option>
+            <option value="FINISHED">Finalizado</option>
+            <option value="NOT_YET_RELEASED">Próximamente</option>
           </select>
 
           {/* Format Dropdown */}

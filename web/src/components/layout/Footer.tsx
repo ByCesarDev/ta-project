@@ -40,7 +40,7 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link to="/directory?status=emision" className="hover:text-indigo-400 transition-colors">
+                <Link to="/directory?status=RELEASING" className="hover:text-indigo-400 transition-colors">
                   Animes en Emisión
                 </Link>
               </li>

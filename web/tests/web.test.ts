@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { formatTime, formatStatusLabel, truncateText } from '../src/lib/utils.js';
+import {
+  formatTime,
+  formatStatusLabel,
+  truncateText,
+  normalizeAnimeStatus,
+  canTrackPlayback,
+  getAdjacentEpisodes,
+} from '../src/lib/utils.js';
 import { EpisodeSourceRow } from '../src/types/index.js';
 
 describe('TotalAnime Web: Utility & Formatting Tests', () => {
@@ -27,6 +34,25 @@ describe('TotalAnime Web: Utility & Formatting Tests', () => {
 
     const unknown = formatStatusLabel('custom_unknown');
     expect(unknown.label).toBe('custom_unknown');
+  });
+
+  it('should normalize anime status strings to AniList / DB enum values', () => {
+    expect(normalizeAnimeStatus('emision')).toBe('RELEASING');
+    expect(normalizeAnimeStatus('en_emision')).toBe('RELEASING');
+    expect(normalizeAnimeStatus('en emisión')).toBe('RELEASING');
+    expect(normalizeAnimeStatus('releasing')).toBe('RELEASING');
+    expect(normalizeAnimeStatus('RELEASING')).toBe('RELEASING');
+
+    expect(normalizeAnimeStatus('finalizado')).toBe('FINISHED');
+    expect(normalizeAnimeStatus('finished')).toBe('FINISHED');
+    expect(normalizeAnimeStatus('FINISHED')).toBe('FINISHED');
+
+    expect(normalizeAnimeStatus('proximamente')).toBe('NOT_YET_RELEASED');
+    expect(normalizeAnimeStatus('próximamente')).toBe('NOT_YET_RELEASED');
+    expect(normalizeAnimeStatus('not_yet_released')).toBe('NOT_YET_RELEASED');
+
+    expect(normalizeAnimeStatus('')).toBe('');
+    expect(normalizeAnimeStatus(undefined)).toBe('');
   });
 
   it('should truncate synopsis text cleanly with ellipsis', () => {
@@ -164,4 +190,52 @@ describe('TotalAnime Web: Episode Navigation Boundaries', () => {
     expect(hasPrev12).toBe(true);
     expect(hasNext12).toBe(false);
   });
+
+  it('should handle non-consecutive episode numbers and gaps correctly', () => {
+    const episodesWithGaps = [
+      { episode_number: 1 },
+      { episode_number: 2 },
+      { episode_number: 5 },
+      { episode_number: 8 },
+    ];
+
+    // From episode 1: prev is null, next is 2
+    const nav1 = getAdjacentEpisodes(episodesWithGaps, 1);
+    expect(nav1.prev).toBeNull();
+    expect(nav1.next).toBe(2);
+
+    // From episode 2: prev is 1, next is 5 (skipping 3 and 4)
+    const nav2 = getAdjacentEpisodes(episodesWithGaps, 2);
+    expect(nav2.prev).toBe(1);
+    expect(nav2.next).toBe(5);
+
+    // From episode 5: prev is 2 (skipping 3 and 4), next is 8 (skipping 6 and 7)
+    const nav5 = getAdjacentEpisodes(episodesWithGaps, 5);
+    expect(nav5.prev).toBe(2);
+    expect(nav5.next).toBe(8);
+
+    // From episode 8 (last in list): prev is 5, next is null
+    const nav8 = getAdjacentEpisodes(episodesWithGaps, 8);
+    expect(nav8.prev).toBe(5);
+    expect(nav8.next).toBeNull();
+  });
 });
+
+describe('TotalAnime Web: Playback Guard & History Protection', () => {
+  it('should prevent tracking and saving progress if no source or embed URL exists', () => {
+    // null or undefined source
+    expect(canTrackPlayback(null)).toBe(false);
+    expect(canTrackPlayback(undefined)).toBe(false);
+
+    // source with missing embed_url
+    expect(canTrackPlayback({ embed_url: undefined } as any)).toBe(false);
+    expect(canTrackPlayback({ embed_url: null } as any)).toBe(false);
+    expect(canTrackPlayback({ embed_url: '' } as any)).toBe(false);
+    expect(canTrackPlayback({ embed_url: '   ' } as any)).toBe(false);
+
+    // source with valid embed_url
+    expect(canTrackPlayback({ embed_url: 'https://streamwish.to/e/abc' })).toBe(true);
+    expect(canTrackPlayback({ embed_url: 'https://mega.nz/embed/xyz' })).toBe(true);
+  });
+});
+

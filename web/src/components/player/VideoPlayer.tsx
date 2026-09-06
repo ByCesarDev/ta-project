@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { EpisodeSourceRow } from '../../types/index.js';
 import { useSaveProgress } from '../../hooks/useWatchHistory.js';
+import { canTrackPlayback } from '../../lib/utils.js';
 import { AlertCircle, Film } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -18,12 +19,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const watchedSecondsRef = useRef(0);
 
-  // Auto-record progress in public.user_history while active
+  // Auto-record progress in public.user_history while an active, playable embed source is present
   useEffect(() => {
+    // Reset local counter on episode or source switch
     watchedSecondsRef.current = 0;
+
+    // GUARD: Do not start interval or record history if there is no valid embed source
+    if (!canTrackPlayback(selectedSource)) {
+      return;
+    }
+
     const totalDurationSeconds = durationMinutes * 60;
 
-    // Periodically save every 15 seconds
+    // Periodically save progress every 15 seconds
     progressTimerRef.current = setInterval(() => {
       watchedSecondsRef.current += 15;
       saveProgressMutation.mutate({
@@ -36,9 +44,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     return () => {
       if (progressTimerRef.current) {
         clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
       }
-      // Save final progress on unmount if user watched > 10 seconds
-      if (watchedSecondsRef.current >= 10) {
+      // Save final progress on unmount/source change only if there was a playable source and watched >= 10s
+      if (canTrackPlayback(selectedSource) && watchedSecondsRef.current >= 10) {
         saveProgressMutation.mutate({
           episodeId,
           progressSeconds: watchedSecondsRef.current,
@@ -46,7 +55,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         });
       }
     };
-  }, [episodeId, durationMinutes]);
+  }, [episodeId, durationMinutes, selectedSource?.id, selectedSource?.embed_url]);
 
   if (!selectedSource || !selectedSource.embed_url) {
     return (

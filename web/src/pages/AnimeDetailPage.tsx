@@ -11,7 +11,6 @@ import { formatStatusLabel } from '../lib/utils.js';
 import {
   Play,
   Bookmark,
-  Star,
   Film,
   Calendar,
   Eye,
@@ -108,9 +107,6 @@ export const AnimeDetailPage: React.FC = () => {
               </Badge>
               {anime.format && <Badge variant="slate">{anime.format}</Badge>}
               {anime.season_year && <Badge variant="outline">{anime.season_year}</Badge>}
-              <span className="flex items-center gap-1 text-amber-400 text-xs font-bold bg-black/60 px-2.5 py-1 rounded-md">
-                <Star className="w-3.5 h-3.5 fill-amber-400" /> 4.9
-              </span>
             </div>
 
             {/* Main Title */}

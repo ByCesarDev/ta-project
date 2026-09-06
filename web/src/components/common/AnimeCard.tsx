@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { AnimeRow, AnimeWithGenres } from '../../types/index.js';
-import { Play, Star, Film } from 'lucide-react';
+import { Play, Film } from 'lucide-react';
 import { Badge } from './Badge.js';
 import { formatStatusLabel } from '../../lib/utils.js';
 
@@ -88,9 +88,11 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, showRank }) => {
           <span className="text-[11px] text-slate-500 font-mono">
             {anime.views_count.toLocaleString()} vistas
           </span>
-          <span className="flex items-center gap-0.5 text-amber-400 text-[11px] font-semibold">
-            <Star className="w-3 h-3 fill-amber-400" /> 4.8
-          </span>
+          {anime.season_year && (
+            <span className="text-[11px] text-slate-400 font-medium">
+              {anime.season_year}
+            </span>
+          )}
         </div>
       </div>
     </Link>

@@ -43,11 +43,16 @@ export const RegisterPage: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const { error } = await signUp(email, password, username);
+    const { error, session } = await signUp(email, password, username);
     setIsLoading(false);
 
     if (error) {
       setErrorMsg(error.message || 'Error al registrar la cuenta');
+    } else if (!session) {
+      setSuccessMsg('¡Cuenta creada! Por favor revisa tu correo electrónico para confirmar tu cuenta antes de iniciar sesión.');
+      setTimeout(() => {
+        navigate('/login');
+      }, 3000);
     } else {
       setSuccessMsg('¡Cuenta creada exitosamente! Redirigiendo...');
       setTimeout(() => {

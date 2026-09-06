@@ -32,7 +32,7 @@ export const Navbar: React.FC = () => {
   const navLinks = [
     { name: 'Inicio', path: '/' },
     { name: 'Directorio', path: '/directory' },
-    { name: 'En Emisión', path: '/directory?status=emision' },
+    { name: 'En Emisión', path: '/directory?status=RELEASING' },
   ];
 
   return (

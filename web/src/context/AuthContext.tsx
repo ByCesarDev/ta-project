@@ -10,7 +10,7 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   signIn: (email: string, pass: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, pass: string, username: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, pass: string, username: string) => Promise<{ error: Error | null; session?: Session | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -90,7 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = async (email: string, pass: string, username: string) => {
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: pass,
         options: {
@@ -99,10 +99,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
         },
       });
-      if (error) return { error };
-      return { error: null };
+      if (error) return { error, session: null };
+      return { error: null, session: data.session };
     } catch (err: unknown) {
-      return { error: err instanceof Error ? err : new Error('Registration failed') };
+      return { error: err instanceof Error ? err : new Error('Registration failed'), session: null };
     }
   };
 

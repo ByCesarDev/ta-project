@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.js';
 import { AnimeFilters, AnimeWithGenres, GenreRow } from '../types/index.js';
+import { normalizeAnimeStatus } from '../lib/utils.js';
 
 export function useGenres() {
   return useQuery({
@@ -92,9 +93,12 @@ export function useAnimeCatalog(filters: AnimeFilters) {
         query = query.or(`name.ilike.${term},title_english.ilike.${term},title_romaji.ilike.${term}`);
       }
 
-      // Status filter
+      // Status filter (normalized to AniList / DB enums: RELEASING, FINISHED, NOT_YET_RELEASED)
       if (filters.status) {
-        query = query.eq('status', filters.status);
+        const normalized = normalizeAnimeStatus(filters.status);
+        if (normalized) {
+          query = query.eq('status', normalized);
+        }
       }
 
       // Format filter

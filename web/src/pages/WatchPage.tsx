@@ -138,6 +138,7 @@ export const WatchPage: React.FC = () => {
           animeSlug={anime.slug}
           currentEpisodeNumber={episode.episode_number}
           totalEpisodes={anime.episodes || allEpisodes?.length || 0}
+          availableEpisodes={allEpisodes}
         />
 
         {/* Quick Episode Grid Selector */}
