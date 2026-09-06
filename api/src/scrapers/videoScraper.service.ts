@@ -40,7 +40,8 @@ export class VideoScraperService {
   public async scrapeEpisodeServers(
     animeSlug: string,
     episodeNumber: number | string,
-    language: StreamLanguage = 'sub'
+    language: StreamLanguage = 'sub',
+    fallbackSlug?: string
   ): Promise<ScrapedServer[]> {
     const cleanSlug = this.formatSlug(animeSlug);
     const epNum = String(episodeNumber).trim();
@@ -65,15 +66,26 @@ export class VideoScraperService {
           return this.parseEpisodeHtml(altResponse.data, language);
         }
 
+        // Try fallback slug if provided (e.g. Romaji title when primary slug is English)
+        if (fallbackSlug && this.formatSlug(fallbackSlug) !== cleanSlug) {
+          return this.scrapeEpisodeServers(fallbackSlug, episodeNumber, language);
+        }
+
         return [];
       }
 
       if (response.status !== 200) {
+        if (fallbackSlug && this.formatSlug(fallbackSlug) !== cleanSlug) {
+          return this.scrapeEpisodeServers(fallbackSlug, episodeNumber, language);
+        }
         return [];
       }
 
       return this.parseEpisodeHtml(response.data, language);
     } catch (error: unknown) {
+      if (fallbackSlug && this.formatSlug(fallbackSlug) !== cleanSlug) {
+        return this.scrapeEpisodeServers(fallbackSlug, episodeNumber, language);
+      }
       const message = error instanceof Error ? error.message : 'Unknown scraper error';
       console.warn(`[VideoScraperService] Warning scraping ${path}:`, message);
       return [];

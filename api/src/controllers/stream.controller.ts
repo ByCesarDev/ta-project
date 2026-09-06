@@ -42,7 +42,7 @@ export class StreamController {
       // 1. Resolve Anime from DB
       const { data: anime, error: animeError } = await supabaseAdmin
         .from('animes')
-        .select('id, name, slug')
+        .select('id, name, slug, title_romaji')
         .eq('slug', animeSlug)
         .maybeSingle();
 
@@ -92,7 +92,15 @@ export class StreamController {
       }
 
       // 4. Live Scraper Fallback
-      const scrapedServers = await videoScraper.scrapeEpisodeServers(animeSlug, epNum, lang);
+      const fallbackSlug = anime?.title_romaji
+        ? videoScraper.formatSlug(anime.title_romaji)
+        : undefined;
+      const scrapedServers = await videoScraper.scrapeEpisodeServers(
+        animeSlug,
+        epNum,
+        lang,
+        fallbackSlug
+      );
 
       // Security: Filter active (verified) servers for public playback
       const activeScrapedServers = scrapedServers.filter((s) => s.is_active);

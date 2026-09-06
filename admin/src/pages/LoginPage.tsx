@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.js';
 import { Button } from '../components/common/Button.js';
@@ -16,7 +16,7 @@ export const LoginPage: React.FC = () => {
 
   // If already logged in with staff permissions, redirect to dashboard
   if (isStaff) {
-    navigate('/', { replace: true });
+    return <Navigate to="/" replace />;
   }
 
   const handleLogin = async (e: React.FormEvent) => {

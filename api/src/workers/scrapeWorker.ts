@@ -66,7 +66,7 @@ export class ScrapeWorker {
       // 1. Fetch Anime details
       const { data: anime, error: animeError } = await supabaseAdmin
         .from('animes')
-        .select('id, name, slug, episodes')
+        .select('id, name, slug, title_romaji, episodes')
         .eq('id', job.anime_id)
         .single();
 
@@ -96,6 +96,10 @@ export class ScrapeWorker {
       }
 
       // 3. Process each episode
+      const fallbackSlug = anime.title_romaji
+        ? videoScraper.formatSlug(anime.title_romaji)
+        : undefined;
+
       for (const ep of episodeList) {
         if (this.shouldStop) {
           console.warn(`[ScrapeWorker] Job ${job.id} interrupted by worker stop signal.`);
@@ -112,7 +116,9 @@ export class ScrapeWorker {
         }
 
         try {
-          const servers = await videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number);
+          const servers = fallbackSlug
+            ? await videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number, 'sub', fallbackSlug)
+            : await videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number);
 
           if (servers.length === 0) {
             failed++;

@@ -10,6 +10,7 @@
     "migrate:users:dry": "tsx scripts/migrate-users.ts --dry-run",
     "migrate:data": "tsx scripts/migrate-data.ts",
     "migrate:data:dry": "tsx scripts/migrate-data.ts --dry-run",
+    "set:dev-passwords": "tsx scripts/set-dev-passwords.ts",
     "api:dev": "npm --prefix api run dev",
     "api:build": "npm --prefix api run build",
     "api:test": "npm --prefix api run test",
