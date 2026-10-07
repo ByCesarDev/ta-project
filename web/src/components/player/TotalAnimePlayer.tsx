@@ -78,19 +78,21 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   // Progress Queries and Mutations
   const { data: savedProgress } = useEpisodeProgress(episodeId);
   const saveProgressMutation = useSaveProgress();
+  const saveMutationRef = useRef(saveProgressMutation);
+  saveMutationRef.current = saveProgressMutation;
 
   // Helper to persist current exact playback time
   const triggerSaveProgress = useCallback(
     (timeToSave: number, totalDuration: number) => {
       if (timeToSave < 2 || totalDuration <= 0) return;
       lastRecordedTimeRef.current = timeToSave;
-      saveProgressMutation.mutate({
+      saveMutationRef.current.mutate({
         episodeId,
         progressSeconds: timeToSave,
         totalSeconds: totalDuration,
       });
     },
-    [episodeId, saveProgressMutation]
+    [episodeId]
   );
 
   // Reset initial seek state when episode changes
@@ -215,7 +217,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         hlsRef.current = null;
       }
     };
-  }, [stream, selectedSource]);
+  }, [stream]);
 
   // 3. Auto-Resume logic once video metadata is ready
   const handleLoadedMetadata = () => {
