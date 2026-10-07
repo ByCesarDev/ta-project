@@ -540,7 +540,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           referrerPolicy="no-referrer"
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
+          sandbox="allow-scripts allow-forms allow-presentation"
           className="w-full h-full border-0 absolute inset-0"
         />
 
