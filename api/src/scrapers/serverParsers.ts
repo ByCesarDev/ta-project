@@ -72,6 +72,41 @@ export const KNOWN_PROVIDERS: ProviderDefinition[] = [
     priority: 90,
     quality: '720p',
   },
+  {
+    provider: 'cuevana19',
+    name: 'Cuevana19',
+    allowedHostnames: ['cuevana19.com', 'play.cuevana19.com', 'cuevana.biz', 'cuevana3.ch', 'cuevana.si'],
+    priority: 35,
+    quality: '1080p',
+  },
+  {
+    provider: 'dramasfree',
+    name: 'DramasFree',
+    allowedHostnames: ['dramasfree.com', 'www3.dramasfree.com'],
+    priority: 36,
+    quality: '1080p',
+  },
+  {
+    provider: 'solo-latino',
+    name: 'SoloLatino',
+    allowedHostnames: ['solo-latino.com', 'latino.solo-latino.com'],
+    priority: 37,
+    quality: '1080p',
+  },
+  {
+    provider: 'upstream',
+    name: 'Upstream',
+    allowedHostnames: ['upstream.to'],
+    priority: 85,
+    quality: '720p',
+  },
+  {
+    provider: 'vidmoly',
+    name: 'Vidmoly',
+    allowedHostnames: ['vidmoly.me', 'vidmoly.to'],
+    priority: 88,
+    quality: '720p',
+  },
 ];
 
 /**
