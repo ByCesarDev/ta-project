@@ -1,7 +1,8 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import axios from 'axios';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
 import { videoScraper } from '../scrapers/videoScraper.service.js';
-import { sanitizeEmbedUrl, normalizeServer } from '../scrapers/serverParsers.js';
+import { sanitizeEmbedUrl, normalizeServer, isPrivateOrLoopbackHost } from '../scrapers/serverParsers.js';
 import { streamResolverService } from '../services/streamResolver.service.js';
 import { AuthenticatedRequest, StreamLanguage } from '../types/index.js';
 
@@ -13,6 +14,7 @@ export class StreamController {
     this.syncEpisodeAvailability = this.syncEpisodeAvailability.bind(this);
     this.resolveSourceById = this.resolveSourceById.bind(this);
     this.resolveDirectSource = this.resolveDirectSource.bind(this);
+    this.proxyStream = this.proxyStream.bind(this);
   }
 
   /**
@@ -520,6 +522,117 @@ export class StreamController {
         error: 'ResolverError',
         message,
       });
+    }
+  }
+
+  /**
+   * GET /api/v1/stream/proxy
+   * High-performance stream proxy for anti-hotlink and CORS-protected video sources.
+   * Handles HTTP Range requests for instant native video seeking and buffering.
+   */
+  public async proxyStream(req: Request, res: Response): Promise<void> {
+    const rawUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+    const rawReferer = typeof req.query.referer === 'string' ? req.query.referer.trim() : '';
+
+    if (!rawUrl) {
+      res.status(400).json({
+        error: 'BadRequest',
+        message: 'Query parameter "url" is required.',
+      });
+      return;
+    }
+
+    // SSRF & Protocol Validation
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        res.status(400).json({
+          error: 'InvalidUrl',
+          message: 'Only HTTP and HTTPS protocols are allowed.',
+        });
+        return;
+      }
+
+      if (isPrivateOrLoopbackHost(parsed.hostname)) {
+        res.status(403).json({
+          error: 'ForbiddenHost',
+          message: 'Streaming from loopback or private network hosts is strictly prohibited.',
+        });
+        return;
+      }
+    } catch {
+      res.status(400).json({
+        error: 'InvalidUrl',
+        message: 'Invalid target URL format.',
+      });
+      return;
+    }
+
+    // Build Forwarding Headers
+    const forwardHeaders: Record<string, string> = {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      Accept: '*/*',
+      Referer: rawReferer || rawUrl,
+    };
+
+    if (req.headers.range) {
+      forwardHeaders['Range'] = String(req.headers.range);
+    }
+
+    try {
+      const upstream = await axios.get(rawUrl, {
+        responseType: 'stream',
+        headers: forwardHeaders,
+        timeout: 15000,
+        validateStatus: (status) => status < 400,
+      });
+
+      // Forward HTTP status (e.g. 206 Partial Content or 200 OK)
+      res.status(upstream.status);
+
+      // Set Streaming & CORS Headers
+      const contentType = String(upstream.headers['content-type'] || 'video/mp4');
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Range, Origin, Accept');
+
+      if (upstream.headers['content-length']) {
+        res.setHeader('Content-Length', String(upstream.headers['content-length']));
+      }
+      if (upstream.headers['content-range']) {
+        res.setHeader('Content-Range', String(upstream.headers['content-range']));
+      }
+
+      // Handle client disconnect
+      req.on('close', () => {
+        try {
+          upstream.data.destroy();
+        } catch {
+          // Ignore stream destruction errors on disconnect
+        }
+      });
+
+      upstream.data.on('error', (streamErr: Error) => {
+        if (!res.headersSent) {
+          res.status(502).json({
+            error: 'UpstreamError',
+            message: `Stream transmission failed: ${streamErr.message}`,
+          });
+        }
+      });
+
+      upstream.data.pipe(res);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Proxy connection failed';
+      if (!res.headersSent) {
+        res.status(502).json({
+          error: 'ProxyError',
+          message,
+        });
+      }
     }
   }
 }

@@ -14,6 +14,9 @@ router.get('/sources/:sourceId/resolve', apiRateLimiter, optionalAuthenticateUse
 // POST /api/v1/stream/resolve (Public resolver with rate limiting)
 router.post('/resolve', apiRateLimiter, streamController.resolveDirectSource);
 
+// GET /api/v1/stream/proxy (High-performance video streaming proxy with Range support)
+router.get('/proxy', streamController.proxyStream);
+
 // POST /api/v1/stream/validate-source (Staff only: validate URL against SSRF policy & host allowlist)
 router.post('/validate-source', requireModeratorOrAdmin, streamController.validateSource);
 

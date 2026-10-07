@@ -218,28 +218,6 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     };
   }, [stream, selectedSource]);
 
-  // Watchdog Timer: Automatically fallback to iframe if buffering takes > 3.5s without playback
-  useEffect(() => {
-    if (!isBuffering || !stream || stream.type === 'iframe') return;
-
-    const watchdog = setTimeout(() => {
-      if (isBuffering && selectedSource?.embed_url) {
-        console.warn('[TotalAnimePlayer] Buffering timeout (3.5s). Falling back to embed iframe.');
-        setIsBuffering(false);
-        setStream({
-          source_id: selectedSource.id,
-          provider: selectedSource.provider,
-          server_name: selectedSource.server_name || selectedSource.provider,
-          type: 'iframe',
-          url: selectedSource.embed_url,
-          is_fallback: true,
-        });
-      }
-    }, 3500);
-
-    return () => clearTimeout(watchdog);
-  }, [isBuffering, stream, selectedSource]);
-
   // 3. Auto-Resume logic once video metadata is ready
   const handleLoadedMetadata = () => {
     const video = videoRef.current;

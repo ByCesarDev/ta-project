@@ -239,3 +239,28 @@ describe('TotalAnime Web: Playback Guard & History Protection', () => {
   });
 });
 
+describe('TotalAnime Web: resolveStreamSource Resolver', () => {
+  it('should format direct proxy URLs with API_BASE_URL', async () => {
+    const { resolveStreamSource } = await import('../src/lib/streamResolver.js');
+    const res = await resolveStreamSource({
+      id: 99,
+      episode_id: 1,
+      provider: 'custom',
+      server_name: 'Proxied Stream',
+      embed_url: 'https://example.com/embed/1',
+      direct_stream_url: '/api/v1/stream/proxy?url=https%3A%2F%2Fcdn.example.com%2Fvideo.mp4',
+      language: 'sub',
+      quality: '1080p',
+      priority: 1,
+      is_active: true,
+      last_verified_at: '2026-09-05T00:00:00Z',
+      created_at: '2026-09-05T00:00:00Z',
+      updated_at: '2026-09-05T00:00:00Z',
+    });
+
+    expect(res.type).toBe('mp4');
+    expect(res.url).toContain('/api/v1/stream/proxy');
+    expect(res.url.startsWith('http')).toBe(true);
+  });
+});
+

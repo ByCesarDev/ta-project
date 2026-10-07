@@ -111,12 +111,12 @@ export class StreamResolverService {
       };
     }
 
-    // 3. Provider-Specific Extraction
+    // 3. Provider-Specific Extraction with Stream Proxy Support
     try {
       const resolved = await this.extractFromHost(embedUrl, provider);
       if (resolved) {
-        // Asynchronously cache resolved direct_stream_url in database if source.id is present
-        if (source.id) {
+        // Asynchronously cache resolved direct_stream_url in database if source.id is present and not a local proxy route
+        if (source.id && !resolved.url.startsWith('/api/v1/stream/proxy')) {
           void Promise.resolve(
             supabaseAdmin
               .from('episode_sources')
@@ -139,7 +139,7 @@ export class StreamResolverService {
           language: source.language,
         };
       }
-    } catch (err) {
+    } catch {
       // Extraction failed or timed out, gracefully fallback to iframe
     }
 
@@ -166,47 +166,163 @@ export class StreamResolverService {
 
     let parsedHost = '';
     try {
-      parsedHost = new URL(sanitized).hostname;
+      parsedHost = new URL(sanitized).hostname.toLowerCase();
       if (isPrivateOrLoopbackHost(parsedHost)) return null;
     } catch {
       return null;
     }
 
-    const { data: html } = await this.httpClient.get(sanitized, {
-      headers: {
-        Referer: sanitized,
-      },
-    });
+    // A. YourUpload extraction (proxying raw MP4 with origin Referer)
+    if (provider.includes('yourupload') || parsedHost.includes('yourupload')) {
+      try {
+        const { data: html } = await this.httpClient.get(sanitized, {
+          headers: { Referer: 'https://www.yourupload.com/' },
+        });
 
-    if (typeof html !== 'string') return null;
-
-    // A. Check for unpacked direct .m3u8
-    const m3u8Match = html.match(/https?:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*|\/hls\/[^"'\s<>]+\.m3u8/i);
-    if (m3u8Match) {
-      let url = m3u8Match[0];
-      if (url.startsWith('/')) {
-        url = new URL(url, sanitized).toString();
+        if (typeof html === 'string') {
+          const match =
+            html.match(/file:\s*['"]([^'"]+\.mp4[^'"]*)['"]/i) ||
+            html.match(/<meta property="og:video" content="([^"]+)"/i);
+          if (match && match[1]) {
+            let directMp4 = match[1].trim();
+            if (directMp4.startsWith('/')) directMp4 = new URL(directMp4, sanitized).toString();
+            // Reject dead/placeholder novideo.mp4
+            if (!directMp4.includes('novideo.mp4')) {
+              // Wrap in Stream Proxy to bypass 403 hotlink & CORS blocks
+              const proxyUrl = `/api/v1/stream/proxy?url=${encodeURIComponent(directMp4)}&referer=${encodeURIComponent('https://www.yourupload.com/')}`;
+              return { url: proxyUrl, type: 'mp4' };
+            }
+          }
+        }
+      } catch {
+        return null;
       }
-      return { url, type: 'hls' };
     }
 
-    // B. Check for packed JS unpacking (StreamWish, FileMoon, Voe)
-    if (html.includes('eval(function(p,a,c,k,e,')) {
-      const unpacked = unpackJS(html);
-      if (unpacked) {
-        const unpackedM3u8 = unpacked.match(/https?:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*/i);
-        if (unpackedM3u8) {
-          return { url: unpackedM3u8[0], type: 'hls' };
+    // B. OK.ru (Odnoklassniki) extraction
+    if (provider.includes('okru') || parsedHost.includes('ok.ru') || parsedHost.includes('odnoklassniki')) {
+      try {
+        const { data: html } = await this.httpClient.get(sanitized, {
+          headers: { Referer: sanitized },
+        });
+
+        if (typeof html === 'string') {
+          // OKVideo data-options metadata contains JSON with video URLs
+          const optionsMatch =
+            html.match(/data-options="([^"]+)"/i) ||
+            html.match(/data-module="OKVideo"[\s\S]*?data-options="([^"]+)"/i);
+          if (optionsMatch && optionsMatch[1]) {
+            const decodedJson = optionsMatch[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+            const parsed = JSON.parse(decodedJson);
+            const videos = parsed?.flashvars?.metadata
+              ? JSON.parse(parsed.flashvars.metadata)?.videos
+              : null;
+            if (Array.isArray(videos) && videos.length > 0) {
+              const chosen = videos[videos.length - 1];
+              if (chosen?.url) {
+                const proxyUrl = `/api/v1/stream/proxy?url=${encodeURIComponent(chosen.url)}&referer=${encodeURIComponent('https://ok.ru/')}`;
+                return { url: proxyUrl, type: 'mp4' };
+              }
+            }
+          }
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    // C. MP4Upload extraction
+    if (provider.includes('mp4upload') || parsedHost.includes('mp4upload')) {
+      try {
+        const { data: html } = await this.httpClient.get(sanitized, {
+          headers: { Referer: 'https://www.mp4upload.com/' },
+        });
+
+        if (typeof html === 'string') {
+          const match =
+            html.match(/player\.src\(\s*['"]([^'"]+\.mp4[^'"]*)['"]/i) ||
+            html.match(/src:\s*['"]([^'"]+\.mp4[^'"]*)['"]/i);
+          if (match && match[1]) {
+            const proxyUrl = `/api/v1/stream/proxy?url=${encodeURIComponent(match[1])}&referer=${encodeURIComponent('https://www.mp4upload.com/')}`;
+            return { url: proxyUrl, type: 'mp4' };
+          }
+        }
+      } catch {
+        return null;
+      }
+    }
+
+    // D. Voe extraction (handling redirect if needed)
+    if (provider.includes('voe') || parsedHost.includes('voe')) {
+      try {
+        let currentUrl = sanitized;
+        let { data: voeHtml } = await this.httpClient.get(currentUrl, {
+          headers: { Referer: sanitized },
+        });
+
+        if (typeof voeHtml === 'string') {
+          // Follow JS redirect: window.location.href = 'https://...'
+          const redirectMatch = voeHtml.match(/window\.location\.href\s*=\s*['"]([^'"]+)['"]/);
+          if (redirectMatch && redirectMatch[1]) {
+            currentUrl = redirectMatch[1];
+            const redirectedRes = await this.httpClient.get(currentUrl, {
+              headers: { Referer: sanitized },
+            });
+            voeHtml = redirectedRes.data;
+          }
+
+          if (typeof voeHtml === 'string') {
+            const hlsMatch =
+              voeHtml.match(/'hls':\s*'([^']+)'/) ||
+              voeHtml.match(/"hls":\s*"([^"]+)"/) ||
+              voeHtml.match(/https?:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*/);
+            if (hlsMatch) {
+              const hlsUrl = hlsMatch[1] || hlsMatch[0];
+              return { url: hlsUrl, type: 'hls' };
+            }
+
+            const mp4Match =
+              voeHtml.match(/var\s+source\s*=\s*['"]([^'"]+\.mp4[^'"]*)['"]/) ||
+              voeHtml.match(/'mp4':\s*'([^']+)'/) ||
+              voeHtml.match(/"mp4":\s*"([^"]+)"/);
+            if (mp4Match && mp4Match[1]) {
+              return { url: mp4Match[1], type: 'mp4' };
+            }
+          }
+        }
+      } catch {
+        // Fallback to general scraper
+      }
+    }
+
+    // General HTML fetch for packed HLS/M3U8 streams (StreamWish, FileMoon, etc.)
+    try {
+      const { data: html } = await this.httpClient.get(sanitized, {
+        headers: { Referer: sanitized },
+      });
+
+      if (typeof html !== 'string') return null;
+
+      // Unpacked direct .m3u8
+      const m3u8Match = html.match(/https?:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*|\/hls\/[^"'\s<>]+\.m3u8/i);
+      if (m3u8Match) {
+        let url = m3u8Match[0];
+        if (url.startsWith('/')) url = new URL(url, sanitized).toString();
+        return { url, type: 'hls' };
+      }
+
+      // Packed JS unpacking
+      if (html.includes('eval(function(p,a,c,k,e,')) {
+        const unpacked = unpackJS(html);
+        if (unpacked) {
+          const unpackedM3u8 = unpacked.match(/https?:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*/i);
+          if (unpackedM3u8) {
+            return { url: unpackedM3u8[0], type: 'hls' };
+          }
         }
       }
-    }
-
-    // C. Voe extraction (hls m3u8 stream)
-    if (provider.includes('voe') || parsedHost.includes('voe')) {
-      const voeMatch = html.match(/'hls':\s*'([^']+)'/) || html.match(/"hls":\s*"([^"]+)"/);
-      if (voeMatch && voeMatch[1]) {
-        return { url: voeMatch[1], type: 'hls' };
-      }
+    } catch {
+      return null;
     }
 
     return null;

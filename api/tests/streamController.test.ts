@@ -133,4 +133,33 @@ describe('Stream Controller', () => {
       })
     );
   });
+
+  describe('proxyStream', () => {
+    it('should return 400 when url query parameter is missing', async () => {
+      mockReq.query = {};
+      await streamController.proxyStream(mockReq as Request, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'BadRequest' })
+      );
+    });
+
+    it('should return 403 when url targets private or loopback host', async () => {
+      mockReq.query = { url: 'http://127.0.0.1:8080/video.mp4' };
+      await streamController.proxyStream(mockReq as Request, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'ForbiddenHost' })
+      );
+    });
+
+    it('should return 403 when url targets localhost', async () => {
+      mockReq.query = { url: 'http://localhost/video.mp4' };
+      await streamController.proxyStream(mockReq as Request, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+    });
+  });
 });
