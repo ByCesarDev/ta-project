@@ -5,6 +5,13 @@ import { sanitizeEmbedUrl, normalizeServer } from '../scrapers/serverParsers.js'
 import { AuthenticatedRequest, StreamLanguage } from '../types/index.js';
 
 export class StreamController {
+  constructor() {
+    this.getStreamSources = this.getStreamSources.bind(this);
+    this.validateSource = this.validateSource.bind(this);
+    this.upsertEpisodeSources = this.upsertEpisodeSources.bind(this);
+    this.syncEpisodeAvailability = this.syncEpisodeAvailability.bind(this);
+  }
+
   /**
    * GET /api/v1/stream/:animeSlug/:episodeNumber
    * Fetches active stream sources from database, falling back to live scraper if missing.
@@ -256,8 +263,10 @@ export class StreamController {
     // Process and validate each source
     if (sources && sources.length > 0) {
       const sanitizedPayload = [];
+      const usedKeys = new Set<string>();
 
-      for (const s of sources) {
+      for (let i = 0; i < sources.length; i++) {
+        const s = sources[i];
         const sanitizedUrl = sanitizeEmbedUrl(s.embed_url);
         if (!sanitizedUrl) {
           res.status(400).json({
@@ -278,32 +287,102 @@ export class StreamController {
           activeStatus = false;
         }
 
+        let provider = s.provider || normalized?.provider || 'custom';
+        if (provider === 'custom') {
+          try {
+            const host = new URL(sanitizedUrl).hostname.toLowerCase().replace(/^www\./, '');
+            const hostParts = host.split('.');
+            const domain = hostParts.length >= 2 ? hostParts[hostParts.length - 2] : hostParts[0];
+            provider = domain ? `custom_${domain}` : 'custom';
+          } catch {
+            provider = 'custom';
+          }
+        }
+
+        const lang = s.language || 'sub';
+        const qual = s.quality || '1080p';
+        let key = `${provider}_${lang}_${qual}`;
+        let counter = 1;
+        while (usedKeys.has(key)) {
+          counter++;
+          provider = `${provider}_${counter}`;
+          key = `${provider}_${lang}_${qual}`;
+        }
+        usedKeys.add(key);
+
         sanitizedPayload.push({
           ...(s.id ? { id: s.id } : {}),
           episode_id: episodeId,
-          provider: s.provider || normalized?.provider || 'custom',
+          provider,
           server_name: s.server_name || normalized?.server_name || 'Personalizado',
           embed_url: sanitizedUrl,
           direct_stream_url: s.direct_stream_url || null,
-          language: s.language || 'sub',
-          quality: s.quality || '1080p',
+          language: lang,
+          quality: qual,
           priority: s.priority ?? 10,
           is_active: activeStatus,
           last_verified_at: new Date().toISOString(),
         });
       }
 
-      const { data: upsertedData, error: upsertError } = await supabaseAdmin
-        .from('episode_sources')
-        .upsert(sanitizedPayload, { onConflict: 'episode_id,provider,language,quality' })
-        .select('*');
+      const existingSources = sanitizedPayload.filter((s) => typeof s.id === 'number');
+      const newSources = sanitizedPayload.filter((s) => !s.id);
+      const allUpserted: any[] = [];
 
-      if (upsertError) {
-        res.status(500).json({
-          error: 'DatabaseError',
-          message: `Error al registrar fuentes: ${upsertError.message}`,
-        });
-        return;
+      if (existingSources.length > 0) {
+        const { data: updatedData, error: updateError } = await supabaseAdmin
+          .from('episode_sources')
+          .upsert(existingSources, { onConflict: 'id' })
+          .select('*');
+
+        if (updateError) {
+          res.status(500).json({
+            error: 'DatabaseError',
+            message: `Error al actualizar fuentes existentes: ${updateError.message}`,
+          });
+          return;
+        }
+        if (updatedData) allUpserted.push(...updatedData);
+      }
+
+      if (newSources.length > 0) {
+        let { data: insertedData, error: insertError } = await supabaseAdmin
+          .from('episode_sources')
+          .upsert(newSources, { onConflict: 'episode_id,provider,language,quality' })
+          .select('*');
+
+        // Resilient fallback if PostgreSQL sequence episode_sources_id_seq is out of sync with MAX(id)
+        if (insertError && (insertError.message.includes('episode_sources_pkey') || insertError.code === '23505')) {
+          const { data: maxRow } = await supabaseAdmin
+            .from('episode_sources')
+            .select('id')
+            .order('id', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          let nextId = (maxRow?.id ? Number(maxRow.id) : 0) + 1;
+          const newSourcesWithIds = newSources.map((s) => ({
+            ...s,
+            id: nextId++,
+          }));
+
+          const retryResult = await supabaseAdmin
+            .from('episode_sources')
+            .upsert(newSourcesWithIds, { onConflict: 'id' })
+            .select('*');
+
+          insertedData = retryResult.data;
+          insertError = retryResult.error;
+        }
+
+        if (insertError) {
+          res.status(500).json({
+            error: 'DatabaseError',
+            message: `Error al registrar nuevas fuentes: ${insertError.message}`,
+          });
+          return;
+        }
+        if (insertedData) allUpserted.push(...insertedData);
       }
 
       // Automatically synchronize episode availability status based on real active sources count
@@ -311,7 +390,7 @@ export class StreamController {
 
       res.status(200).json({
         message: 'Fuentes sincronizadas exitosamente.',
-        sources: upsertedData,
+        sources: allUpserted,
         episode_status: updatedStatus,
       });
       return;

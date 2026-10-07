@@ -4,6 +4,12 @@ import { supabaseAdmin } from '../config/supabaseAdmin.js';
 import { AuthenticatedRequest } from '../types/index.js';
 
 export class AniListController {
+  constructor() {
+    this.search = this.search.bind(this);
+    this.getDetails = this.getDetails.bind(this);
+    this.importAnime = this.importAnime.bind(this);
+  }
+
   /**
    * GET /api/v1/anilist/search?q=...&page=1
    * Live search for anime via AniList GraphQL

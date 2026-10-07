@@ -4,6 +4,12 @@ import { AuthenticatedRequest } from '../types/index.js';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
 
 export class JobsController {
+  constructor() {
+    this.createScrapeJob = this.createScrapeJob.bind(this);
+    this.getJobStatus = this.getJobStatus.bind(this);
+    this.listJobs = this.listJobs.bind(this);
+  }
+
   /**
    * POST /api/v1/jobs/scrape
    * Creates a background scraping job for an anime

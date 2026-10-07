@@ -4,6 +4,8 @@
   "private": true,
   "description": "TotalAnime 2.0 - Modern Anime Streaming Platform",
   "scripts": {
+    "build": "npm run api:build && npm run admin:build && npm run web:build",
+    "test": "npm run api:test && npm run admin:test && npm run web:test",
     "db:reset": "supabase db reset",
     "db:test": "supabase test db",
     "migrate:users": "tsx scripts/migrate-users.ts",
