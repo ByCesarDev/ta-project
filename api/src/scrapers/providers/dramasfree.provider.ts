@@ -4,9 +4,20 @@ import { normalizeServer } from '../serverParsers.js';
 import { IStreamProvider } from './base.provider.js';
 import { ScrapedAnimeSummary, ScrapedServer, StreamLanguage } from '../../types/index.js';
 
+export const CLUSTER_MIRRORS = [
+  'https://www3.dramasfree.com',
+  'https://ww1.123flmsfree.com',
+  'https://play.cuevana19.com',
+  'https://peliculaplay.com',
+  'https://ver.123pelicula.com',
+  'https://flixlat.com',
+  'https://es.cuevana4br.com',
+  'https://ww20.321moviesfree.com',
+];
+
 export class DramasFreeProvider implements IStreamProvider {
   public readonly name = 'dramasfree';
-  public readonly baseUrl: string = 'https://www3.dramasfree.com';
+  public readonly baseUrl: string = CLUSTER_MIRRORS[0];
   public readonly isEnabled = true;
   private client: AxiosInstance;
 
@@ -16,8 +27,8 @@ export class DramasFreeProvider implements IStreamProvider {
       timeout: 10000,
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
         Referer: 'https://www3.dramasfree.com/',
       },
@@ -33,15 +44,43 @@ export class DramasFreeProvider implements IStreamProvider {
       .replace(/^-+|-+$/g, '');
   }
 
+  /**
+   * Helper to perform GET request across mirror pool with automatic failover
+   */
+  private async fetchWithMirrorFailover(path: string): Promise<{ data: any; status: number } | null> {
+    for (const mirror of CLUSTER_MIRRORS) {
+      try {
+        const url = `${mirror}${path.startsWith('/') ? '' : '/'}${path}`;
+        const response = await axios.get(url, {
+          timeout: 7000,
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+            Referer: `${mirror}/`,
+          },
+          validateStatus: (status) => status < 500,
+        });
+
+        if (response.status === 200 && response.data) {
+          return { data: response.data, status: response.status };
+        }
+      } catch {
+        // Try next mirror in pool
+        continue;
+      }
+    }
+    return null;
+  }
+
   public async search(query: string): Promise<ScrapedAnimeSummary[]> {
     try {
       const cleanQuery = query.replace(/-/g, ' ').trim();
-      const response = await this.client.get(`/buscar?q=${encodeURIComponent(cleanQuery)}`, {
-        validateStatus: (status) => status < 500,
-      });
-      if (response.status !== 200) return [];
+      const res = await this.fetchWithMirrorFailover(`/buscar?q=${encodeURIComponent(cleanQuery)}`);
+      if (!res || res.status !== 200) return [];
 
-      const $ = cheerio.load(response.data);
+      const $ = cheerio.load(res.data);
       const list: ScrapedAnimeSummary[] = [];
 
       $('div.drama-item, article.post, div.item-content, a[href*="/detail/drama/"]').each((_i, el) => {
@@ -76,13 +115,12 @@ export class DramasFreeProvider implements IStreamProvider {
     const cleanSlug = this.formatSlug(dramaSlug);
     const epNum = String(episodeNumber).trim();
 
-    // 1. If slug already contains specific drama hash or path
+    // 1. Direct candidate paths
     const candidateSlugs = [dramaSlug, cleanSlug];
     if (fallbackSlug) {
       candidateSlugs.push(fallbackSlug, this.formatSlug(fallbackSlug));
     }
 
-    // Try direct candidate paths
     for (const slug of candidateSlugs) {
       const candidatePaths = [
         `/es/detail/drama/${slug}/${epNum}`,
@@ -92,24 +130,17 @@ export class DramasFreeProvider implements IStreamProvider {
       ];
 
       for (const path of candidatePaths) {
-        try {
-          const response = await this.client.get(path, {
-            validateStatus: (status) => status < 500,
-          });
-
-          if (response.status === 200 && response.data) {
-            const servers = await this.extractFromPageOrDubbing(response.data, epNum, language);
-            if (servers.length > 0) {
-              return servers;
-            }
+        const res = await this.fetchWithMirrorFailover(path);
+        if (res && res.status === 200 && res.data) {
+          const servers = await this.extractFromPageOrDubbing(res.data, epNum, language);
+          if (servers.length > 0) {
+            return servers;
           }
-        } catch {
-          // Continue
         }
       }
     }
 
-    // 2. Search DramasFree catalog if direct paths didn't match
+    // 2. Search cluster catalog if direct paths didn't match
     try {
       const searchQuery = (fallbackSlug || dramaSlug).replace(/-/g, ' ');
       const searchResults = await this.search(searchQuery);
@@ -117,19 +148,12 @@ export class DramasFreeProvider implements IStreamProvider {
       for (const result of searchResults) {
         if (!result.slug) continue;
         const searchPath = `/es/detail/drama/${result.slug}/${epNum}`;
-        try {
-          const response = await this.client.get(searchPath, {
-            validateStatus: (status) => status < 500,
-          });
-
-          if (response.status === 200 && response.data) {
-            const servers = await this.extractFromPageOrDubbing(response.data, epNum, language);
-            if (servers.length > 0) {
-              return servers;
-            }
+        const res = await this.fetchWithMirrorFailover(searchPath);
+        if (res && res.status === 200 && res.data) {
+          const servers = await this.extractFromPageOrDubbing(res.data, epNum, language);
+          if (servers.length > 0) {
+            return servers;
           }
-        } catch {
-          // Continue
         }
       }
     } catch {
@@ -174,24 +198,18 @@ export class DramasFreeProvider implements IStreamProvider {
         });
 
         if (targetEntry?.websiteParam) {
-          try {
-            const targetPath = `/es/detail/drama/${targetEntry.websiteParam}/${episodeNumber}`;
-            const targetRes = await this.client.get(targetPath, {
-              validateStatus: (status) => status < 500,
-            });
+          const targetPath = `/es/detail/drama/${targetEntry.websiteParam}/${episodeNumber}`;
+          const targetRes = await this.fetchWithMirrorFailover(targetPath);
 
-            if (targetRes.status === 200 && targetRes.data) {
-              const targetMatch = targetRes.data.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
-              if (targetMatch) {
-                const targetNextData = JSON.parse(targetMatch[1]);
-                const targetProps = targetNextData?.props?.pageProps;
-                if (targetProps?.mediaInfoList) {
-                  return this.parseMediaInfoList(targetProps.mediaInfoList, targetLanguage);
-                }
+          if (targetRes && targetRes.status === 200 && targetRes.data) {
+            const targetMatch = targetRes.data.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+            if (targetMatch) {
+              const targetNextData = JSON.parse(targetMatch[1]);
+              const targetProps = targetNextData?.props?.pageProps;
+              if (targetProps?.mediaInfoList) {
+                return this.parseMediaInfoList(targetProps.mediaInfoList, targetLanguage);
               }
             }
-          } catch {
-            // Fallback
           }
         }
       }
