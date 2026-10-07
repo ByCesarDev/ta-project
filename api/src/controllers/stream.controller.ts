@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
 import { videoScraper } from '../scrapers/videoScraper.service.js';
 import { sanitizeEmbedUrl, normalizeServer } from '../scrapers/serverParsers.js';
+import { streamResolverService } from '../services/streamResolver.service.js';
 import { AuthenticatedRequest, StreamLanguage } from '../types/index.js';
 
 export class StreamController {
@@ -10,6 +11,8 @@ export class StreamController {
     this.validateSource = this.validateSource.bind(this);
     this.upsertEpisodeSources = this.upsertEpisodeSources.bind(this);
     this.syncEpisodeAvailability = this.syncEpisodeAvailability.bind(this);
+    this.resolveSourceById = this.resolveSourceById.bind(this);
+    this.resolveDirectSource = this.resolveDirectSource.bind(this);
   }
 
   /**
@@ -431,6 +434,92 @@ export class StreamController {
     } catch (err) {
       console.warn(`[StreamController] Failed to sync availability for episode ${episodeId}:`, err);
       return 'pending';
+    }
+  }
+
+  /**
+   * GET /api/v1/stream/sources/:sourceId/resolve
+   * Resolves an episode source by ID into a direct HLS/MP4 playable stream or iframe fallback
+   */
+  public async resolveSourceById(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const rawId = Array.isArray(req.params.sourceId) ? req.params.sourceId[0] : req.params.sourceId;
+    const sourceId = parseInt(String(rawId), 10);
+
+    if (isNaN(sourceId) || sourceId <= 0) {
+      res.status(400).json({
+        error: 'BadRequest',
+        message: 'sourceId must be a valid positive number.',
+      });
+      return;
+    }
+
+    try {
+      const { data: source, error } = await supabaseAdmin
+        .from('episode_sources')
+        .select('id, provider, server_name, embed_url, direct_stream_url, language, quality, is_active')
+        .eq('id', sourceId)
+        .maybeSingle();
+
+      if (error || !source) {
+        res.status(404).json({
+          error: 'NotFound',
+          message: `Episode source with ID ${sourceId} not found.`,
+        });
+        return;
+      }
+
+      // If source is quarantined and caller is not staff, return forbidden
+      const isStaff = req.user?.role === 'admin' || req.user?.role === 'moderator';
+      if (!source.is_active && !isStaff) {
+        res.status(403).json({
+          error: 'QuarantinedSource',
+          message: 'Esta fuente se encuentra en cuarentena de seguridad y requiere revisión administrativa.',
+        });
+        return;
+      }
+
+      const playable = await streamResolverService.resolveSource(source);
+      res.status(200).json(playable);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to resolve streaming source';
+      res.status(500).json({
+        error: 'ResolverError',
+        message,
+      });
+    }
+  }
+
+  /**
+   * POST /api/v1/stream/resolve
+   * Resolves a raw embed URL / source object into a direct stream without requiring a database ID
+   */
+  public async resolveDirectSource(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { embed_url, provider = 'custom', server_name, direct_stream_url, quality, language } = req.body;
+
+    if (!embed_url || typeof embed_url !== 'string') {
+      res.status(400).json({
+        error: 'BadRequest',
+        message: 'embed_url (string) is required in request body.',
+      });
+      return;
+    }
+
+    try {
+      const playable = await streamResolverService.resolveSource({
+        embed_url,
+        provider,
+        server_name,
+        direct_stream_url,
+        quality,
+        language,
+      });
+      res.status(200).json(playable);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to resolve streaming source';
+      res.status(500).json({
+        error: 'ResolverError',
+        message,
+      });
     }
   }
 }

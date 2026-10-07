@@ -8,6 +8,12 @@ const router = Router();
 // GET /api/v1/stream/:animeSlug/:episodeNumber (Public with rate limiter & optional auth for staff refresh)
 router.get('/:animeSlug/:episodeNumber', apiRateLimiter, optionalAuthenticateUser, streamController.getStreamSources);
 
+// GET /api/v1/stream/sources/:sourceId/resolve (Public with optional staff auth for quarantine check)
+router.get('/sources/:sourceId/resolve', apiRateLimiter, optionalAuthenticateUser, streamController.resolveSourceById);
+
+// POST /api/v1/stream/resolve (Public resolver with rate limiting)
+router.post('/resolve', apiRateLimiter, streamController.resolveDirectSource);
+
 // POST /api/v1/stream/validate-source (Staff only: validate URL against SSRF policy & host allowlist)
 router.post('/validate-source', requireModeratorOrAdmin, streamController.validateSource);
 

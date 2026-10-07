@@ -65,19 +65,40 @@ export function useEpisodeProgress(episodeId?: number) {
   return useQuery({
     queryKey: ['history', user?.id, 'episode', episodeId],
     queryFn: async () => {
-      if (!user || !episodeId) return null;
+      if (!episodeId) return null;
 
-      const { data, error } = await supabase
-        .from('user_history')
-        .select('progress_seconds, total_seconds, is_completed')
-        .eq('user_id', user.id)
-        .eq('episode_id', episodeId)
-        .maybeSingle();
+      // 1. Try fetching from Supabase if authenticated
+      if (user) {
+        const { data, error } = await supabase
+          .from('user_history')
+          .select('progress_seconds, total_seconds, is_completed')
+          .eq('user_id', user.id)
+          .eq('episode_id', episodeId)
+          .maybeSingle();
 
-      if (error) return null;
-      return data;
+        if (!error && data) return data;
+      }
+
+      // 2. Fallback to localStorage for guest or instant local resume
+      try {
+        const cached = localStorage.getItem(`ta_ep_progress_${episodeId}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed.progress_seconds === 'number') {
+            return {
+              progress_seconds: parsed.progress_seconds,
+              total_seconds: parsed.total_seconds || 0,
+              is_completed: Boolean(parsed.is_completed),
+            };
+          }
+        }
+      } catch {
+        // Ignore JSON/storage errors
+      }
+
+      return null;
     },
-    enabled: Boolean(user && episodeId),
+    enabled: Boolean(episodeId),
   });
 }
 
@@ -95,9 +116,26 @@ export function useSaveProgress() {
       progressSeconds: number;
       totalSeconds: number;
     }) => {
-      if (!user) return null; // Guest viewing, skip persistence
+      const isCompleted = totalSeconds > 0 && progressSeconds / totalSeconds >= 0.90;
+      const progressFloored = Math.floor(progressSeconds);
+      const totalFloored = Math.floor(totalSeconds);
 
-      const isCompleted = totalSeconds > 0 && progressSeconds / totalSeconds >= 0.85;
+      // Always save to localStorage for zero-latency local recovery
+      try {
+        localStorage.setItem(
+          `ta_ep_progress_${episodeId}`,
+          JSON.stringify({
+            progress_seconds: progressFloored,
+            total_seconds: totalFloored,
+            is_completed: isCompleted,
+            updated_at: new Date().toISOString(),
+          })
+        );
+      } catch {
+        // Ignore localStorage quota error
+      }
+
+      if (!user) return null; // Guest viewing, local storage is enough
 
       const { data, error } = await supabase
         .from('user_history')
@@ -105,8 +143,8 @@ export function useSaveProgress() {
           {
             user_id: user.id,
             episode_id: episodeId,
-            progress_seconds: Math.floor(progressSeconds),
-            total_seconds: Math.floor(totalSeconds),
+            progress_seconds: progressFloored,
+            total_seconds: totalFloored,
             is_completed: isCompleted,
             updated_at: new Date().toISOString(),
           },

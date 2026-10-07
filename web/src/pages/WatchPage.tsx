@@ -121,7 +121,10 @@ export const WatchPage: React.FC = () => {
         <VideoPlayer
           episodeId={episode.id}
           selectedSource={selectedSource}
-          durationMinutes={episode.duration ? Math.round(episode.duration / 60) : 24}
+          animeTitle={animeTitle}
+          episodeNumber={episode.episode_number}
+          hasNextEpisode={Boolean(allEpisodes && allEpisodes.some((e) => e.episode_number === episode.episode_number + 1))}
+          onSelectNextEpisode={() => navigate(`/watch/${anime.slug}/${episode.episode_number + 1}`)}
         />
 
         {/* Server Selector */}

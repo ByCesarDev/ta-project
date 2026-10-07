@@ -67,3 +67,16 @@ export interface ServerOption {
   priority: number;
   is_active: boolean;
 }
+
+export interface PlayableStream {
+  source_id?: number;
+  provider: string;
+  server_name: string;
+  type: 'hls' | 'mp4' | 'iframe';
+  url: string;
+  direct_url?: string | null;
+  quality?: string;
+  language?: StreamLanguage;
+  headers?: Record<string, string>;
+  is_fallback?: boolean;
+}
