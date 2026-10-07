@@ -72,11 +72,12 @@ export interface PlayableStream {
   source_id?: number;
   provider: string;
   server_name: string;
-  type: 'hls' | 'mp4' | 'iframe';
+  type: 'hls' | 'mp4' | 'iframe' | 'error';
   url: string;
   direct_url?: string | null;
   quality?: string;
   language?: StreamLanguage;
   headers?: Record<string, string>;
   is_fallback?: boolean;
+  error_message?: string;
 }

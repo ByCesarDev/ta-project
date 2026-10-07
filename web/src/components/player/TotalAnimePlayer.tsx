@@ -118,14 +118,13 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       })
       .catch(() => {
         if (!isCancelled) {
-          // Fallback to iframe
           setStream({
             source_id: selectedSource.id,
             provider: selectedSource.provider,
             server_name: selectedSource.server_name || selectedSource.provider,
-            type: 'iframe',
-            url: selectedSource.embed_url,
-            is_fallback: true,
+            type: 'error',
+            url: '',
+            error_message: `No se pudo conectar con el servidor ${selectedSource.server_name || selectedSource.provider}.`,
           });
           setIsResolving(false);
         }
@@ -511,6 +510,26 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     );
   }
 
+  // State: Provider dead / video unavailable
+  if (stream?.type === 'error') {
+    return (
+      <div className="w-full aspect-video-player rounded-3xl overflow-hidden bg-[#0c101c] border border-red-500/20 flex flex-col items-center justify-center p-6 text-center mb-6 shadow-2xl relative">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 mb-3 shadow-lg shadow-red-500/10">
+          <AlertCircle className="w-7 h-7" />
+        </div>
+        <h3 className="font-bold text-white text-lg font-['Outfit'] mb-1">
+          Video no disponible en {stream.server_name}
+        </h3>
+        <p className="text-slate-400 text-xs max-w-md mb-3">
+          {stream.error_message || 'El archivo de video fue dado de baja o no se encuentra disponible en este servidor de origen.'}
+        </p>
+        <span className="text-[11px] text-indigo-400 font-medium bg-indigo-950/60 px-3 py-1.5 rounded-lg border border-indigo-500/20">
+          Por favor selecciona otro servidor en la lista inferior para reproducir.
+        </span>
+      </div>
+    );
+  }
+
   // Fallback: Embed Iframe Mode
   if (stream?.type === 'iframe') {
     return (
@@ -577,17 +596,15 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         onLoadedData={() => setIsBuffering(false)}
         onError={() => {
           setIsBuffering(false);
-          if (selectedSource?.embed_url) {
-            console.warn('[TotalAnimePlayer] Native video error. Falling back to embed iframe.');
-            setStream({
-              source_id: selectedSource.id,
-              provider: selectedSource.provider,
-              server_name: selectedSource.server_name || selectedSource.provider,
-              type: 'iframe',
-              url: selectedSource.embed_url,
-              is_fallback: true,
-            });
-          }
+          console.warn('[TotalAnimePlayer] Native video error on source:', selectedSource?.server_name);
+          setStream({
+            source_id: selectedSource?.id,
+            provider: selectedSource?.provider || 'error',
+            server_name: selectedSource?.server_name || 'Servidor',
+            type: 'error',
+            url: '',
+            error_message: 'El flujo de video no pudo ser reproducido o la conexión con el servidor fue rechazada.',
+          });
         }}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}

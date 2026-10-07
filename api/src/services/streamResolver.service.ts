@@ -6,14 +6,20 @@ export interface PlayableSource {
   source_id?: number;
   provider: string;
   server_name: string;
-  type: 'hls' | 'mp4' | 'iframe';
+  type: 'hls' | 'mp4' | 'iframe' | 'error';
   url: string;
   direct_url?: string | null;
   quality?: string;
   language?: string;
   headers?: Record<string, string>;
   is_fallback?: boolean;
+  error_message?: string;
 }
+
+type ExtractedResult =
+  | { success: true; url: string; type: 'hls' | 'mp4' }
+  | { success: false; dead: true; reason: string }
+  | null;
 
 /**
  * Unpacks P.A.C.K.E.R. obfuscated JavaScript code commonly found in video streaming hosts
@@ -114,7 +120,7 @@ export class StreamResolverService {
     // 3. Provider-Specific Extraction with Stream Proxy Support
     try {
       const resolved = await this.extractFromHost(embedUrl, provider);
-      if (resolved) {
+      if (resolved && resolved.success) {
         // Asynchronously cache resolved direct_stream_url in database if source.id is present and not a local proxy route
         if (source.id && !resolved.url.startsWith('/api/v1/stream/proxy')) {
           void Promise.resolve(
@@ -138,29 +144,57 @@ export class StreamResolverService {
           quality: source.quality,
           language: source.language,
         };
+      } else if (resolved && !resolved.success && resolved.dead) {
+        // Source was identified as deleted/dead by host -> Return explicit error rather than loading broken iframe
+        return {
+          source_id: source.id,
+          provider,
+          server_name: serverName,
+          type: 'error',
+          url: '',
+          direct_url: null,
+          quality: source.quality,
+          language: source.language,
+          error_message: resolved.reason,
+        };
       }
     } catch {
-      // Extraction failed or timed out, gracefully fallback to iframe
+      // Extraction failed or timed out
     }
 
-    // 4. Default Safe Fallback: iframe mode
+    // 4. Default Safe Fallback: iframe mode for embed-native hosts (e.g. Mega)
+    if (provider.includes('mega') || provider.includes('dood')) {
+      return {
+        source_id: source.id,
+        provider,
+        server_name: serverName,
+        type: 'iframe',
+        url: embedUrl,
+        direct_url: null,
+        quality: source.quality,
+        language: source.language,
+        is_fallback: true,
+      };
+    }
+
+    // If a scrapable provider could not be resolved, mark as unavailable
     return {
       source_id: source.id,
       provider,
       server_name: serverName,
-      type: 'iframe',
-      url: embedUrl,
+      type: 'error',
+      url: '',
       direct_url: null,
       quality: source.quality,
       language: source.language,
-      is_fallback: true,
+      error_message: `No se pudo obtener el flujo de video directo para ${serverName}.`,
     };
   }
 
   /**
    * Attempts live extraction of .m3u8 / .mp4 links from known streaming hosts
    */
-  private async extractFromHost(embedUrl: string, provider: string): Promise<{ url: string; type: 'hls' | 'mp4' } | null> {
+  private async extractFromHost(embedUrl: string, provider: string): Promise<ExtractedResult> {
     const sanitized = sanitizeEmbedUrl(embedUrl);
     if (!sanitized) return null;
 
@@ -180,17 +214,19 @@ export class StreamResolverService {
         });
 
         if (typeof html === 'string') {
+          if (html.includes('novideo.mp4') || html.includes('File not found') || html.includes('File was deleted')) {
+            return { success: false, dead: true, reason: 'El archivo de video fue eliminado de los servidores de YourUpload.' };
+          }
+
           const match =
             html.match(/file:\s*['"]([^'"]+\.mp4[^'"]*)['"]/i) ||
             html.match(/<meta property="og:video" content="([^"]+)"/i);
           if (match && match[1]) {
             let directMp4 = match[1].trim();
             if (directMp4.startsWith('/')) directMp4 = new URL(directMp4, sanitized).toString();
-            // Reject dead/placeholder novideo.mp4
             if (!directMp4.includes('novideo.mp4')) {
-              // Wrap in Stream Proxy to bypass 403 hotlink & CORS blocks
               const proxyUrl = `/api/v1/stream/proxy?url=${encodeURIComponent(directMp4)}&referer=${encodeURIComponent('https://www.yourupload.com/')}`;
-              return { url: proxyUrl, type: 'mp4' };
+              return { success: true, url: proxyUrl, type: 'mp4' };
             }
           }
         }
@@ -207,6 +243,10 @@ export class StreamResolverService {
         });
 
         if (typeof html === 'string') {
+          if (html.includes('Видео заблокировано') || html.includes('copyrightsRestricted')) {
+            return { success: false, dead: true, reason: 'El video se encuentra bloqueado por derechos de autor en OK.ru.' };
+          }
+
           // OKVideo data-options metadata contains JSON with video URLs
           const optionsMatch =
             html.match(/data-options="([^"]+)"/i) ||
@@ -221,7 +261,7 @@ export class StreamResolverService {
               const chosen = videos[videos.length - 1];
               if (chosen?.url) {
                 const proxyUrl = `/api/v1/stream/proxy?url=${encodeURIComponent(chosen.url)}&referer=${encodeURIComponent('https://ok.ru/')}`;
-                return { url: proxyUrl, type: 'mp4' };
+                return { success: true, url: proxyUrl, type: 'mp4' };
               }
             }
           }
@@ -239,12 +279,16 @@ export class StreamResolverService {
         });
 
         if (typeof html === 'string') {
+          if (html.includes('File was deleted') || html.includes('404 Not Found')) {
+            return { success: false, dead: true, reason: 'El video fue eliminado de MP4Upload.' };
+          }
+
           const match =
             html.match(/player\.src\(\s*['"]([^'"]+\.mp4[^'"]*)['"]/i) ||
             html.match(/src:\s*['"]([^'"]+\.mp4[^'"]*)['"]/i);
           if (match && match[1]) {
             const proxyUrl = `/api/v1/stream/proxy?url=${encodeURIComponent(match[1])}&referer=${encodeURIComponent('https://www.mp4upload.com/')}`;
-            return { url: proxyUrl, type: 'mp4' };
+            return { success: true, url: proxyUrl, type: 'mp4' };
           }
         }
       } catch {
@@ -278,7 +322,7 @@ export class StreamResolverService {
               voeHtml.match(/https?:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*/);
             if (hlsMatch) {
               const hlsUrl = hlsMatch[1] || hlsMatch[0];
-              return { url: hlsUrl, type: 'hls' };
+              return { success: true, url: hlsUrl, type: 'hls' };
             }
 
             const mp4Match =
@@ -286,7 +330,7 @@ export class StreamResolverService {
               voeHtml.match(/'mp4':\s*'([^']+)'/) ||
               voeHtml.match(/"mp4":\s*"([^"]+)"/);
             if (mp4Match && mp4Match[1]) {
-              return { url: mp4Match[1], type: 'mp4' };
+              return { success: true, url: mp4Match[1], type: 'mp4' };
             }
           }
         }
@@ -308,7 +352,7 @@ export class StreamResolverService {
       if (m3u8Match) {
         let url = m3u8Match[0];
         if (url.startsWith('/')) url = new URL(url, sanitized).toString();
-        return { url, type: 'hls' };
+        return { success: true, url, type: 'hls' };
       }
 
       // Packed JS unpacking
@@ -317,7 +361,7 @@ export class StreamResolverService {
         if (unpacked) {
           const unpackedM3u8 = unpacked.match(/https?:\/\/[^"'\s<>]+\.m3u8[^"'\s<>]*/i);
           if (unpackedM3u8) {
-            return { url: unpackedM3u8[0], type: 'hls' };
+            return { success: true, url: unpackedM3u8[0], type: 'hls' };
           }
         }
       }
