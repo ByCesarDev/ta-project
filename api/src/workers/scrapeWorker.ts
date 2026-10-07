@@ -58,11 +58,24 @@ export class ScrapeWorker {
    * Processes a single scrape job
    */
   public async processJob(job: ScrapeJob): Promise<void> {
-    const errorLog: { episode_number: number; error: string; timestamp: string }[] = [];
+    const jobLog: Array<{
+      level: 'info' | 'scrape' | 'success' | 'warn' | 'error';
+      timestamp: string;
+      episode_number?: number;
+      message: string;
+      detail?: string;
+      error?: string;
+    }> = [];
     let processed = 0;
     let failed = 0;
 
     try {
+      jobLog.push({
+        level: 'info',
+        timestamp: new Date().toISOString(),
+        message: `⚡ Conexión establecida con ScrapeWorker [${this.workerId}]`,
+      });
+
       // 1. Fetch Anime details
       const { data: anime, error: animeError } = await supabaseAdmin
         .from('animes')
@@ -71,8 +84,14 @@ export class ScrapeWorker {
         .single();
 
       if (animeError || !anime) {
-        throw new Error(`Anime not found with ID ${job.anime_id}: ${animeError?.message}`);
+        throw new Error(`Anime no encontrado con ID ${job.anime_id}: ${animeError?.message}`);
       }
+
+      jobLog.push({
+        level: 'info',
+        timestamp: new Date().toISOString(),
+        message: `🎬 Iniciando tarea de scraping para "${anime.name}" (Slug: ${anime.slug})`,
+      });
 
       // 2. Fetch or initialize Episodes
       const { data: episodes, error: epError } = await supabaseAdmin
@@ -82,18 +101,26 @@ export class ScrapeWorker {
         .order('episode_number', { ascending: true });
 
       if (epError) {
-        throw new Error(`Failed to load episodes for anime ${anime.id}: ${epError.message}`);
+        throw new Error(`Error al cargar episodios del anime ${anime.id}: ${epError.message}`);
       }
 
       const episodeList = episodes || [];
 
       if (episodeList.length === 0) {
-        console.warn(`[ScrapeWorker] No episodes found in database for anime ${anime.slug}.`);
-        await jobsService.finishJob(job.id, this.workerId, 'completed', 0, 0, [
-          { message: 'No episodes to scrape in database', timestamp: new Date().toISOString() },
-        ]);
+        jobLog.push({
+          level: 'warn',
+          timestamp: new Date().toISOString(),
+          message: `⚠️ No se encontraron episodios registrados en BD para ${anime.slug}`,
+        });
+        await jobsService.finishJob(job.id, this.workerId, 'completed', 0, 0, jobLog);
         return;
       }
+
+      jobLog.push({
+        level: 'info',
+        timestamp: new Date().toISOString(),
+        message: `📋 Total de episodios a procesar: ${episodeList.length} eps • Consultando Cluster de 8 Espejos...`,
+      });
 
       // 3. Process each episode
       const fallbackSlug = anime.title_romaji
@@ -102,7 +129,11 @@ export class ScrapeWorker {
 
       for (const ep of episodeList) {
         if (this.shouldStop) {
-          console.warn(`[ScrapeWorker] Job ${job.id} interrupted by worker stop signal.`);
+          jobLog.push({
+            level: 'warn',
+            timestamp: new Date().toISOString(),
+            message: `🛑 Tarea interrumpida por señal de apagado del worker`,
+          });
           break;
         }
 
@@ -126,9 +157,10 @@ export class ScrapeWorker {
 
           if (servers.length === 0) {
             failed++;
-            errorLog.push({
+            jobLog.push({
+              level: 'warn',
               episode_number: ep.episode_number,
-              error: `No video servers found on scraper provider for episode ${ep.episode_number}`,
+              message: `Episodio ${ep.episode_number}: Sin fuentes encontradas en los espejos del cluster`,
               timestamp: new Date().toISOString(),
             });
           } else {
@@ -173,12 +205,32 @@ export class ScrapeWorker {
               .eq('id', ep.id);
 
             processed++;
+
+            const dubCount = servers.filter((s) => s.language === 'dub').length;
+            const subCount = servers.filter((s) => s.language === 'sub').length;
+            const qualitiesList = Array.from(new Set(servers.map((s) => s.quality))).join(', ');
+            const audioTags = [
+              dubCount > 0 ? `Latino (${dubCount})` : null,
+              subCount > 0 ? `Original Sub (${subCount})` : null,
+            ]
+              .filter(Boolean)
+              .join(' + ');
+
+            jobLog.push({
+              level: 'success',
+              episode_number: ep.episode_number,
+              message: `Episodio ${ep.episode_number}: ${servers.length} fuentes HLS vinculadas con éxito`,
+              detail: `Audios: [${audioTags}] • Calidades: [${qualitiesList}] • Estado BD -> DISPONIBLE`,
+              timestamp: new Date().toISOString(),
+            });
           }
         } catch (epErr: unknown) {
           failed++;
-          const message = epErr instanceof Error ? epErr.message : 'Unknown episode scrape error';
-          errorLog.push({
+          const message = epErr instanceof Error ? epErr.message : 'Error desconocido al scrapear episodio';
+          jobLog.push({
+            level: 'error',
             episode_number: ep.episode_number,
+            message: `Episodio ${ep.episode_number}: Fallo de extracción: ${message}`,
             error: message,
             timestamp: new Date().toISOString(),
           });
@@ -190,7 +242,7 @@ export class ScrapeWorker {
           this.workerId,
           processed,
           failed,
-          errorLog
+          jobLog
         );
 
         if (!progressOk) {
@@ -201,18 +253,24 @@ export class ScrapeWorker {
         }
 
         // Friendly throttle between requests
-        await this.sleep(400);
+        await this.sleep(300);
       }
 
       // 4. Mark job completion status with worker fencing
       const finalStatus = processed > 0 ? 'completed' : 'failed';
+      jobLog.push({
+        level: 'info',
+        timestamp: new Date().toISOString(),
+        message: `🏁 Tarea finalizada [${finalStatus.toUpperCase()}]. Episodios procesados: ${processed}/${episodeList.length} • Fallidos: ${failed}`,
+      });
+
       const finishOk = await jobsService.finishJob(
         job.id,
         this.workerId,
         finalStatus,
         processed,
         failed,
-        errorLog
+        jobLog
       );
 
       if (!finishOk) {
@@ -228,10 +286,13 @@ export class ScrapeWorker {
     } catch (jobErr: unknown) {
       const message = jobErr instanceof Error ? jobErr.message : 'Job execution failed';
       console.error(`[ScrapeWorker] Critical failure on Job ${job.id}:`, message);
-      await jobsService.finishJob(job.id, this.workerId, 'failed', processed, failed, [
-        ...errorLog,
-        { error: message, timestamp: new Date().toISOString() },
-      ]);
+      jobLog.push({
+        level: 'error',
+        timestamp: new Date().toISOString(),
+        message: `💥 Error crítico en la ejecución del job: ${message}`,
+        error: message,
+      });
+      await jobsService.finishJob(job.id, this.workerId, 'failed', processed, failed, jobLog);
     }
   }
 

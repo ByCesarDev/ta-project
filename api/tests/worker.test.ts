@@ -157,7 +157,7 @@ describe('ScrapeWorker Fencing & Heartbeat Enforcement', () => {
       'completed',
       1,
       0,
-      []
+      expect.any(Array)
     );
   });
 });
