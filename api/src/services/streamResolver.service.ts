@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { sanitizeEmbedUrl, isPrivateOrLoopbackHost } from '../scrapers/serverParsers.js';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
+import { ytdlpExtractorService } from './ytdlpExtractor.service.js';
 
 export interface PlayableSource {
   source_id?: number;
@@ -117,7 +118,7 @@ export class StreamResolverService {
       };
     }
 
-    // 3. Provider-Specific Extraction with Stream Proxy Support
+    // 3. Fast Specialized Regex Extraction with Stream Proxy Support
     try {
       const resolved = await this.extractFromHost(embedUrl, provider);
       if (resolved && resolved.success) {
@@ -159,7 +160,51 @@ export class StreamResolverService {
         };
       }
     } catch {
-      // Extraction failed or timed out
+      // Fast extraction failed, proceed to yt-dlp fallback
+    }
+
+    // 4. Automated yt-dlp Extraction Sidecar Engine
+    try {
+      const ytDlpRes = await ytdlpExtractorService.extract(embedUrl);
+      if (ytDlpRes.success && ytDlpRes.url && ytDlpRes.type) {
+        if (source.id && ytDlpRes.direct_url && !ytDlpRes.direct_url.startsWith('/api/v1/stream/proxy')) {
+          void Promise.resolve(
+            supabaseAdmin
+              .from('episode_sources')
+              .update({
+                direct_stream_url: ytDlpRes.direct_url,
+                last_verified_at: new Date().toISOString(),
+              })
+              .eq('id', source.id)
+          ).catch(() => {});
+        }
+
+        return {
+          source_id: source.id,
+          provider,
+          server_name: serverName,
+          type: ytDlpRes.type,
+          url: ytDlpRes.url,
+          direct_url: ytDlpRes.direct_url || ytDlpRes.url,
+          quality: source.quality,
+          language: source.language,
+          headers: ytDlpRes.headers,
+        };
+      } else if (ytDlpRes.dead) {
+        return {
+          source_id: source.id,
+          provider,
+          server_name: serverName,
+          type: 'error',
+          url: '',
+          direct_url: null,
+          quality: source.quality,
+          language: source.language,
+          error_message: ytDlpRes.reason || `El video fue eliminado de ${serverName}.`,
+        };
+      }
+    } catch {
+      // yt-dlp extraction failed or timed out
     }
 
     // 4. Default Safe Fallback: iframe mode for embed-native hosts (e.g. Mega)

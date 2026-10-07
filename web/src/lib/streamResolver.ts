@@ -104,12 +104,23 @@ export async function resolveStreamSource(source: EpisodeSourceRow): Promise<Pla
 
     if (res.ok) {
       const data: PlayableStream = await res.json();
-      if (data && data.url) {
-        return {
-          ...data,
-          url: normalizeStreamUrl(data.url),
-          direct_url: data.direct_url ? normalizeStreamUrl(data.direct_url) : null,
-        };
+      if (data) {
+        if (data.type === 'error') {
+          return data;
+        }
+        if (data.type === 'iframe') {
+          return {
+            ...data,
+            is_fallback: data.is_fallback ?? false,
+          };
+        }
+        if (data.url) {
+          return {
+            ...data,
+            url: normalizeStreamUrl(data.url),
+            direct_url: data.direct_url ? normalizeStreamUrl(data.direct_url) : null,
+          };
+        }
       }
     }
   } catch {
