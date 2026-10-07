@@ -5,22 +5,20 @@ import * as path from 'path';
 dotenv.config({ path: path.join(process.cwd(), 'api', '.env') });
 dotenv.config();
 
-const supabaseUrl = process.env.SUPABASE_URL || 'https://kifhkrbvxzdubfoglvvk.supabase.co';
-const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(
+  process.env.SUPABASE_URL || 'https://kifhkrbvxzdubfoglvvk.supabase.co',
+  process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-const supabase = createClient(supabaseUrl, supabaseKey!, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
-
-async function checkJobs() {
+async function main() {
   const { data: jobs } = await supabase.from('scrape_jobs').select('*');
-  console.log('Current Jobs:', jobs);
+  console.log('JOBS IN DB:', JSON.stringify(jobs, null, 2));
 
   const { data: animes } = await supabase.from('animes').select('id, name, slug');
-  console.log('Current Animes count:', animes?.length, animes);
+  console.log('ANIMES IN DB:', animes);
 
-  const { data: eps } = await supabase.from('episodes').select('id, episode_number').eq('anime_id', 84);
-  console.log('Episodes in DB for anime 84 (The Seven Deadly Sins):', eps?.length);
+  const { data: episodes } = await supabase.from('episodes').select('id, anime_id, episode_number, status');
+  console.log(`EPISODES IN DB (${episodes?.length || 0} total):`, episodes?.slice(0, 5));
 }
 
-checkJobs().catch(console.error);
+main();

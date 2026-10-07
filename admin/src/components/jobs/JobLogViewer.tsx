@@ -188,7 +188,7 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
         </div>
       }
       subtitle={`Anime ID: #${job.anime_id} • Creado: ${formatDate(job.created_at)}`}
-      maxWidth="3xl"
+      maxWidth="2xl"
     >
       <div className="space-y-4">
         {/* Metric Cards Banner */}
