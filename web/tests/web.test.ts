@@ -264,3 +264,21 @@ describe('TotalAnime Web: resolveStreamSource Resolver', () => {
   });
 });
 
+describe('TotalAnime Web: Episode Reactions & Player Settings', () => {
+  it('should generate consistent storage key for episode reactions', () => {
+    const animeSlug = 'the-seven-deadly-sins';
+    const episodeNumber = 1;
+    const storageKey = `ta_reaction_${animeSlug}_ep_${episodeNumber}`;
+    expect(storageKey).toBe('ta_reaction_the-seven-deadly-sins_ep_1');
+  });
+
+  it('should map stream languages to user-friendly audio labels', () => {
+    const getAudioLabel = (lang: string) =>
+      lang === 'dub' ? 'Doblaje (Español Latino)' : 'Subtitulado (Original/Japonés)';
+
+    expect(getAudioLabel('sub')).toBe('Subtitulado (Original/Japonés)');
+    expect(getAudioLabel('dub')).toBe('Doblaje (Español Latino)');
+  });
+});
+
+

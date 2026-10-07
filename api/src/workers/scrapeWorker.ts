@@ -116,9 +116,13 @@ export class ScrapeWorker {
         }
 
         try {
-          const servers = fallbackSlug
-            ? await videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number, 'sub', fallbackSlug)
-            : await videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number);
+          // Scrape both SUB (Original) and DUB (Latino) streams concurrently
+          const [subServers, dubServers] = await Promise.all([
+            videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number, 'sub', fallbackSlug),
+            videoScraper.scrapeEpisodeServers(anime.slug, ep.episode_number, 'dub', fallbackSlug),
+          ]);
+
+          const servers = [...subServers, ...dubServers];
 
           if (servers.length === 0) {
             failed++;
@@ -138,6 +142,7 @@ export class ScrapeWorker {
                     provider: s.provider,
                     server_name: s.server_name,
                     embed_url: s.embed_url,
+                    direct_stream_url: s.direct_stream_url || null,
                     language: s.language,
                     quality: s.quality,
                     priority: s.priority,

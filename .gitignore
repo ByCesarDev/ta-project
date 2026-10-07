@@ -48,3 +48,6 @@ Thumbs.db
 *.sw?
 .idea/
 .vscode/
+api/scratch/
+scratch/
+scratch_*.html

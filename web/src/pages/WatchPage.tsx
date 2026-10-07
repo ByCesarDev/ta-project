@@ -3,11 +3,12 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageContainer } from '../components/layout/PageContainer.js';
 import { useEpisodeWithSources, useAnimeEpisodes } from '../hooks/useEpisodes.js';
 import { VideoPlayer } from '../components/player/VideoPlayer.js';
-import { ServerSelector } from '../components/player/ServerSelector.js';
 import { EpisodeNavigation } from '../components/player/EpisodeNavigation.js';
+import { EpisodeReactions } from '../components/player/EpisodeReactions.js';
+import { DisqusComments } from '../components/comments/DisqusComments.js';
 import { EpisodeSourceRow, StreamLanguage } from '../types/index.js';
 import { Skeleton } from '../components/common/Skeleton.js';
-import { ArrowLeft, Tv } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 
 export const WatchPage: React.FC = () => {
   const { slug, episodeNumber } = useParams<{ slug: string; episodeNumber: string }>();
@@ -22,36 +23,74 @@ export const WatchPage: React.FC = () => {
   const { data: allEpisodes } = useAnimeEpisodes(episodeData?.anime?.id);
 
   const [selectedLanguage, setSelectedLanguage] = useState<StreamLanguage>('sub');
+  const [selectedQuality, setSelectedQuality] = useState<string>('Auto');
   const [selectedSource, setSelectedSource] = useState<EpisodeSourceRow | null>(null);
 
-  // When episode sources load, select the highest priority source for the current language
+  // Available languages detected from sources
+  const availableLanguages: StreamLanguage[] = React.useMemo(() => {
+    if (!episodeData?.sources || episodeData.sources.length === 0) return ['sub', 'dub'];
+    const langs = Array.from(new Set(episodeData.sources.map((s) => s.language)));
+    return langs.length > 0 ? langs : ['sub', 'dub'];
+  }, [episodeData]);
+
+  // When episode sources load or language/quality changes, select the best matching source
   useEffect(() => {
     if (episodeData?.sources && episodeData.sources.length > 0) {
-      // Find sources matching language
-      let matching = episodeData.sources.filter((s) => s.language === selectedLanguage);
-      if (matching.length === 0) {
+      let langSources = episodeData.sources.filter((s) => s.language === selectedLanguage);
+      if (langSources.length === 0) {
         // Fallback to whatever language is available
         const firstAvailableLang = episodeData.sources[0].language;
         setSelectedLanguage(firstAvailableLang);
-        matching = episodeData.sources.filter((s) => s.language === firstAvailableLang);
+        langSources = episodeData.sources.filter((s) => s.language === firstAvailableLang);
       }
 
-      if (matching.length > 0) {
-        setSelectedSource(matching[0]);
+      if (langSources.length > 0) {
+        if (selectedQuality !== 'Auto') {
+          const qualityMatch = langSources.find(
+            (s) => s.quality === selectedQuality || s.quality?.toLowerCase().includes(selectedQuality.toLowerCase())
+          );
+          setSelectedSource(qualityMatch || langSources[0]);
+        } else {
+          setSelectedSource(langSources[0]);
+        }
       } else {
         setSelectedSource(null);
       }
     } else {
       setSelectedSource(null);
     }
-  }, [episodeData, selectedLanguage]);
+  }, [episodeData, selectedLanguage, selectedQuality]);
 
   const handleLanguageChange = (lang: StreamLanguage) => {
     setSelectedLanguage(lang);
     if (episodeData?.sources) {
       const matching = episodeData.sources.filter((s) => s.language === lang);
       if (matching.length > 0) {
-        setSelectedSource(matching[0]);
+        if (selectedQuality !== 'Auto') {
+          const qualityMatch = matching.find(
+            (s) => s.quality === selectedQuality || s.quality?.toLowerCase().includes(selectedQuality.toLowerCase())
+          );
+          setSelectedSource(qualityMatch || matching[0]);
+        } else {
+          setSelectedSource(matching[0]);
+        }
+      }
+    }
+  };
+
+  const handleQualityChange = (qual: string) => {
+    setSelectedQuality(qual);
+    if (episodeData?.sources) {
+      const langSources = episodeData.sources.filter((s) => s.language === selectedLanguage);
+      if (langSources.length > 0) {
+        if (qual !== 'Auto') {
+          const match = langSources.find(
+            (s) => s.quality === qual || s.quality?.toLowerCase().includes(qual.toLowerCase())
+          );
+          if (match) setSelectedSource(match);
+        } else {
+          setSelectedSource(langSources[0]);
+        }
       }
     }
   };
@@ -86,7 +125,7 @@ export const WatchPage: React.FC = () => {
     );
   }
 
-  const { anime, episode, sources } = episodeData;
+  const { anime, episode } = episodeData;
   const animeTitle = anime.title_english || anime.title_romaji || anime.name;
 
   return (
@@ -117,26 +156,23 @@ export const WatchPage: React.FC = () => {
           )}
         </div>
 
-        {/* Video Player */}
+        {/* Video Player (with embedded audio track, custom subtitles, and quality settings in cog) */}
         <VideoPlayer
           episodeId={episode.id}
           selectedSource={selectedSource}
+          availableSources={episodeData.sources}
           animeTitle={animeTitle}
           episodeNumber={episode.episode_number}
+          availableLanguages={availableLanguages}
+          selectedLanguage={selectedLanguage}
+          onSelectLanguage={handleLanguageChange}
+          selectedQuality={selectedQuality}
+          onSelectQuality={handleQualityChange}
           hasNextEpisode={Boolean(allEpisodes && allEpisodes.some((e) => e.episode_number === episode.episode_number + 1))}
           onSelectNextEpisode={() => navigate(`/watch/${anime.slug}/${episode.episode_number + 1}`)}
         />
 
-        {/* Server Selector */}
-        <ServerSelector
-          sources={sources}
-          selectedSourceId={selectedSource?.id ?? null}
-          onSelectSource={(source) => setSelectedSource(source)}
-          selectedLanguage={selectedLanguage}
-          onSelectLanguage={handleLanguageChange}
-        />
-
-        {/* Episode Navigation Bar */}
+        {/* Episode Navigation Bar (Anterior / Siguiente) */}
         <EpisodeNavigation
           animeSlug={anime.slug}
           currentEpisodeNumber={episode.episode_number}
@@ -144,34 +180,19 @@ export const WatchPage: React.FC = () => {
           availableEpisodes={allEpisodes}
         />
 
-        {/* Quick Episode Grid Selector */}
-        {allEpisodes && allEpisodes.length > 0 && (
-          <div className="p-6 rounded-3xl bg-[#0c101c] border border-slate-800/80 mb-12 shadow-xl">
-            <h3 className="text-sm font-bold text-white font-['Outfit'] flex items-center gap-2 mb-4">
-              <Tv className="w-4 h-4 text-indigo-400" />
-              Todos los Episodios ({allEpisodes.length})
-            </h3>
+        {/* Reactions & Actions Bar (Likes, Dislikes, Share, Bookmark) */}
+        <EpisodeReactions
+          animeSlug={anime.slug}
+          episodeNumber={episode.episode_number}
+          animeTitle={animeTitle}
+        />
 
-            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-2">
-              {allEpisodes.map((ep) => {
-                const isCurrent = ep.episode_number === episode.episode_number;
-                return (
-                  <button
-                    key={ep.id}
-                    onClick={() => navigate(`/watch/${anime.slug}/${ep.episode_number}`)}
-                    className={`py-2 px-1 rounded-xl text-xs font-bold transition-all border ${
-                      isCurrent
-                        ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30'
-                        : 'bg-slate-900/80 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    {ep.episode_number}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* Disqus Community Comments */}
+        <DisqusComments
+          animeSlug={anime.slug}
+          episodeNumber={episode.episode_number}
+          animeTitle={animeTitle}
+        />
       </div>
     </PageContainer>
   );

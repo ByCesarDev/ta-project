@@ -149,7 +149,8 @@ describe('ScrapeWorker Fencing & Heartbeat Enforcement', () => {
 
     await worker.processJob(mockJob);
 
-    expect(scraperSpy).toHaveBeenCalledWith('active-anime', 1);
+    expect(scraperSpy).toHaveBeenCalledWith('active-anime', 1, 'sub', undefined);
+    expect(scraperSpy).toHaveBeenCalledWith('active-anime', 1, 'dub', undefined);
     expect(jobsService.finishJob).toHaveBeenCalledWith(
       'job-valid-lease-456',
       expect.any(String),

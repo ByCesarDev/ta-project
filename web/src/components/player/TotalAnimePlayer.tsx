@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
 import {
   Play,
@@ -17,28 +17,64 @@ import {
   Loader2,
   Sparkles,
   Check,
+  ChevronRight,
+  ChevronLeft,
+  Headphones,
+  Sliders,
+  Gauge,
+  MessageSquare,
+  Palette,
 } from 'lucide-react';
-import { EpisodeSourceRow, PlayableStream } from '../../types/index.js';
+import { EpisodeSourceRow, PlayableStream, StreamLanguage } from '../../types/index.js';
 import { useSaveProgress, useEpisodeProgress } from '../../hooks/useWatchHistory.js';
 import { resolveStreamSource } from '../../lib/streamResolver.js';
 import { formatTime } from '../../lib/utils.js';
+
+export interface SubtitleTrack {
+  id: string;
+  language: string;
+  label: string;
+  url?: string;
+  isDefault?: boolean;
+}
+
+export interface SubtitleStyleConfig {
+  fontSize: 'small' | 'medium' | 'large';
+  color: string;
+  background: 'shadow' | 'box';
+}
 
 interface TotalAnimePlayerProps {
   episodeId: number;
   animeTitle?: string;
   episodeNumber?: number;
   selectedSource: EpisodeSourceRow | null;
+  availableSources?: EpisodeSourceRow[];
+  availableLanguages?: StreamLanguage[];
+  selectedLanguage?: StreamLanguage;
+  onSelectLanguage?: (lang: StreamLanguage) => void;
+  selectedQuality?: string;
+  onSelectQuality?: (quality: string) => void;
+  subtitles?: SubtitleTrack[];
   onSelectNextEpisode?: () => void;
   hasNextEpisode?: boolean;
 }
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const STANDARD_FALLBACK_QUALITIES = ['Auto', '1080p', '720p', '540p', '360p'];
 
 export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   episodeId,
   animeTitle,
   episodeNumber,
   selectedSource,
+  availableSources = [],
+  availableLanguages = ['sub', 'dub'],
+  selectedLanguage = 'sub',
+  onSelectLanguage,
+  selectedQuality = 'Auto',
+  onSelectQuality,
+  subtitles = [],
   onSelectNextEpisode,
   hasNextEpisode,
 }) => {
@@ -71,7 +107,46 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   const [isPiP, setIsPiP] = useState<boolean>(false);
   const [showControls, setShowControls] = useState<boolean>(true);
   const [isBuffering, setIsBuffering] = useState<boolean>(false);
+
+  // Settings Menu Popover state
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [settingsTab, setSettingsTab] = useState<
+    'main' | 'audio' | 'quality' | 'speed' | 'subtitles' | 'subtitle-style'
+  >('main');
+
+  // Quality state
+  const [hlsQualityLevels, setHlsQualityLevels] = useState<Array<{ label: string; level: number }>>([]);
+  const [activeQuality, setActiveQuality] = useState<string>(selectedQuality || 'Auto');
+
+  // Subtitles state
+  const [selectedSubtitle, setSelectedSubtitle] = useState<string | null>(() => {
+    const saved = localStorage.getItem('ta_player_subtitle_lang');
+    return saved !== null ? (saved === 'off' ? null : saved) : 'es';
+  });
+
+  const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleConfig>(() => {
+    const saved = localStorage.getItem('ta_player_subtitle_style');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // use default
+      }
+    }
+    return {
+      fontSize: 'medium',
+      color: '#ffffff',
+      background: 'shadow',
+    };
+  });
+
+  const [activeCueText, setActiveCueText] = useState<string | null>(null);
+  const [parsedCues, setParsedCues] = useState<Array<{ start: number; end: number; text: string }>>([]);
+
+  // HLS audio tracks state
+  const [hlsAudioTracks, setHlsAudioTracks] = useState<Array<{ id: number; label: string; lang: string }>>([]);
+  const [activeHlsAudioTrack, setActiveHlsAudioTrack] = useState<number>(-1);
+
   const [resumeToast, setResumeToast] = useState<string | null>(null);
   const [doubleTapFeedback, setDoubleTapFeedback] = useState<'rewind' | 'forward' | null>(null);
 
@@ -100,6 +175,13 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     initialSeekDoneRef.current = false;
     lastRecordedTimeRef.current = 0;
   }, [episodeId]);
+
+  // Keep activeQuality in sync with selectedQuality prop
+  useEffect(() => {
+    if (selectedQuality) {
+      setActiveQuality(selectedQuality);
+    }
+  }, [selectedQuality]);
 
   // 1. Resolve Stream Source when selectedSource changes
   useEffect(() => {
@@ -169,12 +251,42 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       hls.loadSource(streamUrl);
       hls.attachMedia(video);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
         setIsBuffering(false);
+        if (data?.levels && data.levels.length > 0) {
+          const parsed = data.levels.map((lvl, idx) => ({
+            label: lvl.height ? `${lvl.height}p` : `Nivel ${idx + 1}`,
+            level: idx,
+          }));
+          setHlsQualityLevels(parsed);
+        }
+
+        // Check for embedded audio tracks
+        if (hls.audioTracks && hls.audioTracks.length > 0) {
+          const audioList = hls.audioTracks.map((t, idx) => ({
+            id: idx,
+            label: t.name || t.lang || `Pista ${idx + 1}`,
+            lang: t.lang || 'und',
+          }));
+          setHlsAudioTracks(audioList);
+          setActiveHlsAudioTrack(hls.audioTrack);
+        }
+
         video.play().then(() => setIsPlaying(true)).catch(() => {
           setIsPlaying(false);
           setIsBuffering(false);
         });
+      });
+
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_event, data) => {
+        if (data.audioTracks && data.audioTracks.length > 0) {
+          const audioList = data.audioTracks.map((t, idx) => ({
+            id: idx,
+            label: t.name || t.lang || `Pista ${idx + 1}`,
+            lang: t.lang || 'und',
+          }));
+          setHlsAudioTracks(audioList);
+        }
       });
 
       hls.on(Hls.Events.LEVEL_LOADED, () => {
@@ -219,7 +331,65 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     };
   }, [stream]);
 
-  // 3. Auto-Resume logic once video metadata is ready
+  // 3. Subtitles Loader & WebVTT Parser
+  useEffect(() => {
+    if (!selectedSubtitle) {
+      setParsedCues([]);
+      setActiveCueText(null);
+      return;
+    }
+
+    const matchedTrack = subtitles.find(
+      (s) => s.id === selectedSubtitle || s.language === selectedSubtitle
+    );
+
+    if (matchedTrack?.url) {
+      fetch(matchedTrack.url)
+        .then((res) => res.text())
+        .then((vttText) => {
+          const cues: Array<{ start: number; end: number; text: string }> = [];
+          const lines = vttText.split(/\r?\n/);
+          let i = 0;
+
+          const parseTime = (timeStr: string): number => {
+            const parts = timeStr.trim().split(':');
+            if (parts.length === 3) {
+              const [h, m, s] = parts;
+              return parseFloat(h) * 3600 + parseFloat(m) * 60 + parseFloat(s.replace(',', '.'));
+            } else if (parts.length === 2) {
+              const [m, s] = parts;
+              return parseFloat(m) * 60 + parseFloat(s.replace(',', '.'));
+            }
+            return 0;
+          };
+
+          while (i < lines.length) {
+            const line = lines[i].trim();
+            if (line.includes('-->')) {
+              const [startStr, endStr] = line.split('-->');
+              const start = parseTime(startStr);
+              const end = parseTime(endStr);
+              i++;
+              const textLines: string[] = [];
+              while (i < lines.length && lines[i].trim() !== '') {
+                textLines.push(lines[i].trim());
+                i++;
+              }
+              cues.push({ start, end, text: textLines.join('<br />') });
+            }
+            i++;
+          }
+          setParsedCues(cues);
+        })
+        .catch(() => {
+          setParsedCues([]);
+        });
+    } else {
+      setParsedCues([]);
+    }
+  }, [selectedSubtitle, subtitles]);
+
+  // 4. Auto-Resume logic once video metadata is ready
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -240,19 +410,27 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       }
       initialSeekDoneRef.current = true;
     } else if (lastRecordedTimeRef.current > 5) {
-      // Preserve timestamp on server switch
+      // Preserve timestamp on server or quality/language switch
       video.currentTime = lastRecordedTimeRef.current;
       setCurrentTime(lastRecordedTimeRef.current);
     }
   };
 
-  // 4. Video Event Handlers
+  // 5. Video Event Handlers
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     if (!video) return;
 
     const cur = video.currentTime;
     setCurrentTime(cur);
+
+    // Sync active subtitle cue
+    if (parsedCues.length > 0) {
+      const matchingCue = parsedCues.find((c) => c.start <= cur && cur <= c.end);
+      setActiveCueText(matchingCue ? matchingCue.text : null);
+    } else {
+      setActiveCueText(null);
+    }
 
     // Calculate buffer percentage
     if (video.buffered.length > 0) {
@@ -404,14 +582,13 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         setIsPiP(true);
       }
     } catch {
-      // PiP not supported or rejected
+      // PiP not supported
     }
   };
 
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in an input or textarea
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
@@ -494,6 +671,66 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     lastTouchTimeRef.current = { time: now, x: touch.clientX };
   };
 
+  // Derive all available quality options seamlessly
+  const qualityOptions = useMemo(() => {
+    const set = new Set<string>(['Auto']);
+
+    // 1. From HLS levels
+    if (hlsQualityLevels.length > 0) {
+      hlsQualityLevels.forEach((lvl) => set.add(lvl.label));
+    }
+
+    // 2. From availableSources in active language
+    const currentLangSources = availableSources.filter((s) => s.language === selectedLanguage);
+    currentLangSources.forEach((s) => {
+      if (s.quality) set.add(s.quality);
+    });
+
+    // 3. Fallback ladder if only Auto exists
+    if (set.size <= 1) {
+      STANDARD_FALLBACK_QUALITIES.forEach((q) => set.add(q));
+    }
+
+    return Array.from(set);
+  }, [hlsQualityLevels, availableSources, selectedLanguage]);
+
+  // Subtitle selection handler
+  const handleSelectSubtitle = (subId: string | null) => {
+    setSelectedSubtitle(subId);
+    localStorage.setItem('ta_player_subtitle_lang', subId || 'off');
+    setSettingsTab('main');
+  };
+
+  // Subtitle styling updater
+  const updateSubtitleStyle = (updates: Partial<SubtitleStyleConfig>) => {
+    setSubtitleStyle((prev) => {
+      const next = { ...prev, ...updates };
+      localStorage.setItem('ta_player_subtitle_style', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // Quality selection handler
+  const handleSelectQuality = (qual: string) => {
+    setActiveQuality(qual);
+    localStorage.setItem('ta_player_quality', qual);
+
+    // If HLS instance is active and quality matches an HLS level
+    if (hlsRef.current) {
+      if (qual === 'Auto') {
+        hlsRef.current.currentLevel = -1;
+      } else {
+        const hlsMatch = hlsQualityLevels.find((lvl) => lvl.label === qual);
+        if (hlsMatch) {
+          hlsRef.current.currentLevel = hlsMatch.level;
+        }
+      }
+    }
+
+    onSelectQuality?.(qual);
+    setSettingsTab('main');
+  };
+
   // No active sources available
   if (!selectedSource || (!selectedSource.embed_url && !selectedSource.direct_stream_url)) {
     return (
@@ -523,10 +760,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
           Video no disponible en {stream.server_name}
         </h3>
         <p className="text-slate-400 text-xs max-w-md mb-3">
-          {stream.error_message || 'El archivo de video fue dado de baja o no se encuentra disponible en este servidor de origen.'}
+          {stream.error_message ||
+            'El archivo de video fue dado de baja o no se encuentra disponible en este servidor de origen.'}
         </p>
         <span className="text-[11px] text-indigo-400 font-medium bg-indigo-950/60 px-3 py-1.5 rounded-lg border border-indigo-500/20">
-          Por favor selecciona otro servidor en la lista inferior para reproducir.
+          Por favor selecciona otra pista de audio o calidad en los ajustes del reproductor.
         </span>
       </div>
     );
@@ -613,6 +851,39 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         playsInline
         className="w-full h-full object-contain cursor-pointer"
       />
+
+      {/* CUSTOM ANIME SUBTITLE RENDERER */}
+      {selectedSubtitle && activeCueText && (
+        <div
+          className={`absolute left-0 right-0 text-center pointer-events-none z-25 px-6 transition-all duration-200 ${
+            showControls ? 'bottom-20 sm:bottom-24' : 'bottom-6 sm:bottom-8'
+          }`}
+        >
+          <span
+            className={`inline-block font-bold tracking-wide transition-all ${
+              subtitleStyle.background === 'box'
+                ? 'bg-black/85 px-4 py-2 rounded-2xl border border-white/10 backdrop-blur-xs shadow-2xl'
+                : ''
+            }`}
+            style={{
+              color: subtitleStyle.color,
+              fontSize:
+                subtitleStyle.fontSize === 'small'
+                  ? 'clamp(13px, 1.8vw, 16px)'
+                  : subtitleStyle.fontSize === 'large'
+                  ? 'clamp(20px, 3.2vw, 28px)'
+                  : 'clamp(16px, 2.5vw, 22px)',
+              textShadow:
+                subtitleStyle.background === 'box'
+                  ? 'none'
+                  : '0 0 4px #000, 0 0 8px #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 6px rgba(0,0,0,0.95)',
+              fontFamily: 'Outfit, Inter, system-ui, sans-serif',
+              lineHeight: 1.35,
+            }}
+            dangerouslySetInnerHTML={{ __html: activeCueText }}
+          />
+        </div>
+      )}
 
       {/* Loading Overlay */}
       {((isResolving && !stream) || (isBuffering && isPlaying)) && (
@@ -786,30 +1057,394 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
               {/* Settings Dropdown Popover */}
               {showSettings && (
-                <div className="absolute right-0 bottom-full mb-2 w-48 p-2 rounded-2xl bg-slate-900/95 border border-slate-700/80 backdrop-blur-xl shadow-2xl z-40 animate-fade-in">
-                  <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1">
-                    Velocidad
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {SPEED_OPTIONS.map((rate) => (
+                <div className="absolute right-0 bottom-full mb-2 w-60 p-2.5 rounded-2xl bg-slate-900/95 border border-slate-700/80 backdrop-blur-xl shadow-2xl z-40 animate-fade-in text-xs max-h-[380px] overflow-y-auto">
+                  {/* MAIN SETTINGS MENU */}
+                  {settingsTab === 'main' && (
+                    <div className="space-y-1">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1 tracking-wider">
+                        Ajustes
+                      </div>
+
+                      {/* 1. Audio Track Submenu Button */}
                       <button
-                        key={rate}
-                        onClick={() => {
-                          setPlaybackRate(rate);
-                          localStorage.setItem('ta_player_rate', String(rate));
-                          setShowSettings(false);
-                        }}
-                        className={`py-1 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
-                          playbackRate === rate
-                            ? 'bg-indigo-600 text-white'
-                            : 'hover:bg-white/10 text-slate-300'
+                        onClick={() => setSettingsTab('audio')}
+                        className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/10 text-slate-200 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Headphones className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Pista de audio</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-slate-400 text-[11px]">
+                          <span>
+                            {selectedLanguage === 'dub' ? 'Doblaje Latino' : 'Subtitulado'}
+                          </span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </div>
+                      </button>
+
+                      {/* 2. Subtitles Submenu Button */}
+                      <button
+                        onClick={() => setSettingsTab('subtitles')}
+                        className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/10 text-slate-200 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Subtítulos</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-slate-400 text-[11px]">
+                          <span>
+                            {selectedSubtitle === null
+                              ? 'Desactivados'
+                              : selectedSubtitle === 'es'
+                              ? 'Español'
+                              : selectedSubtitle === 'en'
+                              ? 'Inglés'
+                              : selectedSubtitle}
+                          </span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </div>
+                      </button>
+
+                      {/* 3. Quality Submenu Button */}
+                      <button
+                        onClick={() => setSettingsTab('quality')}
+                        className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/10 text-slate-200 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Calidad</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-slate-400 text-[11px]">
+                          <span>{activeQuality}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </div>
+                      </button>
+
+                      {/* 4. Speed Submenu Button */}
+                      <button
+                        onClick={() => setSettingsTab('speed')}
+                        className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/10 text-slate-200 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Gauge className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Velocidad</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-slate-400 text-[11px]">
+                          <span>{playbackRate === 1 ? 'Normal' : `${playbackRate}x`}</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </div>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* AUDIO TRACK SUBMENU */}
+                  {settingsTab === 'audio' && (
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => setSettingsTab('main')}
+                        className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold text-slate-400 hover:text-white transition-colors mb-1"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>Volver</span>
+                      </button>
+                      <div className="text-[10px] uppercase font-bold text-slate-400 px-2 pb-1 border-b border-slate-800">
+                        Seleccionar Audio
+                      </div>
+
+                      {/* Source-level languages */}
+                      {availableLanguages.map((lang) => {
+                        const isSelected = selectedLanguage === lang;
+                        const label =
+                          lang === 'dub'
+                            ? 'Doblaje (Español Latino)'
+                            : 'Subtitulado (Original/Japonés)';
+                        return (
+                          <button
+                            key={lang}
+                            onClick={() => {
+                              onSelectLanguage?.(lang);
+                              setSettingsTab('main');
+                            }}
+                            className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                              isSelected
+                                ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                                : 'hover:bg-white/10 text-slate-200'
+                            }`}
+                          >
+                            <span>{label}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                          </button>
+                        );
+                      })}
+
+                      {/* Embedded HLS audio tracks if stream has multiple */}
+                      {hlsAudioTracks.length > 1 && (
+                        <>
+                          <div className="text-[10px] uppercase font-bold text-slate-400 px-2 pt-2 pb-1 border-b border-slate-800">
+                            Pistas HLS
+                          </div>
+                          {hlsAudioTracks.map((track) => {
+                            const isSelected = activeHlsAudioTrack === track.id;
+                            return (
+                              <button
+                                key={`hls-audio-${track.id}`}
+                                onClick={() => {
+                                  if (hlsRef.current) {
+                                    hlsRef.current.audioTrack = track.id;
+                                    setActiveHlsAudioTrack(track.id);
+                                  }
+                                  setSettingsTab('main');
+                                }}
+                                className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                                  isSelected
+                                    ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                                    : 'hover:bg-white/10 text-slate-200'
+                                }`}
+                              >
+                                <span>{track.label}</span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                              </button>
+                            );
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* SUBTITLES SUBMENU */}
+                  {settingsTab === 'subtitles' && (
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => setSettingsTab('main')}
+                        className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold text-slate-400 hover:text-white transition-colors mb-1"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>Volver</span>
+                      </button>
+                      <div className="text-[10px] uppercase font-bold text-slate-400 px-2 pb-1 border-b border-slate-800">
+                        Subtítulos
+                      </div>
+
+                      {/* Off Option */}
+                      <button
+                        onClick={() => handleSelectSubtitle(null)}
+                        className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                          selectedSubtitle === null
+                            ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                            : 'hover:bg-white/10 text-slate-200'
                         }`}
                       >
-                        {playbackRate === rate && <Check className="w-3 h-3" />}
-                        {rate}x
+                        <span>Desactivados</span>
+                        {selectedSubtitle === null && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                       </button>
-                    ))}
-                  </div>
+
+                      {/* Spanish Subtitles */}
+                      <button
+                        onClick={() => handleSelectSubtitle('es')}
+                        className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                          selectedSubtitle === 'es'
+                            ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                            : 'hover:bg-white/10 text-slate-200'
+                        }`}
+                      >
+                        <span>Español (Latino / Castellano)</span>
+                        {selectedSubtitle === 'es' && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                      </button>
+
+                      {/* English Subtitles */}
+                      <button
+                        onClick={() => handleSelectSubtitle('en')}
+                        className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                          selectedSubtitle === 'en'
+                            ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                            : 'hover:bg-white/10 text-slate-200'
+                        }`}
+                      >
+                        <span>English</span>
+                        {selectedSubtitle === 'en' && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                      </button>
+
+                      {/* Dynamic Subtitle Tracks */}
+                      {subtitles.map((track) => {
+                        const isSelected = selectedSubtitle === track.id;
+                        return (
+                          <button
+                            key={track.id}
+                            onClick={() => handleSelectSubtitle(track.id)}
+                            className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                              isSelected
+                                ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                                : 'hover:bg-white/10 text-slate-200'
+                            }`}
+                          >
+                            <span>{track.label}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                          </button>
+                        );
+                      })}
+
+                      {/* Subtitle Style Customization Button */}
+                      <button
+                        onClick={() => setSettingsTab('subtitle-style')}
+                        className="w-full flex items-center justify-between p-2 mt-2 rounded-xl bg-indigo-950/40 hover:bg-indigo-900/50 text-indigo-300 border border-indigo-500/20 transition-colors font-medium text-[11px]"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Palette className="w-3.5 h-3.5" />
+                          <span>Personalizar subtítulos...</span>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* SUBTITLE STYLE CUSTOMIZATION */}
+                  {settingsTab === 'subtitle-style' && (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => setSettingsTab('subtitles')}
+                        className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold text-slate-400 hover:text-white transition-colors mb-1"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>Volver a Subtítulos</span>
+                      </button>
+                      <div className="text-[10px] uppercase font-bold text-slate-400 px-2 pb-1 border-b border-slate-800">
+                        Estilo de Subtítulos
+                      </div>
+
+                      {/* Size Selector */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-slate-400 px-2">Tamaño de Texto</span>
+                        <div className="grid grid-cols-3 gap-1 px-1">
+                          {(['small', 'medium', 'large'] as const).map((size) => (
+                            <button
+                              key={size}
+                              onClick={() => updateSubtitleStyle({ fontSize: size })}
+                              className={`py-1 rounded-lg text-[10px] font-semibold transition-colors ${
+                                subtitleStyle.fontSize === size
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                              }`}
+                            >
+                              {size === 'small' ? 'Chico' : size === 'large' ? 'Grande' : 'Normal'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Color Selector */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-slate-400 px-2">Color</span>
+                        <div className="flex items-center gap-1.5 px-2">
+                          {[
+                            { label: 'Blanco', value: '#ffffff' },
+                            { label: 'Amarillo', value: '#facc15' },
+                            { label: 'Cyan', value: '#38bdf8' },
+                          ].map((col) => (
+                            <button
+                              key={col.value}
+                              onClick={() => updateSubtitleStyle({ color: col.value })}
+                              style={{ backgroundColor: col.value }}
+                              className={`w-6 h-6 rounded-full border-2 transition-transform ${
+                                subtitleStyle.color === col.value
+                                  ? 'border-indigo-400 scale-110 shadow-lg'
+                                  : 'border-transparent hover:scale-105'
+                              }`}
+                              title={col.label}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Background / Effect Selector */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-slate-400 px-2">Sombra / Fondo</span>
+                        <div className="grid grid-cols-2 gap-1 px-1">
+                          {[
+                            { label: 'Sombra Negra', value: 'shadow' as const },
+                            { label: 'Caja Oscura', value: 'box' as const },
+                          ].map((bg) => (
+                            <button
+                              key={bg.value}
+                              onClick={() => updateSubtitleStyle({ background: bg.value })}
+                              className={`py-1 px-1.5 rounded-lg text-[10px] font-semibold transition-colors ${
+                                subtitleStyle.background === bg.value
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-white/5 hover:bg-white/10 text-slate-300'
+                              }`}
+                            >
+                              {bg.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* QUALITY SUBMENU */}
+                  {settingsTab === 'quality' && (
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => setSettingsTab('main')}
+                        className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold text-slate-400 hover:text-white transition-colors mb-1"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>Volver</span>
+                      </button>
+                      <div className="text-[10px] uppercase font-bold text-slate-400 px-2 pb-1 border-b border-slate-800">
+                        Calidad de Video
+                      </div>
+                      {qualityOptions.map((qual) => (
+                        <button
+                          key={qual}
+                          onClick={() => handleSelectQuality(qual)}
+                          className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                            activeQuality === qual
+                              ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                              : 'hover:bg-white/10 text-slate-200'
+                          }`}
+                        >
+                          <span>{qual}</span>
+                          {activeQuality === qual && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* PLAYBACK SPEED SUBMENU */}
+                  {settingsTab === 'speed' && (
+                    <div className="space-y-1">
+                      <button
+                        onClick={() => setSettingsTab('main')}
+                        className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold text-slate-400 hover:text-white transition-colors mb-1"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>Volver</span>
+                      </button>
+                      <div className="text-[10px] uppercase font-bold text-slate-400 px-2 pb-1 border-b border-slate-800">
+                        Velocidad
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 pt-1">
+                        {SPEED_OPTIONS.map((rate) => (
+                          <button
+                            key={rate}
+                            onClick={() => {
+                              setPlaybackRate(rate);
+                              localStorage.setItem('ta_player_rate', String(rate));
+                              setSettingsTab('main');
+                            }}
+                            className={`py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors ${
+                              playbackRate === rate
+                                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                                : 'hover:bg-white/10 text-slate-300'
+                            }`}
+                          >
+                            {playbackRate === rate && <Check className="w-3 h-3" />}
+                            {rate}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

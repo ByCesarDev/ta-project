@@ -35,7 +35,8 @@ export class DramasFreeProvider implements IStreamProvider {
 
   public async search(query: string): Promise<ScrapedAnimeSummary[]> {
     try {
-      const response = await this.client.get(`/buscar?q=${encodeURIComponent(query)}`, {
+      const cleanQuery = query.replace(/-/g, ' ').trim();
+      const response = await this.client.get(`/buscar?q=${encodeURIComponent(cleanQuery)}`, {
         validateStatus: (status) => status < 500,
       });
       if (response.status !== 200) return [];
@@ -43,18 +44,20 @@ export class DramasFreeProvider implements IStreamProvider {
       const $ = cheerio.load(response.data);
       const list: ScrapedAnimeSummary[] = [];
 
-      $('div.drama-item, article.post, div.item-content').each((_i, el) => {
-        const title = $(el).find('h2, h3, div.title').first().text().trim();
-        const href = $(el).find('a').first().attr('href') || '';
+      $('div.drama-item, article.post, div.item-content, a[href*="/detail/drama/"]').each((_i, el) => {
+        const title = $(el).find('h2, h3, div.title, p.title').first().text().trim() || $(el).attr('title') || '';
+        const href = $(el).attr('href') || $(el).find('a').first().attr('href') || '';
         const img = $(el).find('img').first().attr('src') || $(el).find('img').first().attr('data-src');
 
-        if (title && href) {
-          const slug = href.replace(/^https?:\/\/[^/]+\//, '').replace(/^\/+|\/+$/g, '');
-          list.push({
-            name: title,
-            slug: slug || this.formatSlug(title),
-            img,
-          });
+        if (href && href.includes('/detail/drama/')) {
+          const rawSlug = href.replace(/^.*\/detail\/drama\//, '').replace(/^\/+|\/+$/g, '').split('/')[0];
+          if (rawSlug) {
+            list.push({
+              name: title || rawSlug,
+              slug: rawSlug,
+              img,
+            });
+          }
         }
       });
 
@@ -73,49 +76,197 @@ export class DramasFreeProvider implements IStreamProvider {
     const cleanSlug = this.formatSlug(dramaSlug);
     const epNum = String(episodeNumber).trim();
 
-    const candidatePaths = [
-      `/ver/${cleanSlug}-episodio-${epNum}`,
-      `/drama/${cleanSlug}/episodio-${epNum}`,
-      `/${cleanSlug}-capitulo-${epNum}`,
-      `/ver/${cleanSlug}-capitulo-${epNum}`,
-    ];
+    // 1. If slug already contains specific drama hash or path
+    const candidateSlugs = [dramaSlug, cleanSlug];
+    if (fallbackSlug) {
+      candidateSlugs.push(fallbackSlug, this.formatSlug(fallbackSlug));
+    }
 
-    for (const path of candidatePaths) {
-      try {
-        const response = await this.client.get(path, {
-          validateStatus: (status) => status < 500,
-        });
+    // Try direct candidate paths
+    for (const slug of candidateSlugs) {
+      const candidatePaths = [
+        `/es/detail/drama/${slug}/${epNum}`,
+        `/detail/drama/${slug}/${epNum}`,
+        `/es/detail/drama/${slug}`,
+        `/detail/drama/${slug}`,
+      ];
 
-        if (response.status === 200 && response.data) {
-          const servers = this.parseEpisodeHtml(response.data, language);
-          if (servers.length > 0) {
-            return servers;
+      for (const path of candidatePaths) {
+        try {
+          const response = await this.client.get(path, {
+            validateStatus: (status) => status < 500,
+          });
+
+          if (response.status === 200 && response.data) {
+            const servers = await this.extractFromPageOrDubbing(response.data, epNum, language);
+            if (servers.length > 0) {
+              return servers;
+            }
           }
+        } catch {
+          // Continue
         }
-      } catch {
-        // Continue to next path candidate
       }
     }
 
-    if (fallbackSlug && this.formatSlug(fallbackSlug) !== cleanSlug) {
-      return this.getEpisodeServers(fallbackSlug, episodeNumber, language);
+    // 2. Search DramasFree catalog if direct paths didn't match
+    try {
+      const searchQuery = (fallbackSlug || dramaSlug).replace(/-/g, ' ');
+      const searchResults = await this.search(searchQuery);
+
+      for (const result of searchResults) {
+        if (!result.slug) continue;
+        const searchPath = `/es/detail/drama/${result.slug}/${epNum}`;
+        try {
+          const response = await this.client.get(searchPath, {
+            validateStatus: (status) => status < 500,
+          });
+
+          if (response.status === 200 && response.data) {
+            const servers = await this.extractFromPageOrDubbing(response.data, epNum, language);
+            if (servers.length > 0) {
+              return servers;
+            }
+          }
+        } catch {
+          // Continue
+        }
+      }
+    } catch {
+      // Ignore search error
     }
 
     return [];
   }
 
-  public parseEpisodeHtml(html: string, targetLanguage: StreamLanguage = 'sub'): ScrapedServer[] {
-    const $ = cheerio.load(html);
-    const serversMap = new Map<string, ScrapedServer>();
+  private async extractFromPageOrDubbing(
+    html: string,
+    episodeNumber: string,
+    targetLanguage: StreamLanguage
+  ): Promise<ScrapedServer[]> {
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+    if (!nextDataMatch) {
+      return this.parseEpisodeHtml(html, targetLanguage);
+    }
 
-    // 1. Parse server options with data-src / data-server / embed URLs
+    try {
+      const nextData = JSON.parse(nextDataMatch[1]);
+      const pageProps = nextData?.props?.pageProps;
+      if (!pageProps) return this.parseEpisodeHtml(html, targetLanguage);
+
+      const pageDubMode = String(pageProps.dubMode || '0');
+      const isPageDub = pageDubMode === '1' || (pageProps.name || '').toLowerCase().includes('doblaje');
+      const currentPageLang: StreamLanguage = isPageDub ? 'dub' : 'sub';
+
+      // If current page matches target language, parse mediaInfoList directly
+      if (currentPageLang === targetLanguage) {
+        return this.parseMediaInfoList(pageProps.mediaInfoList, targetLanguage);
+      }
+
+      // If current page is opposite language, check dubbingList to switch to matching version
+      if (Array.isArray(pageProps.dubbingList) && pageProps.dubbingList.length > 0) {
+        const targetEntry = pageProps.dubbingList.find((d: any) => {
+          if (targetLanguage === 'dub') {
+            return String(d.dubMode) === '1' || (d.name || '').toLowerCase().includes('doblaje');
+          } else {
+            return String(d.dubMode) === '0';
+          }
+        });
+
+        if (targetEntry?.websiteParam) {
+          try {
+            const targetPath = `/es/detail/drama/${targetEntry.websiteParam}/${episodeNumber}`;
+            const targetRes = await this.client.get(targetPath, {
+              validateStatus: (status) => status < 500,
+            });
+
+            if (targetRes.status === 200 && targetRes.data) {
+              const targetMatch = targetRes.data.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+              if (targetMatch) {
+                const targetNextData = JSON.parse(targetMatch[1]);
+                const targetProps = targetNextData?.props?.pageProps;
+                if (targetProps?.mediaInfoList) {
+                  return this.parseMediaInfoList(targetProps.mediaInfoList, targetLanguage);
+                }
+              }
+            }
+          } catch {
+            // Fallback
+          }
+        }
+      }
+
+      // If no alternate dubbing entry found, return current page media list if available
+      return this.parseMediaInfoList(pageProps.mediaInfoList, currentPageLang);
+    } catch {
+      return this.parseEpisodeHtml(html, targetLanguage);
+    }
+  }
+
+  private parseMediaInfoList(mediaInfoList: any[], language: StreamLanguage): ScrapedServer[] {
+    const serversMap = new Map<string, ScrapedServer>();
+    if (!Array.isArray(mediaInfoList) || mediaInfoList.length === 0) return [];
+
+    for (const media of mediaInfoList) {
+      if (media.mediaUrl) {
+        const def = media.currentDefinition || 'GROOT_SD';
+        const quality =
+          def === 'GROOT_SD'
+            ? '720p'
+            : def === 'GROOT_LD'
+            ? '540p'
+            : def === 'GROOT_FD'
+            ? '360p'
+            : '1080p';
+        const priority = def === 'GROOT_SD' ? 10 : def === 'GROOT_LD' ? 20 : def === 'GROOT_FD' ? 30 : 5;
+
+        const server: ScrapedServer = {
+          provider: 'dramasfree',
+          server_name: `DramasFree (${quality})`,
+          embed_url: media.mediaUrl,
+          direct_stream_url: media.mediaUrl,
+          language,
+          quality,
+          priority,
+          is_active: true,
+        };
+
+        const key = `dramasfree_${quality}_${language}`;
+        if (!serversMap.has(key)) {
+          serversMap.set(key, server);
+        }
+      }
+    }
+
+    return Array.from(serversMap.values()).sort((a, b) => a.priority - b.priority);
+  }
+
+  public parseEpisodeHtml(html: string, targetLanguage: StreamLanguage = 'sub'): ScrapedServer[] {
+    const serversMap = new Map<string, ScrapedServer>();
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+    if (nextDataMatch) {
+      try {
+        const nextData = JSON.parse(nextDataMatch[1]);
+        const pageProps = nextData?.props?.pageProps;
+        if (pageProps?.mediaInfoList) {
+          const pageDubMode = String(pageProps.dubMode || '0');
+          const isPageDub = pageDubMode === '1' || (pageProps.name || '').toLowerCase().includes('doblaje');
+          const lang: StreamLanguage = isPageDub ? 'dub' : 'sub';
+          return this.parseMediaInfoList(pageProps.mediaInfoList, lang);
+        }
+      } catch {
+        // Fallback
+      }
+    }
+
+    const $ = cheerio.load(html);
     $('ul.server-list li, div.server-opt, button.btn-server, a.btn-stream').each((_i, el) => {
       const rawUrl = $(el).attr('data-src') || $(el).attr('data-url') || $(el).attr('href');
       const hint = $(el).text()?.trim() || 'DramasFree Server';
       const textLower = hint.toLowerCase();
 
       let itemLang: StreamLanguage = targetLanguage;
-      if (textLower.includes('lat') || textLower.includes('doblado') || textLower.includes('espanol')) {
+      if (textLower.includes('lat') || textLower.includes('doblado') || textLower.includes('espanol') || textLower.includes('audio latino')) {
         itemLang = 'dub';
       } else if (textLower.includes('sub') || textLower.includes('coreano') || textLower.includes('jap')) {
         itemLang = 'sub';
@@ -128,23 +279,7 @@ export class DramasFreeProvider implements IStreamProvider {
         if (server) {
           const key = `${server.provider}_${server.embed_url}_${itemLang}`;
           if (!serversMap.has(key)) {
-            serversMap.set(key, server);
-          }
-        }
-      }
-    });
-
-    // 2. Parse direct iframes
-    $('iframe').each((_i, el) => {
-      const src = $(el).attr('src');
-      if (src) {
-        let finalSrc = src;
-        if (finalSrc.startsWith('//')) finalSrc = `https:${finalSrc}`;
-        const server = normalizeServer(finalSrc, 'DramasFree Embed', targetLanguage);
-        if (server) {
-          const key = `${server.provider}_${server.embed_url}_${targetLanguage}`;
-          if (!serversMap.has(key)) {
-            serversMap.set(key, server);
+            serversMap.set(key, { ...server, language: itemLang });
           }
         }
       }

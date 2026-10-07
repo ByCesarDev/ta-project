@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, ListFilter } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../common/Button.js';
 import { getAdjacentEpisodes } from '../../lib/utils.js';
 
@@ -9,7 +9,6 @@ interface EpisodeNavigationProps {
   currentEpisodeNumber: number;
   totalEpisodes: number;
   availableEpisodes?: { episode_number: number }[];
-  onOpenEpisodesList?: () => void;
 }
 
 export const EpisodeNavigation: React.FC<EpisodeNavigationProps> = ({
@@ -17,7 +16,6 @@ export const EpisodeNavigation: React.FC<EpisodeNavigationProps> = ({
   currentEpisodeNumber,
   totalEpisodes,
   availableEpisodes,
-  onOpenEpisodesList,
 }) => {
   const { prev: prevEpisodeNumber, next: nextEpisodeNumber } = getAdjacentEpisodes(
     availableEpisodes || [],
@@ -43,22 +41,11 @@ export const EpisodeNavigation: React.FC<EpisodeNavigationProps> = ({
         </Button>
       )}
 
-      {/* Episode Index / List button */}
+      {/* Episode Index */}
       <div className="flex items-center gap-2">
         <span className="font-bold text-sm text-white font-['Outfit']">
           Episodio {currentEpisodeNumber}
         </span>
-        {onOpenEpisodesList ? (
-          <Button variant="ghost" size="sm" onClick={onOpenEpisodesList} leftIcon={<ListFilter className="w-4 h-4" />}>
-            Episodios
-          </Button>
-        ) : (
-          <Link to={`/anime/${animeSlug}`}>
-            <Button variant="ghost" size="sm" leftIcon={<ListFilter className="w-4 h-4" />}>
-              Ver Lista
-            </Button>
-          </Link>
-        )}
       </div>
 
       {/* Next Episode */}

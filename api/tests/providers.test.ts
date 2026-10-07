@@ -28,7 +28,7 @@ describe('Multi-Provider Streaming Scrapers', () => {
   });
 
   describe('DramasFreeProvider', () => {
-    it('should parse drama servers with language identification', () => {
+    it('should parse drama servers with language identification from HTML', () => {
       const mockDramasHtml = `
         <ul class="server-list">
           <li data-src="https://ok.ru/videoembed/123456789">Servidor OK.ru (Sub Coreano)</li>
@@ -46,6 +46,42 @@ describe('Multi-Provider Streaming Scrapers', () => {
       const mp4upload = servers.find((s) => s.provider === 'mp4upload');
       expect(mp4upload).toBeDefined();
       expect(mp4upload?.language).toBe('dub');
+    });
+
+    it('should parse direct HLS streams and detect audio from __NEXT_DATA__ payload', () => {
+      const mockNextHtml = `
+        <html>
+          <head></head>
+          <body>
+            <script id="__NEXT_DATA__" type="application/json">
+              {
+                "props": {
+                  "pageProps": {
+                    "name": "[Doblaje Español]Los Siete Pecados Capitales Temporada 1",
+                    "paramIds": "sNA1hjhxFcJpD4ZwSK9En",
+                    "dubMode": "1",
+                    "subtitleLang": "es",
+                    "mediaInfoList": [
+                      { "currentDefinition": "GROOT_SD", "mediaUrl": "https://vs7z.dramasfree.com/video-sd.m3u8" },
+                      { "currentDefinition": "GROOT_LD", "mediaUrl": "https://vs7z.dramasfree.com/video-ld.m3u8" }
+                    ]
+                  }
+                }
+              }
+            </script>
+          </body>
+        </html>
+      `;
+
+      const servers = dramasFreeProvider.parseEpisodeHtml(mockNextHtml, 'dub');
+      expect(servers.length).toBe(2);
+      expect(servers.every((s) => s.provider === 'dramasfree')).toBe(true);
+      expect(servers.every((s) => s.language === 'dub')).toBe(true);
+
+      const sdServer = servers.find((s) => s.quality === '720p');
+      expect(sdServer).toBeDefined();
+      expect(sdServer?.embed_url).toBe('https://vs7z.dramasfree.com/video-sd.m3u8');
+      expect(sdServer?.direct_stream_url).toBe('https://vs7z.dramasfree.com/video-sd.m3u8');
     });
   });
 
