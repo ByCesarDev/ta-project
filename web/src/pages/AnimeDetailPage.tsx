@@ -82,6 +82,7 @@ export const AnimeDetailPage: React.FC = () => {
           <img
             src={anime.banner_image || anime.cover_image || 'https://totalanime.com/placeholder-banner.webp'}
             alt={title}
+            fetchPriority="high"
             className="w-full h-full object-cover opacity-35 filter saturate-150 blur-sm scale-105"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0c101c] via-[#0c101c]/60 to-transparent" />
@@ -94,6 +95,7 @@ export const AnimeDetailPage: React.FC = () => {
             <img
               src={anime.cover_image || 'https://totalanime.com/placeholder-cover.webp'}
               alt={title}
+              fetchPriority="high"
               className="w-full h-full object-cover"
             />
           </div>

@@ -158,15 +158,26 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     if (stream.type === 'hls' && Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 90,
+        lowLatencyMode: true,
+        startLevel: -1,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        autoStartLoad: true,
       });
 
       hls.loadSource(streamUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => setIsPlaying(false));
+        setIsBuffering(false);
+        video.play().then(() => setIsPlaying(true)).catch(() => {
+          setIsPlaying(false);
+          setIsBuffering(false);
+        });
+      });
+
+      hls.on(Hls.Events.LEVEL_LOADED, () => {
+        setIsBuffering(false);
       });
 
       hls.on(Hls.Events.ERROR, (_, data) => {
@@ -192,7 +203,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       // Native HLS (Safari/iOS) or direct MP4
       video.src = streamUrl;
       video.load();
-      video.play().catch(() => setIsPlaying(false));
+      setIsBuffering(false);
+      video.play().then(() => setIsPlaying(true)).catch(() => {
+        setIsPlaying(false);
+        setIsBuffering(false);
+      });
     }
 
     return () => {
@@ -201,7 +216,29 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         hlsRef.current = null;
       }
     };
-  }, [stream]);
+  }, [stream, selectedSource]);
+
+  // Watchdog Timer: Automatically fallback to iframe if buffering takes > 3.5s without playback
+  useEffect(() => {
+    if (!isBuffering || !stream || stream.type === 'iframe') return;
+
+    const watchdog = setTimeout(() => {
+      if (isBuffering && selectedSource?.embed_url) {
+        console.warn('[TotalAnimePlayer] Buffering timeout (3.5s). Falling back to embed iframe.');
+        setIsBuffering(false);
+        setStream({
+          source_id: selectedSource.id,
+          provider: selectedSource.provider,
+          server_name: selectedSource.server_name || selectedSource.provider,
+          type: 'iframe',
+          url: selectedSource.embed_url,
+          is_fallback: true,
+        });
+      }
+    }, 3500);
+
+    return () => clearTimeout(watchdog);
+  }, [isBuffering, stream, selectedSource]);
 
   // 3. Auto-Resume logic once video metadata is ready
   const handleLoadedMetadata = () => {
@@ -505,6 +542,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
           title={`Reproductor ${stream.server_name}`}
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
+          referrerPolicy="no-referrer"
           sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"
           className="w-full h-full border-0 absolute inset-0"
         />
@@ -557,20 +595,49 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         }}
         onWaiting={() => setIsBuffering(true)}
         onPlaying={() => setIsBuffering(false)}
+        onCanPlay={() => setIsBuffering(false)}
+        onLoadedData={() => setIsBuffering(false)}
+        onError={() => {
+          setIsBuffering(false);
+          if (selectedSource?.embed_url) {
+            console.warn('[TotalAnimePlayer] Native video error. Falling back to embed iframe.');
+            setStream({
+              source_id: selectedSource.id,
+              provider: selectedSource.provider,
+              server_name: selectedSource.server_name || selectedSource.provider,
+              type: 'iframe',
+              url: selectedSource.embed_url,
+              is_fallback: true,
+            });
+          }
+        }}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         playsInline
         className="w-full h-full object-contain cursor-pointer"
       />
 
-      {/* Loading & Resolving Overlay */}
-      {(isResolving || isBuffering) && (
+      {/* Loading Overlay */}
+      {((isResolving && !stream) || (isBuffering && isPlaying)) && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/40 backdrop-blur-xs pointer-events-none">
           <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-2" />
           <p className="text-xs text-slate-300 font-mono tracking-wider">
-            {isResolving ? 'Resolviendo stream directo...' : 'Cargando buffer...'}
+            {isResolving ? 'Iniciando reproductor...' : 'Cargando buffer...'}
           </p>
         </div>
+      )}
+
+      {/* Center Play Button Overlay when paused */}
+      {!isPlaying && !isResolving && (
+        <button
+          onClick={togglePlay}
+          className="absolute inset-0 z-10 flex items-center justify-center group/center cursor-pointer bg-black/20 hover:bg-black/10 transition-colors"
+          title="Reproducir (Espacio/K)"
+        >
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-indigo-600/90 hover:bg-indigo-500 text-white flex items-center justify-center shadow-2xl shadow-indigo-500/50 transform group-hover/center:scale-110 transition-all border border-indigo-400/40">
+            <Play className="w-8 h-8 sm:w-10 sm:h-10 fill-white translate-x-0.5" />
+          </div>
+        </button>
       )}
 
       {/* Resume Toast Notification */}

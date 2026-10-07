@@ -198,32 +198,10 @@ export class StreamResolverService {
         if (unpackedM3u8) {
           return { url: unpackedM3u8[0], type: 'hls' };
         }
-        const unpackedMp4 = unpacked.match(/https?:\/\/[^"'\s<>]+\.mp4[^"'\s<>]*/i);
-        if (unpackedMp4) {
-          return { url: unpackedMp4[0], type: 'mp4' };
-        }
       }
     }
 
-    // C. YourUpload extraction
-    if (provider.includes('yourupload') || parsedHost.includes('yourupload')) {
-      const match = html.match(/file:\s*['"]([^'"]+\.mp4[^'"]*)['"]/i) || html.match(/<meta property="og:video" content="([^"]+)"/i);
-      if (match && match[1]) {
-        let url = match[1];
-        if (url.startsWith('/')) url = new URL(url, sanitized).toString();
-        return { url, type: 'mp4' };
-      }
-    }
-
-    // D. MP4Upload extraction
-    if (provider.includes('mp4upload') || parsedHost.includes('mp4upload')) {
-      const match = html.match(/player\.src\(\s*['"]([^'"]+\.mp4[^'"]*)['"]/i) || html.match(/src:\s*['"]([^'"]+\.mp4[^'"]*)['"]/i);
-      if (match && match[1]) {
-        return { url: match[1], type: 'mp4' };
-      }
-    }
-
-    // E. Voe extraction (hls or video link)
+    // C. Voe extraction (hls m3u8 stream)
     if (provider.includes('voe') || parsedHost.includes('voe')) {
       const voeMatch = html.match(/'hls':\s*'([^']+)'/) || html.match(/"hls":\s*"([^"]+)"/);
       if (voeMatch && voeMatch[1]) {
