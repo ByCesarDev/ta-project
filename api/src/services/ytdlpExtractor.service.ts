@@ -119,12 +119,27 @@ export class YtDlpExtractorService {
           });
           stdout = fallbackRes.stdout;
         } catch (fallbackErr: any) {
+          const fallbackStderr = fallbackErr?.stderr || '';
+          if (fallbackStderr.includes('404: Not Found') || fallbackStderr.includes('410: Gone')) {
+            return {
+              success: false,
+              dead: true,
+              reason: 'El archivo de video fue eliminado de los servidores de origen (404 Not Found).',
+            };
+          }
           return {
             success: false,
             reason: fallbackErr?.message || 'yt-dlp extraction failed',
           };
         }
       } else {
+        if (stderr.includes('404: Not Found') || stderr.includes('410: Gone')) {
+          return {
+            success: false,
+            dead: true,
+            reason: 'El archivo de video fue eliminado de los servidores de origen (404 Not Found).',
+          };
+        }
         return {
           success: false,
           reason: err?.message || 'yt-dlp execution failed',
