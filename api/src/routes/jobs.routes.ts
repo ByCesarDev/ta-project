@@ -8,6 +8,11 @@ const router = Router();
 // All job operations require moderator or admin privilege
 router.use(requireModeratorOrAdmin);
 
+// Cloudflare Clearance Manager
+router.get('/cloudflare/status', jobsController.getCloudflareStatus);
+router.post('/cloudflare/save', jobsController.saveCloudflareClearance);
+router.post('/cloudflare/solve', jobsController.solveCloudflareClearance);
+
 // POST /api/v1/jobs/scrape - Queue a scrape job
 router.post('/scrape', strictRateLimiter, jobsController.createScrapeJob);
 
@@ -18,3 +23,4 @@ router.get('/:jobId', jobsController.getJobStatus);
 router.get('/', jobsController.listJobs);
 
 export default router;
+

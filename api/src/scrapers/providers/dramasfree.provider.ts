@@ -4,6 +4,8 @@ import { normalizeServer } from '../serverParsers.js';
 import { IStreamProvider } from './base.provider.js';
 import { ScrapedAnimeSummary, ScrapedServer, StreamLanguage } from '../../types/index.js';
 
+import { cloudflareCookieService } from '../../services/cloudflareCookie.service.js';
+
 export const CLUSTER_MIRRORS = [
   'https://www3.dramasfree.com',
   'https://ww1.123flmsfree.com',
@@ -45,19 +47,18 @@ export class DramasFreeProvider implements IStreamProvider {
   }
 
   /**
-   * Helper to perform GET request across mirror pool with automatic failover
+   * Helper to perform GET request across mirror pool with automatic failover and Cloudflare clearance
    */
   private async fetchWithMirrorFailover(path: string): Promise<{ data: any; status: number } | null> {
+    const cfHeaders = cloudflareCookieService.getHeaders();
+
     for (const mirror of CLUSTER_MIRRORS) {
       try {
         const url = `${mirror}${path.startsWith('/') ? '' : '/'}${path}`;
         const response = await axios.get(url, {
           timeout: 7000,
           headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+            ...cfHeaders,
             Referer: `${mirror}/`,
           },
           validateStatus: (status) => status < 500,

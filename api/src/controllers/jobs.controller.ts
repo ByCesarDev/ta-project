@@ -154,6 +154,53 @@ export class JobsController {
       });
     }
   }
+
+  /**
+   * GET /api/v1/jobs/cloudflare/status
+   */
+  public async getCloudflareStatus(_req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { cloudflareCookieService } = await import('../services/cloudflareCookie.service.js');
+    const clearance = cloudflareCookieService.getClearance();
+    res.status(200).json({
+      hasClearance: Boolean(clearance?.cookie),
+      clearance,
+    });
+  }
+
+  /**
+   * POST /api/v1/jobs/cloudflare/save
+   */
+  public async saveCloudflareClearance(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { cookie, userAgent } = req.body;
+    if (!cookie || typeof cookie !== 'string') {
+      res.status(400).json({
+        error: 'BadRequest',
+        message: 'cookie (string) is required.',
+      });
+      return;
+    }
+
+    const { cloudflareCookieService } = await import('../services/cloudflareCookie.service.js');
+    cloudflareCookieService.saveClearance(cookie, userAgent);
+    res.status(200).json({
+      message: 'Cloudflare cf_clearance guardado exitosamente.',
+      clearance: cloudflareCookieService.getClearance(),
+    });
+  }
+
+  /**
+   * POST /api/v1/jobs/cloudflare/solve
+   */
+  public async solveCloudflareClearance(_req: AuthenticatedRequest, res: Response): Promise<void> {
+    const { cloudflareCookieService } = await import('../services/cloudflareCookie.service.js');
+    const result = await cloudflareCookieService.launchSolverWindow();
+    if (result.success) {
+      res.status(200).json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  }
 }
 
 export const jobsController = new JobsController();
+

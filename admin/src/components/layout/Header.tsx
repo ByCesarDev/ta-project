@@ -1,7 +1,9 @@
-import React from 'react';
-import { Menu, LogOut, ShieldCheck, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, LogOut, ShieldCheck, User, Key, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { Badge } from '../common/Badge.js';
+import { CloudflareManagerModal } from '../cloudflare/CloudflareManagerModal.js';
+import { apiClient } from '../../lib/api.js';
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -9,10 +11,19 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
   const { user, profile, role, signOut } = useAuth();
+  const [showCfModal, setShowCfModal] = useState<boolean>(false);
+  const [hasClearance, setHasClearance] = useState<boolean>(false);
+
+  useEffect(() => {
+    apiClient
+      .get('/jobs/cloudflare/status')
+      .then((res) => setHasClearance(res.data?.hasClearance || false))
+      .catch(() => {});
+  }, []);
 
   return (
     <header className="h-20 bg-[#090d16]/80 backdrop-blur-xl border-b border-slate-800/80 px-6 sm:px-8 flex items-center justify-between sticky top-0 z-30">
-      {/* Mobile Menu Button */}
+      {/* Mobile Menu Button & Status */}
       <div className="flex items-center gap-4">
         <button
           onClick={onMenuToggle}
@@ -25,7 +36,28 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span>Supabase DB & API Conectados</span>
         </div>
+
+        {/* Cloudflare Clearance Manager Trigger Pill */}
+        <button
+          onClick={() => setShowCfModal(true)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${
+            hasClearance
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+              : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20 animate-pulse'
+          }`}
+          title="Gestor de Sesión Cloudflare"
+        >
+          {hasClearance ? <Key className="w-3.5 h-3.5 text-emerald-400" /> : <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />}
+          <span>{hasClearance ? 'Cloudflare: Activo' : 'Cloudflare: Sincronizar'}</span>
+        </button>
       </div>
+
+      {/* Cloudflare Manager Modal */}
+      <CloudflareManagerModal
+        isOpen={showCfModal}
+        onClose={() => setShowCfModal(false)}
+        onStatusChange={(status) => setHasClearance(status)}
+      />
 
       {/* User Actions */}
       <div className="flex items-center gap-4">
