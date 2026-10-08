@@ -68,6 +68,14 @@ export interface ServerOption {
   is_active: boolean;
 }
 
+export interface SubtitleTrack {
+  id: string;
+  language: string;
+  label: string;
+  url?: string;
+  isDefault?: boolean;
+}
+
 export interface PlayableStream {
   source_id?: number;
   provider: string;
@@ -80,4 +88,5 @@ export interface PlayableStream {
   headers?: Record<string, string>;
   is_fallback?: boolean;
   error_message?: string;
+  subtitles?: SubtitleTrack[];
 }

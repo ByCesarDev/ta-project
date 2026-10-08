@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { normalizeServer } from '../serverParsers.js';
 import { IStreamProvider } from './base.provider.js';
-import { ScrapedAnimeSummary, ScrapedServer, StreamLanguage } from '../../types/index.js';
+import { ScrapedAnimeSummary, ScrapedServer, StreamLanguage, SubtitleTrack } from '../../types/index.js';
 import { cloudflareCookieService } from '../../services/cloudflareCookie.service.js';
 
 export const CLUSTER_MIRRORS = [
@@ -195,9 +195,12 @@ export class DramasFreeProvider implements IStreamProvider {
       const isPageDub = pageDubMode === '1' || (pageProps.name || '').toLowerCase().includes('doblaje');
       const currentPageLang: StreamLanguage = isPageDub ? 'dub' : 'sub';
 
+      // Extract subtitle tracks for this episode
+      const subList = this.extractSubtitlesFromProps(pageProps, episodeNumber);
+
       // If current page matches target language, parse mediaInfoList directly
       if (currentPageLang === targetLanguage && Array.isArray(pageProps.mediaInfoList) && pageProps.mediaInfoList.length > 0) {
-        return this.parseMediaInfoList(pageProps.mediaInfoList, targetLanguage);
+        return this.parseMediaInfoList(pageProps.mediaInfoList, targetLanguage, subList);
       }
 
       // If current page is opposite language, check dubbingList to switch to matching version
@@ -220,7 +223,8 @@ export class DramasFreeProvider implements IStreamProvider {
               const targetNextData = JSON.parse(targetMatch[1]);
               const targetProps = targetNextData?.props?.pageProps;
               if (targetProps?.mediaInfoList && targetProps.mediaInfoList.length > 0) {
-                return this.parseMediaInfoList(targetProps.mediaInfoList, targetLanguage);
+                const targetSubs = this.extractSubtitlesFromProps(targetProps, episodeNumber);
+                return this.parseMediaInfoList(targetProps.mediaInfoList, targetLanguage, targetSubs.length > 0 ? targetSubs : subList);
               }
             }
           }
@@ -228,15 +232,40 @@ export class DramasFreeProvider implements IStreamProvider {
       }
 
       // Fallback to current page media list if available
-      return this.parseMediaInfoList(pageProps.mediaInfoList, currentPageLang);
+      return this.parseMediaInfoList(pageProps.mediaInfoList, currentPageLang, subList);
     } catch {
       return this.parseEpisodeHtml(html, targetLanguage);
     }
   }
 
-  private parseMediaInfoList(mediaInfoList: any[], language: StreamLanguage): ScrapedServer[] {
+  private extractSubtitlesFromProps(pageProps: any, episodeNumber: string): SubtitleTrack[] {
+    if (!pageProps) return [];
+    const epNum = parseInt(episodeNumber, 10);
+    const targetEpVo = Array.isArray(pageProps.episodeVo)
+      ? pageProps.episodeVo.find((e: any) => e.episodeNo === epNum || e.seriesNo === epNum) || pageProps.episodeVo[0]
+      : null;
+    const rawSubs = targetEpVo?.subtitlingList || pageProps.subtitlingList || [];
+    if (!Array.isArray(rawSubs)) return [];
+
+    const subList: SubtitleTrack[] = [];
+    for (const sub of rawSubs) {
+      if (sub.subtitlingUrl) {
+        subList.push({
+          id: sub.languageAbbr || sub.language?.toLowerCase() || 'und',
+          language: sub.languageAbbr || 'und',
+          label: sub.language || sub.languageAbbr || 'Subtítulo',
+          url: sub.subtitlingUrl,
+        });
+      }
+    }
+    return subList;
+  }
+
+  private parseMediaInfoList(mediaInfoList: any[], language: StreamLanguage, subList: SubtitleTrack[] = []): ScrapedServer[] {
     const serversMap = new Map<string, ScrapedServer>();
     if (!Array.isArray(mediaInfoList) || mediaInfoList.length === 0) return [];
+
+    const subHash = subList.length > 0 ? `#subtitles=${encodeURIComponent(JSON.stringify(subList))}` : '';
 
     for (const media of mediaInfoList) {
       if (media.mediaUrl) {
@@ -254,12 +283,13 @@ export class DramasFreeProvider implements IStreamProvider {
         const server: ScrapedServer = {
           provider: 'dramasfree',
           server_name: `DramasFree (${quality})`,
-          embed_url: media.mediaUrl,
-          direct_stream_url: media.mediaUrl,
+          embed_url: `${media.mediaUrl}${subHash}`,
+          direct_stream_url: `${media.mediaUrl}${subHash}`,
           language,
           quality,
           priority,
           is_active: true,
+          subtitles: subList.length > 0 ? subList : undefined,
         };
 
         const key = `dramasfree_${quality}_${language}`;
@@ -283,7 +313,8 @@ export class DramasFreeProvider implements IStreamProvider {
           const pageDubMode = String(pageProps.dubMode || '0');
           const isPageDub = pageDubMode === '1' || (pageProps.name || '').toLowerCase().includes('doblaje');
           const lang: StreamLanguage = isPageDub ? 'dub' : 'sub';
-          return this.parseMediaInfoList(pageProps.mediaInfoList, lang);
+          const subs = this.extractSubtitlesFromProps(pageProps, '1');
+          return this.parseMediaInfoList(pageProps.mediaInfoList, lang, subs);
         }
       } catch {
         // Fallback

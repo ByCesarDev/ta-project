@@ -22,48 +22,66 @@ export async function resolveStreamSource(source: EpisodeSourceRow): Promise<Pla
   const providerLower = (source.provider || '').toLowerCase();
   const serverName = source.server_name || source.provider;
 
+  // Extract embedded subtitles from hash if present
+  let embeddedSubtitles: Array<{ id: string; language: string; label: string; url?: string }> = [];
+  const rawUrl = source.direct_stream_url || source.embed_url || '';
+  if (rawUrl.includes('#subtitles=')) {
+    try {
+      const rawSub = decodeURIComponent(rawUrl.split('#subtitles=')[1].split('&')[0]);
+      embeddedSubtitles = JSON.parse(rawSub);
+    } catch {
+      // ignore
+    }
+  }
+
   // 1. Direct Stream URL already stored in database
   if (source.direct_stream_url && source.direct_stream_url.trim().length > 0) {
     const direct = normalizeStreamUrl(source.direct_stream_url.trim());
-    const type = direct.includes('.m3u8') ? 'hls' : direct.includes('.mp4') ? 'mp4' : 'hls';
+    const cleanDirect = direct.split('#')[0];
+    const type = cleanDirect.includes('.m3u8') ? 'hls' : cleanDirect.includes('.mp4') ? 'mp4' : 'hls';
     return {
       source_id: source.id,
       provider: source.provider,
       server_name: serverName,
       type,
-      url: direct,
-      direct_url: direct,
+      url: cleanDirect,
+      direct_url: cleanDirect,
       quality: source.quality,
       language: source.language,
+      subtitles: embeddedSubtitles.length > 0 ? embeddedSubtitles : undefined,
     };
   }
 
   // 2. Direct HLS or MP4 file in embed_url
   if (source.embed_url.includes('.m3u8')) {
     const direct = normalizeStreamUrl(source.embed_url.trim());
+    const cleanDirect = direct.split('#')[0];
     return {
       source_id: source.id,
       provider: source.provider,
       server_name: serverName,
       type: 'hls',
-      url: direct,
-      direct_url: direct,
+      url: cleanDirect,
+      direct_url: cleanDirect,
       quality: source.quality,
       language: source.language,
+      subtitles: embeddedSubtitles.length > 0 ? embeddedSubtitles : undefined,
     };
   }
 
   if (source.embed_url.includes('.mp4') && !source.embed_url.includes('embed')) {
     const direct = normalizeStreamUrl(source.embed_url.trim());
+    const cleanDirect = direct.split('#')[0];
     return {
       source_id: source.id,
       provider: source.provider,
       server_name: serverName,
       type: 'mp4',
-      url: direct,
-      direct_url: direct,
+      url: cleanDirect,
+      direct_url: cleanDirect,
       quality: source.quality,
       language: source.language,
+      subtitles: embeddedSubtitles.length > 0 ? embeddedSubtitles : undefined,
     };
   }
 

@@ -142,6 +142,55 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
   const [activeCueText, setActiveCueText] = useState<string | null>(null);
   const [parsedCues, setParsedCues] = useState<Array<{ start: number; end: number; text: string }>>([]);
+  const [hlsSubtitleTracks, setHlsSubtitleTracks] = useState<
+    Array<{ index: number; label: string; lang: string }>
+  >([]);
+
+  // Combined available subtitle tracks (props + stream metadata + HLS embedded)
+  const allSubtitleTracks = useMemo<SubtitleTrack[]>(() => {
+    const list: SubtitleTrack[] = [];
+    const seenIds = new Set<string>();
+
+    // 1. External tracks from props & stream
+    const external = [...(subtitles || []), ...(stream?.subtitles || [])];
+    for (const track of external) {
+      if (track && track.id && !seenIds.has(track.id)) {
+        seenIds.add(track.id);
+        list.push(track);
+      }
+    }
+
+    // 2. Embedded tracks from HLS
+    for (const hlsTrack of hlsSubtitleTracks) {
+      const trackId = `hls_${hlsTrack.index}`;
+      if (!seenIds.has(trackId)) {
+        seenIds.add(trackId);
+        list.push({
+          id: trackId,
+          language: hlsTrack.lang || 'und',
+          label: hlsTrack.label || `Pista ${hlsTrack.index + 1}`,
+        });
+      }
+    }
+
+    return list;
+  }, [subtitles, stream?.subtitles, hlsSubtitleTracks]);
+
+  // Human-readable active subtitle label for menu
+  const selectedSubtitleLabel = useMemo(() => {
+    if (selectedSubtitle === null) return 'Desactivados';
+    const match = allSubtitleTracks.find(
+      (s) =>
+        s.id === selectedSubtitle ||
+        s.language === selectedSubtitle ||
+        (selectedSubtitle === 'es' && (s.language === 'es' || s.label.toLowerCase().includes('español') || s.label.toLowerCase().includes('spanish'))) ||
+        (selectedSubtitle === 'en' && (s.language === 'en' || s.label.toLowerCase().includes('english') || s.label.toLowerCase().includes('inglés')))
+    );
+    if (match) return match.label;
+    if (selectedSubtitle === 'es') return 'Español';
+    if (selectedSubtitle === 'en') return 'English';
+    return selectedSubtitle;
+  }, [selectedSubtitle, allSubtitleTracks]);
 
   // HLS audio tracks state
   const [hlsAudioTracks, setHlsAudioTracks] = useState<Array<{ id: number; label: string; lang: string }>>([]);
@@ -272,6 +321,16 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
           setActiveHlsAudioTrack(hls.audioTrack);
         }
 
+        // Check for embedded subtitle tracks
+        if (hls.subtitleTracks && hls.subtitleTracks.length > 0) {
+          const subList = hls.subtitleTracks.map((t, idx) => ({
+            index: idx,
+            label: t.name || t.lang || `Subtítulo ${idx + 1}`,
+            lang: t.lang || 'und',
+          }));
+          setHlsSubtitleTracks(subList);
+        }
+
         video.play().then(() => setIsPlaying(true)).catch(() => {
           setIsPlaying(false);
           setIsBuffering(false);
@@ -286,6 +345,17 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
             lang: t.lang || 'und',
           }));
           setHlsAudioTracks(audioList);
+        }
+      });
+
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, (_event, data) => {
+        if (data.subtitleTracks && data.subtitleTracks.length > 0) {
+          const subList = data.subtitleTracks.map((t, idx) => ({
+            index: idx,
+            label: t.name || t.lang || `Subtítulo ${idx + 1}`,
+            lang: t.lang || 'und',
+          }));
+          setHlsSubtitleTracks(subList);
         }
       });
 
@@ -331,24 +401,47 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     };
   }, [stream]);
 
-  // 3. Subtitles Loader & WebVTT Parser
+  // 3. Subtitles Loader & WebVTT/SRT Parser
   useEffect(() => {
     if (!selectedSubtitle) {
       setParsedCues([]);
       setActiveCueText(null);
+      if (hlsRef.current) {
+        hlsRef.current.subtitleTrack = -1;
+      }
       return;
     }
 
-    const matchedTrack = subtitles.find(
-      (s) => s.id === selectedSubtitle || s.language === selectedSubtitle
+    // 1. Check if selectedSubtitle matches an HLS track
+    const matchedHls = hlsSubtitleTracks.find(
+      (h) => `hls_${h.index}` === selectedSubtitle || h.lang === selectedSubtitle
+    );
+
+    if (matchedHls && hlsRef.current) {
+      hlsRef.current.subtitleTrack = matchedHls.index;
+      setParsedCues([]);
+      return;
+    }
+
+    // 2. Check if selectedSubtitle matches an external track (SRT/VTT)
+    const matchedTrack = allSubtitleTracks.find(
+      (s) =>
+        s.id === selectedSubtitle ||
+        s.language === selectedSubtitle ||
+        (selectedSubtitle === 'es' && (s.language === 'es' || s.label.toLowerCase().includes('español') || s.label.toLowerCase().includes('spanish'))) ||
+        (selectedSubtitle === 'en' && (s.language === 'en' || s.label.toLowerCase().includes('english') || s.label.toLowerCase().includes('inglés')))
     );
 
     if (matchedTrack?.url) {
+      if (hlsRef.current) {
+        hlsRef.current.subtitleTrack = -1;
+      }
+
       fetch(matchedTrack.url)
         .then((res) => res.text())
-        .then((vttText) => {
+        .then((rawText) => {
           const cues: Array<{ start: number; end: number; text: string }> = [];
-          const lines = vttText.split(/\r?\n/);
+          const lines = rawText.split(/\r?\n/);
           let i = 0;
 
           const parseTime = (timeStr: string): number => {
@@ -366,16 +459,22 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
           while (i < lines.length) {
             const line = lines[i].trim();
             if (line.includes('-->')) {
-              const [startStr, endStr] = line.split('-->');
+              const [startStr, endRaw] = line.split('-->');
               const start = parseTime(startStr);
+              const endStr = endRaw.trim().split(/\s+/)[0];
               const end = parseTime(endStr);
               i++;
               const textLines: string[] = [];
               while (i < lines.length && lines[i].trim() !== '') {
-                textLines.push(lines[i].trim());
+                const cleanLine = lines[i].trim().replace(/<\/?[^>]+(>|$)/g, '');
+                if (cleanLine.length > 0) {
+                  textLines.push(cleanLine);
+                }
                 i++;
               }
-              cues.push({ start, end, text: textLines.join('<br />') });
+              if (textLines.length > 0) {
+                cues.push({ start, end, text: textLines.join('<br />') });
+              }
             }
             i++;
           }
@@ -387,7 +486,58 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     } else {
       setParsedCues([]);
     }
-  }, [selectedSubtitle, subtitles]);
+  }, [selectedSubtitle, allSubtitleTracks, hlsSubtitleTracks]);
+
+  // Hook into video.textTracks for embedded cues and suppress default browser black boxes
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleCueChange = () => {
+      if (!selectedSubtitle) {
+        setActiveCueText(null);
+        return;
+      }
+      if (parsedCues.length > 0) return; // External cues handled by handleTimeUpdate
+
+      let foundText: string | null = null;
+      for (let i = 0; i < video.textTracks.length; i++) {
+        const track = video.textTracks[i];
+        if (track.mode === 'showing') {
+          track.mode = 'hidden';
+        }
+        if (track.mode === 'hidden' && track.activeCues && track.activeCues.length > 0) {
+          const cueTexts: string[] = [];
+          for (let j = 0; j < track.activeCues.length; j++) {
+            const cue = track.activeCues[j] as any;
+            if (cue?.text) {
+              cueTexts.push(cue.text.replace(/\n/g, '<br />'));
+            }
+          }
+          if (cueTexts.length > 0) {
+            foundText = cueTexts.join('<br />');
+            break;
+          }
+        }
+      }
+      if (foundText !== null) {
+        setActiveCueText(foundText);
+      }
+    };
+
+    const textTracks = video.textTracks;
+    textTracks.addEventListener('change', handleCueChange);
+    for (let i = 0; i < textTracks.length; i++) {
+      textTracks[i].oncuechange = handleCueChange;
+    }
+
+    return () => {
+      textTracks.removeEventListener('change', handleCueChange);
+      for (let i = 0; i < textTracks.length; i++) {
+        textTracks[i].oncuechange = null;
+      }
+    };
+  }, [stream, selectedSubtitle, parsedCues]);
 
   // 4. Auto-Resume logic once video metadata is ready
   const handleLoadedMetadata = () => {
@@ -698,6 +848,18 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   const handleSelectSubtitle = (subId: string | null) => {
     setSelectedSubtitle(subId);
     localStorage.setItem('ta_player_subtitle_lang', subId || 'off');
+
+    if (!subId) {
+      if (hlsRef.current) hlsRef.current.subtitleTrack = -1;
+      setActiveCueText(null);
+      setParsedCues([]);
+    } else if (subId.startsWith('hls_')) {
+      const idx = parseInt(subId.replace('hls_', ''), 10);
+      if (hlsRef.current && !isNaN(idx)) {
+        hlsRef.current.subtitleTrack = idx;
+      }
+    }
+
     setSettingsTab('main');
   };
 
@@ -848,6 +1010,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         }}
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
+        onSeeked={handleTimeUpdate}
         playsInline
         className="w-full h-full object-contain cursor-pointer"
       />
@@ -1092,15 +1255,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                           <span>Subtítulos</span>
                         </div>
                         <div className="flex items-center gap-1 text-slate-400 text-[11px]">
-                          <span>
-                            {selectedSubtitle === null
-                              ? 'Desactivados'
-                              : selectedSubtitle === 'es'
-                              ? 'Español'
-                              : selectedSubtitle === 'en'
-                              ? 'Inglés'
-                              : selectedSubtitle}
-                          </span>
+                          <span>{selectedSubtitleLabel}</span>
                           <ChevronRight className="w-3.5 h-3.5" />
                         </div>
                       </button>
@@ -1238,35 +1393,14 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                         {selectedSubtitle === null && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                       </button>
 
-                      {/* Spanish Subtitles */}
-                      <button
-                        onClick={() => handleSelectSubtitle('es')}
-                        className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
-                          selectedSubtitle === 'es'
-                            ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
-                            : 'hover:bg-white/10 text-slate-200'
-                        }`}
-                      >
-                        <span>Español (Latino / Castellano)</span>
-                        {selectedSubtitle === 'es' && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                      </button>
-
-                      {/* English Subtitles */}
-                      <button
-                        onClick={() => handleSelectSubtitle('en')}
-                        className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
-                          selectedSubtitle === 'en'
-                            ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
-                            : 'hover:bg-white/10 text-slate-200'
-                        }`}
-                      >
-                        <span>English</span>
-                        {selectedSubtitle === 'en' && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                      </button>
-
                       {/* Dynamic Subtitle Tracks */}
-                      {subtitles.map((track) => {
-                        const isSelected = selectedSubtitle === track.id;
+                      {allSubtitleTracks.map((track) => {
+                        const isSelected =
+                          selectedSubtitle === track.id ||
+                          selectedSubtitle === track.language ||
+                          (selectedSubtitle === 'es' && (track.language === 'es' || track.label.toLowerCase().includes('español'))) ||
+                          (selectedSubtitle === 'en' && (track.language === 'en' || track.label.toLowerCase().includes('english')));
+
                         return (
                           <button
                             key={track.id}
@@ -1277,11 +1411,24 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                                 : 'hover:bg-white/10 text-slate-200'
                             }`}
                           >
-                            <span>{track.label}</span>
+                            <div className="flex items-center gap-2">
+                              <span>{track.label}</span>
+                              {track.language && track.language !== 'und' && (
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-white/10 text-slate-300 font-mono">
+                                  {track.language}
+                                </span>
+                              )}
+                            </div>
                             {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                           </button>
                         );
                       })}
+
+                      {allSubtitleTracks.length === 0 && (
+                        <div className="p-3 text-center text-xs text-slate-400">
+                          No se detectaron pistas de subtítulos para esta fuente
+                        </div>
+                      )}
 
                       {/* Subtitle Style Customization Button */}
                       <button

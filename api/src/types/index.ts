@@ -18,6 +18,13 @@ export interface AuthenticatedRequest extends Request {
   user?: AuthenticatedUser;
 }
 
+export interface SubtitleTrack {
+  id: string;
+  language: string;
+  label: string;
+  url: string;
+}
+
 export interface ScrapedServer {
   provider: string;
   server_name: string;
@@ -27,6 +34,7 @@ export interface ScrapedServer {
   quality: string;
   priority: number;
   is_active?: boolean;
+  subtitles?: SubtitleTrack[];
 }
 
 export interface ScrapedAnimeSummary {
