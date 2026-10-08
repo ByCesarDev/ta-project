@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Cpu,
@@ -18,9 +18,9 @@ import { ScrapeJob } from '../types/index.js';
 import { formatDate } from '../lib/utils.js';
 
 export const JobsPage: React.FC = () => {
-  const [selectedJobForLogs, setSelectedJobForLogs] = useState<ScrapeJob | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
-  // Poll scrape jobs every 3 seconds
+  // Poll scrape jobs every 2 seconds for high-responsiveness
   const { data: jobs, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['scrape-jobs-list'],
     queryFn: async () => {
@@ -33,8 +33,13 @@ export const JobsPage: React.FC = () => {
       if (error) throw error;
       return (data || []) as ScrapeJob[];
     },
-    refetchInterval: 3000, // Real-time polling
+    refetchInterval: 2000, // Real-time polling
   });
+
+  const selectedJob = useMemo(
+    () => jobs?.find((j) => j.id === selectedJobId) || null,
+    [jobs, selectedJobId]
+  );
 
   const columns: Column<ScrapeJob>[] = [
     {
@@ -132,7 +137,7 @@ export const JobsPage: React.FC = () => {
             variant="outline"
             size="sm"
             icon={<Terminal className="w-3.5 h-3.5 text-indigo-400" />}
-            onClick={() => setSelectedJobForLogs(job)}
+            onClick={() => setSelectedJobId(job.id)}
           >
             Logs ({job.error_log?.length || 0})
           </Button>
@@ -174,9 +179,9 @@ export const JobsPage: React.FC = () => {
 
       {/* Job Log Viewer Modal */}
       <JobLogViewer
-        isOpen={Boolean(selectedJobForLogs)}
-        onClose={() => setSelectedJobForLogs(null)}
-        job={selectedJobForLogs}
+        isOpen={Boolean(selectedJobId)}
+        onClose={() => setSelectedJobId(null)}
+        job={selectedJob}
       />
     </div>
   );

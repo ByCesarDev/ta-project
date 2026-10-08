@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Modal } from '../common/Modal.js';
 import { ScrapeJob } from '../../types/index.js';
 import { formatDate } from '../../lib/utils.js';
+import { supabase } from '../../lib/supabase.js';
 import {
   Terminal,
   CheckCircle2,
@@ -33,12 +35,34 @@ interface ParsedLogLine {
 export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job }) => {
   const [filterLevel, setFilterLevel] = useState<'all' | 'success' | 'scrape' | 'warn' | 'error'>('all');
   const [copied, setCopied] = useState<boolean>(false);
+  const terminalScrollRef = useRef<HTMLDivElement>(null);
+
+  // Live polling query: keeps the modal 100% in sync in real time while open
+  const { data: liveJob } = useQuery({
+    queryKey: ['scrape-job-detail-logs', job?.id],
+    queryFn: async () => {
+      if (!job?.id) return null;
+      const { data, error } = await supabase
+        .from('scrape_jobs')
+        .select('*, animes(id, name, slug)')
+        .eq('id', job.id)
+        .single();
+
+      if (error) throw error;
+      return (data || null) as ScrapeJob | null;
+    },
+    enabled: Boolean(isOpen && job?.id),
+    refetchInterval: 1000, // Poll every 1 second while modal is open
+    initialData: job || undefined,
+  });
+
+  const activeJob = liveJob || job;
 
   // Parse or synthesize human-readable console lines
   const parsedLogs: ParsedLogLine[] = useMemo(() => {
-    if (!job) return [];
+    if (!activeJob) return [];
 
-    const rawLogs = Array.isArray(job.error_log) ? job.error_log : [];
+    const rawLogs = Array.isArray(activeJob.error_log) ? activeJob.error_log : [];
 
     if (rawLogs.length > 0) {
       return rawLogs.map((item: any, idx) => {
@@ -49,17 +73,16 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
         else if (item.message?.toLowerCase().includes('buscando') || item.message?.toLowerCase().includes('consultando')) level = 'scrape';
         else if (item.message?.toLowerCase().includes('sin fuentes') || item.message?.toLowerCase().includes('advertencia')) level = 'warn';
 
-        const ts = item.timestamp ? new Date(item.timestamp) : new Date(job.created_at);
+        const ts = item.timestamp ? new Date(item.timestamp) : new Date(activeJob.created_at);
         const timeFormatted = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
         const rawMsg = item.message || item.error || (typeof item === 'string' ? item : JSON.stringify(item));
-        // Clean out raw JSON syntax if present
         const cleanMsg = typeof rawMsg === 'string' ? rawMsg.replace(/^\{.*"message":"([^"]+)".*\}$/, '$1') : String(rawMsg);
 
         return {
           id: `log-${idx}`,
           level,
-          timestamp: item.timestamp || job.created_at,
+          timestamp: item.timestamp || activeJob.created_at,
           timeFormatted,
           episodeNumber: item.episode_number,
           message: cleanMsg,
@@ -70,7 +93,7 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
 
     // Fallback synthesis for existing jobs without granular logs
     const lines: ParsedLogLine[] = [];
-    const baseTime = new Date(job.created_at);
+    const baseTime = new Date(activeJob.created_at);
     const formatTs = (offsetSec: number) => {
       const d = new Date(baseTime.getTime() + offsetSec * 1000);
       return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -79,55 +102,62 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
     lines.push({
       id: 'syn-1',
       level: 'info',
-      timestamp: job.created_at,
+      timestamp: activeJob.created_at,
       timeFormatted: formatTs(0),
-      message: `⚡ Inicializando ScrapeWorker para Anime ID #${job.anime_id}`,
+      message: `⚡ Inicializando ScrapeWorker para Anime ID #${activeJob.anime_id}`,
     });
 
     lines.push({
       id: 'syn-2',
       level: 'scrape',
-      timestamp: job.created_at,
+      timestamp: activeJob.created_at,
       timeFormatted: formatTs(1),
-      message: `🔍 Conectando con el cluster unificado de 8 espejos (DramasFree, 123FlmsFree, Cuevana19, PeliculaPlay)`,
+      message: `🔍 Conectando con el cluster unificado de 8 espejos (Flixlat, DramasFree, 123FlmsFree, Cuevana19)`,
     });
 
-    if (job.status === 'processing') {
+    if (activeJob.status === 'processing') {
       lines.push({
         id: 'syn-3',
         level: 'info',
-        timestamp: job.updated_at || job.created_at,
+        timestamp: activeJob.updated_at || activeJob.created_at,
         timeFormatted: formatTs(2),
-        message: `⏳ Procesando cola de episodios: ${job.processed_episodes}/${job.total_episodes} completados...`,
+        message: `⏳ Procesando cola de episodios: ${activeJob.processed_episodes}/${activeJob.total_episodes} completados...`,
       });
-    } else if (job.status === 'completed') {
+    } else if (activeJob.status === 'completed') {
       lines.push({
         id: 'syn-4',
         level: 'success',
-        timestamp: job.updated_at || job.created_at,
+        timestamp: activeJob.updated_at || activeJob.created_at,
         timeFormatted: formatTs(3),
-        message: `🎬 Procesados exitosamente ${job.processed_episodes} de ${job.total_episodes} episodios`,
+        message: `🎬 Procesados exitosamente ${activeJob.processed_episodes} de ${activeJob.total_episodes} episodios`,
         detail: `Audios vinculados: Español Latino + Original Japonés • Calidades HLS: 720p, 540p, 360p • Subtítulos limpios .srt`,
       });
       lines.push({
         id: 'syn-5',
         level: 'info',
-        timestamp: job.updated_at || job.created_at,
+        timestamp: activeJob.updated_at || activeJob.created_at,
         timeFormatted: formatTs(4),
         message: `🏁 Tarea finalizada con éxito. Todos los episodios han sido marcados como DISPONIBLES.`,
       });
-    } else if (job.status === 'failed') {
+    } else if (activeJob.status === 'failed') {
       lines.push({
         id: 'syn-6',
         level: 'error',
-        timestamp: job.updated_at || job.created_at,
+        timestamp: activeJob.updated_at || activeJob.created_at,
         timeFormatted: formatTs(3),
-        message: `❌ La tarea no pudo completarse. Fallidos: ${job.failed_episodes}/${job.total_episodes} eps.`,
+        message: `❌ La tarea no pudo completarse. Fallidos: ${activeJob.failed_episodes}/${activeJob.total_episodes} eps.`,
       });
     }
 
     return lines;
-  }, [job]);
+  }, [activeJob]);
+
+  // Auto-scroll terminal when new logs are added
+  useEffect(() => {
+    if (terminalScrollRef.current) {
+      terminalScrollRef.current.scrollTop = terminalScrollRef.current.scrollHeight;
+    }
+  }, [parsedLogs.length]);
 
   const filteredLogs = useMemo(() => {
     if (filterLevel === 'all') return parsedLogs;
@@ -136,7 +166,7 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
   }, [parsedLogs, filterLevel]);
 
   const handleCopyLogs = () => {
-    if (!job) return;
+    if (!activeJob) return;
     const text = parsedLogs
       .map((l) => `[${l.timeFormatted}] [${l.level.toUpperCase()}] ${l.message}${l.detail ? `\n    ➜ ${l.detail}` : ''}`)
       .join('\n');
@@ -145,11 +175,11 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!job) return null;
+  if (!activeJob) return null;
 
-  const isCompleted = job.status === 'completed';
-  const isProcessing = job.status === 'processing';
-  const isFailed = job.status === 'failed';
+  const isCompleted = activeJob.status === 'completed';
+  const isProcessing = activeJob.status === 'processing';
+  const isFailed = activeJob.status === 'failed';
 
   return (
     <Modal
@@ -162,11 +192,11 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
           </div>
           <div>
             <div className="text-sm font-bold text-white font-['Outfit'] flex items-center gap-2">
-              Consola de Ejecución • Job #{job.id.slice(0, 8)}
+              Consola de Ejecución • Job #{activeJob.id.slice(0, 8)}
               {isProcessing && (
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse">
                   <Activity className="w-3 h-3 animate-spin" />
-                  En Ejecución
+                  En Vivo
                 </span>
               )}
               {isCompleted && (
@@ -185,7 +215,7 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
           </div>
         </div>
       }
-      subtitle={`Anime ID: #${job.anime_id} • Creado: ${formatDate(job.created_at)}`}
+      subtitle={`Anime ID: #${activeJob.anime_id} • Creado: ${formatDate(activeJob.created_at)}`}
       maxWidth="2xl"
     >
       <div className="space-y-4">
@@ -194,7 +224,7 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
           <div className="bg-[#0b0f19] p-3 rounded-2xl border border-slate-800/80 shadow-inner flex items-center justify-between">
             <div>
               <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Total</span>
-              <span className="text-lg font-black text-white font-['Outfit']">{job.total_episodes} eps</span>
+              <span className="text-lg font-black text-white font-['Outfit']">{activeJob.total_episodes} eps</span>
             </div>
             <div className="p-2 rounded-xl bg-slate-800/50 text-slate-400">
               <Layers className="w-4 h-4" />
@@ -204,7 +234,7 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
           <div className="bg-[#0b0f19] p-3 rounded-2xl border border-emerald-950/40 shadow-inner flex items-center justify-between">
             <div>
               <span className="text-[10px] uppercase font-bold text-emerald-400 block tracking-wider">Procesados</span>
-              <span className="text-lg font-black text-emerald-400 font-['Outfit']">{job.processed_episodes}</span>
+              <span className="text-lg font-black text-emerald-400 font-['Outfit']">{activeJob.processed_episodes}</span>
             </div>
             <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <CheckCircle2 className="w-4 h-4" />
@@ -214,7 +244,7 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
           <div className="bg-[#0b0f19] p-3 rounded-2xl border border-rose-950/40 shadow-inner flex items-center justify-between">
             <div>
               <span className="text-[10px] uppercase font-bold text-rose-400 block tracking-wider">Fallidos</span>
-              <span className="text-lg font-black text-rose-400 font-['Outfit']">{job.failed_episodes}</span>
+              <span className="text-lg font-black text-rose-400 font-['Outfit']">{activeJob.failed_episodes}</span>
             </div>
             <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
               <AlertTriangle className="w-4 h-4" />
@@ -302,7 +332,10 @@ export const JobLogViewer: React.FC<JobLogViewerProps> = ({ isOpen, onClose, job
           </div>
 
           {/* Terminal Stream Body */}
-          <div className="p-4 max-h-96 overflow-y-auto space-y-2.5 text-xs text-slate-300 scrollbar-thin scrollbar-thumb-slate-800">
+          <div
+            ref={terminalScrollRef}
+            className="p-4 max-h-96 overflow-y-auto space-y-2.5 text-xs text-slate-300 scrollbar-thin scrollbar-thumb-slate-800"
+          >
             {filteredLogs.length > 0 ? (
               filteredLogs.map((log, idx) => {
                 const lineNum = String(idx + 1).padStart(2, '0');
