@@ -439,8 +439,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         hlsRef.current.subtitleTrack = -1;
       }
 
-      fetch(matchedTrack.url)
-        .then((res) => res.text())
+      fetch(matchedTrack.url, { referrerPolicy: 'no-referrer' })
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.text();
+        })
         .then((rawText) => {
           const cues: Array<{ start: number; end: number; text: string }> = [];
           const lines = rawText.split(/\r?\n/);
