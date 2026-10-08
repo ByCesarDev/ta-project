@@ -51,3 +51,6 @@ Thumbs.db
 api/scratch/
 scratch/
 scratch_*.html
+*.cf_clearance.json
+.cf_clearance.json
+
