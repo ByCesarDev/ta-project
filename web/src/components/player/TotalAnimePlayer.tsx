@@ -142,6 +142,8 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
   const [activeCueText, setActiveCueText] = useState<string | null>(null);
   const [parsedCues, setParsedCues] = useState<Array<{ start: number; end: number; text: string }>>([]);
+  const parsedCuesRef = useRef<Array<{ start: number; end: number; text: string }>>([]);
+  parsedCuesRef.current = parsedCues;
   const [hlsSubtitleTracks, setHlsSubtitleTracks] = useState<
     Array<{ index: number; label: string; lang: string }>
   >([]);
@@ -445,13 +447,17 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
           let i = 0;
 
           const parseTime = (timeStr: string): number => {
-            const parts = timeStr.trim().split(':');
+            if (!timeStr) return 0;
+            const clean = timeStr.trim().replace(/[^\d:.,]/g, '');
+            const parts = clean.split(':');
             if (parts.length === 3) {
               const [h, m, s] = parts;
-              return parseFloat(h) * 3600 + parseFloat(m) * 60 + parseFloat(s.replace(',', '.'));
+              return (parseFloat(h) || 0) * 3600 + (parseFloat(m) || 0) * 60 + (parseFloat(s.replace(',', '.')) || 0);
             } else if (parts.length === 2) {
               const [m, s] = parts;
-              return parseFloat(m) * 60 + parseFloat(s.replace(',', '.'));
+              return (parseFloat(m) || 0) * 60 + (parseFloat(s.replace(',', '.')) || 0);
+            } else if (parts.length === 1) {
+              return parseFloat(parts[0].replace(',', '.')) || 0;
             }
             return 0;
           };
@@ -466,24 +472,34 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
               i++;
               const textLines: string[] = [];
               while (i < lines.length && lines[i].trim() !== '') {
-                const cleanLine = lines[i].trim().replace(/<\/?[^>]+(>|$)/g, '');
+                const cleanLine = lines[i].trim().replace(/<\/?[^>]+(>|$)/g, '').replace(/\{[^}]+\}/g, '');
                 if (cleanLine.length > 0) {
                   textLines.push(cleanLine);
                 }
                 i++;
               }
-              if (textLines.length > 0) {
+              if (textLines.length > 0 && end > start) {
                 cues.push({ start, end, text: textLines.join('<br />') });
               }
             }
             i++;
           }
+          parsedCuesRef.current = cues;
           setParsedCues(cues);
+
+          // Immediate sync with current video timestamp
+          if (videoRef.current) {
+            const cur = videoRef.current.currentTime;
+            const matchingCue = cues.find((c) => c.start <= cur && cur <= c.end);
+            setActiveCueText(matchingCue ? matchingCue.text : null);
+          }
         })
         .catch(() => {
+          parsedCuesRef.current = [];
           setParsedCues([]);
         });
     } else {
+      parsedCuesRef.current = [];
       setParsedCues([]);
     }
   }, [selectedSubtitle, allSubtitleTracks, hlsSubtitleTracks]);
@@ -575,10 +591,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     setCurrentTime(cur);
 
     // Sync active subtitle cue
-    if (parsedCues.length > 0) {
-      const matchingCue = parsedCues.find((c) => c.start <= cur && cur <= c.end);
+    const cues = parsedCuesRef.current;
+    if (cues.length > 0 && selectedSubtitle) {
+      const matchingCue = cues.find((c) => c.start <= cur && cur <= c.end);
       setActiveCueText(matchingCue ? matchingCue.text : null);
-    } else {
+    } else if (!selectedSubtitle) {
       setActiveCueText(null);
     }
 
@@ -976,9 +993,13 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       <video
         ref={videoRef}
         onClick={togglePlay}
-        onPlay={() => setIsPlaying(true)}
+        onPlay={() => {
+          setIsPlaying(true);
+          handleTimeUpdate();
+        }}
         onPause={() => {
           setIsPlaying(false);
+          handleTimeUpdate();
           if (videoRef.current) {
             triggerSaveProgress(videoRef.current.currentTime, videoRef.current.duration);
           }
@@ -1011,6 +1032,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         onLoadedMetadata={handleLoadedMetadata}
         onTimeUpdate={handleTimeUpdate}
         onSeeked={handleTimeUpdate}
+        onSeeking={handleTimeUpdate}
         playsInline
         className="w-full h-full object-contain cursor-pointer"
       />
@@ -1018,7 +1040,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       {/* CUSTOM ANIME SUBTITLE RENDERER */}
       {selectedSubtitle && activeCueText && (
         <div
-          className={`absolute left-0 right-0 text-center pointer-events-none z-25 px-6 transition-all duration-200 ${
+          className={`absolute left-0 right-0 text-center pointer-events-none z-[35] px-6 transition-all duration-150 ${
             showControls ? 'bottom-20 sm:bottom-24' : 'bottom-6 sm:bottom-8'
           }`}
         >
