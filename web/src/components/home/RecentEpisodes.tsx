@@ -70,7 +70,7 @@ export const RecentEpisodes: React.FC<RecentEpisodesProps> = ({ episodes, isLoad
             return (
               <Link
                 key={ep.id}
-                to={`/watch/${ep.animes.slug}/${ep.episode_number}`}
+                to={`/watch/${(ep as any).series_slug || ep.animes.slug}/${ep.id}`}
                 className="group flex flex-col rounded-2xl overflow-hidden bg-[#0c101c]/80 border border-slate-800/80 hover:border-indigo-500/50 shadow-md transition-all duration-300 hover:-translate-y-1"
               >
                 {/* Thumbnail container */}

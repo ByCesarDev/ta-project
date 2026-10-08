@@ -1,22 +1,32 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { AnimeRow, AnimeWithGenres } from '../../types/index.js';
-import { Play, Film } from 'lucide-react';
+import { Play, Film, Layers } from 'lucide-react';
 import { Badge } from './Badge.js';
 import { formatStatusLabel } from '../../lib/utils.js';
 
 interface AnimeCardProps {
-  anime: AnimeRow | AnimeWithGenres;
+  anime: any;
   showRank?: number;
 }
 
 export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, showRank }) => {
   const statusInfo = formatStatusLabel(anime.status);
   const title = anime.title_english || anime.title_romaji || anime.name;
+  const seasonsCount = anime.total_seasons_count || anime.seasons?.length;
+  const episodesCount =
+    typeof anime.total_episodes_count === 'number'
+      ? anime.total_episodes_count
+      : Array.isArray(anime.episodes)
+      ? anime.episodes.length
+      : typeof anime.episodes === 'number'
+      ? anime.episodes
+      : 0;
+
+  const targetSlug = anime.series_slug || anime.slug;
 
   return (
     <Link
-      to={`/anime/${anime.slug}`}
+      to={`/anime/${targetSlug}`}
       className="group relative flex flex-col anime-card-zoom rounded-2xl overflow-hidden bg-[#0c101c]/80 border border-slate-800/80 shadow-lg hover:border-indigo-500/50"
     >
       {/* Cover Image Container */}
@@ -31,14 +41,14 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, showRank }) => {
         {/* Gradient Overlay on Bottom */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#07090e] via-transparent to-black/20" />
 
-        {/* Optional Ranking Number (Top Animes) */}
+        {/* Optional Ranking Number (Top Series) */}
         {showRank !== undefined && (
           <div className="absolute top-2 left-2 w-8 h-8 rounded-lg bg-indigo-600/90 backdrop-blur-md flex items-center justify-center font-extrabold text-white text-sm shadow-lg shadow-indigo-600/30 border border-indigo-400/30">
             #{showRank}
           </div>
         )}
 
-        {/* Status Badge */}
+        {/* Status & Seasons Badges */}
         <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
           <Badge
             variant={statusInfo.label === 'En Emisión' ? 'emerald' : 'primary'}
@@ -47,11 +57,17 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, showRank }) => {
           >
             {statusInfo.label}
           </Badge>
-          {anime.format && (
+
+          {seasonsCount ? (
+            <Badge variant="purple" size="xs" className="shadow-md backdrop-blur-md flex items-center gap-1">
+              <Layers className="w-2.5 h-2.5" />
+              {seasonsCount} {seasonsCount === 1 ? 'Temp' : 'Temps'}
+            </Badge>
+          ) : anime.format ? (
             <Badge variant="slate" size="xs" className="shadow-md bg-black/60 backdrop-blur-md text-slate-300">
               {anime.format}
             </Badge>
-          )}
+          ) : null}
         </div>
 
         {/* Hover Play Button Overlay */}
@@ -65,7 +81,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, showRank }) => {
         <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] text-slate-300 font-medium">
           <span className="flex items-center gap-1 bg-black/70 px-2 py-0.5 rounded-md backdrop-blur-md">
             <Film className="w-3 h-3 text-indigo-400" />
-            {anime.episodes > 0 ? `${anime.episodes} eps` : 'En emisión'}
+            {episodesCount > 0 ? `${episodesCount} eps` : 'En emisión'}
           </span>
           {anime.season_year && (
             <span className="bg-black/70 px-2 py-0.5 rounded-md backdrop-blur-md">
@@ -86,7 +102,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ anime, showRank }) => {
 
         <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
           <span className="text-[11px] text-slate-500 font-mono">
-            {anime.views_count.toLocaleString()} vistas
+            {(anime.views_count || 0).toLocaleString()} vistas
           </span>
           {anime.season_year && (
             <span className="text-[11px] text-slate-400 font-medium">

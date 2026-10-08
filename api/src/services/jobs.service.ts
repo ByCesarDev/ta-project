@@ -10,6 +10,7 @@ export interface CreateJobOptions {
   sourceUrl?: string;
   sourceId?: string;
   frozenConfig?: Record<string, any>;
+  sourceConfig?: Record<string, any>;
   targetMode?: 'all' | 'single' | 'pending';
   targetEpisodeNumber?: number;
 }
@@ -32,6 +33,8 @@ export class JobsService {
           }
         : optsOrAnimeId;
 
+    const sourceConfig = opts.sourceConfig || opts.frozenConfig || (opts.sourceUrl ? { source_url: opts.sourceUrl } : null);
+
     const { data, error } = await supabaseAdmin
       .from('scrape_jobs')
       .insert({
@@ -45,6 +48,7 @@ export class JobsService {
         source_url: opts.sourceUrl || null,
         source_id: opts.sourceId || null,
         frozen_config: opts.frozenConfig || {},
+        source_config: sourceConfig,
         target_mode: opts.targetMode || 'all',
         target_episode_number: opts.targetEpisodeNumber ?? null,
         created_at: new Date().toISOString(),

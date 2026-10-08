@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageContainer } from '../components/layout/PageContainer.js';
-import { useAnimeCatalog, useGenres } from '../hooks/useAnime.js';
+import { useSeriesCatalog } from '../hooks/useSeries.js';
+import { useGenres } from '../hooks/useAnime.js';
 import { AnimeCard } from '../components/common/AnimeCard.js';
 import { AnimeCardSkeleton } from '../components/common/Skeleton.js';
+import { DropdownSelect } from '../components/common/DropdownSelect.js';
 import { Search, SlidersHorizontal, Film } from 'lucide-react';
-import { normalizeAnimeStatus } from '../lib/utils.js';
 
 export const CatalogPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [selectedGenre, setSelectedGenre] = useState(searchParams.get('genre') || '');
-  const [status, setStatus] = useState(normalizeAnimeStatus(searchParams.get('status') || ''));
+  const [status, setStatus] = useState(searchParams.get('status') || 'all');
   const [format, setFormat] = useState(searchParams.get('format') || '');
   const [sortBy, setSortBy] = useState<'views' | 'recent' | 'name' | 'episodes'>(
     (searchParams.get('sort') as any) || 'views'
@@ -24,7 +25,7 @@ export const CatalogPage: React.FC = () => {
   useEffect(() => {
     const qParam = searchParams.get('q') || '';
     const genreParam = searchParams.get('genre') || '';
-    const statusParam = normalizeAnimeStatus(searchParams.get('status') || '');
+    const statusParam = searchParams.get('status') || 'all';
     setSearch(qParam);
     setSelectedGenre(genreParam);
     setStatus(statusParam);
@@ -33,13 +34,13 @@ export const CatalogPage: React.FC = () => {
   const updateFilters = (newParams: Record<string, string>) => {
     const updated = new URLSearchParams(searchParams);
     Object.entries(newParams).forEach(([k, v]) => {
-      if (v) updated.set(k, v);
+      if (v && v !== 'all') updated.set(k, v);
       else updated.delete(k);
     });
     setSearchParams(updated);
   };
 
-  const { data: catalogResult, isLoading } = useAnimeCatalog({
+  const { data: catalogResult, isLoading } = useSeriesCatalog({
     search,
     genreSlug: selectedGenre,
     status,
@@ -47,8 +48,8 @@ export const CatalogPage: React.FC = () => {
     sortBy,
   });
 
-  const animes = catalogResult?.animes || [];
-  const totalCount = catalogResult?.totalCount || 0;
+  const seriesList = catalogResult?.series || [];
+  const totalCount = catalogResult?.total || 0;
 
   return (
     <PageContainer>
@@ -56,10 +57,10 @@ export const CatalogPage: React.FC = () => {
       <div className="mb-8">
         <h1 className="text-3xl sm:text-4xl font-black text-white font-['Outfit'] tracking-tight flex items-center gap-3">
           <Film className="w-8 h-8 text-indigo-500" />
-          Directorio de Animes
+          Directorio de Series
         </h1>
         <p className="text-xs sm:text-sm text-slate-400 mt-1">
-          Explora nuestro catálogo completo con filtros avanzados por género, formato y estado.
+          Explora nuestro catálogo completo de series de anime con selector unificado de temporadas, películas y OVAs.
         </p>
       </div>
 
@@ -72,7 +73,7 @@ export const CatalogPage: React.FC = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Buscar por título..."
+              placeholder="Buscar por título o serie..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -83,51 +84,53 @@ export const CatalogPage: React.FC = () => {
           </div>
 
           {/* Status Dropdown */}
-          <select
+          <DropdownSelect
             value={status}
-            onChange={(e) => {
-              setStatus(e.target.value);
-              updateFilters({ status: e.target.value });
+            onChange={(val) => {
+              const str = String(val);
+              setStatus(str);
+              updateFilters({ status: str });
             }}
-            className="glass-input text-xs py-2"
-          >
-            <option value="">Todos los Estados</option>
-            <option value="RELEASING">En Emisión</option>
-            <option value="FINISHED">Finalizado</option>
-            <option value="NOT_YET_RELEASED">Próximamente</option>
-          </select>
+            options={[
+              { value: 'all', label: 'Todos los Estados' },
+              { value: 'emision', label: 'En Emisión', badge: 'Activo' },
+              { value: 'finalizado', label: 'Finalizado', badge: 'Completo' },
+              { value: 'proximamente', label: 'Próximamente', badge: 'Próximo' },
+            ]}
+          />
 
           {/* Format Dropdown */}
-          <select
+          <DropdownSelect
             value={format}
-            onChange={(e) => {
-              setFormat(e.target.value);
-              updateFilters({ format: e.target.value });
+            onChange={(val) => {
+              const str = String(val);
+              setFormat(str);
+              updateFilters({ format: str });
             }}
-            className="glass-input text-xs py-2"
-          >
-            <option value="">Todos los Formatos</option>
-            <option value="TV">Series TV</option>
-            <option value="MOVIE">Películas</option>
-            <option value="OVA">OVA</option>
-            <option value="ONA">ONA</option>
-          </select>
+            options={[
+              { value: '', label: 'Todos los Formatos' },
+              { value: 'TV', label: 'Series TV' },
+              { value: 'MOVIE', label: 'Películas' },
+              { value: 'OVA', label: 'OVAs' },
+              { value: 'ONA', label: 'ONAs' },
+            ]}
+          />
 
           {/* Sorting Dropdown */}
-          <select
+          <DropdownSelect
             value={sortBy}
-            onChange={(e) => {
-              const val = e.target.value as any;
-              setSortBy(val);
-              updateFilters({ sort: val });
+            onChange={(val) => {
+              const str = val as 'views' | 'recent' | 'name' | 'episodes';
+              setSortBy(str);
+              updateFilters({ sort: str });
             }}
-            className="glass-input text-xs py-2"
-          >
-            <option value="views">Más Vistos</option>
-            <option value="recent">Recién Agregados</option>
-            <option value="name">Título (A-Z)</option>
-            <option value="episodes">Más Episodios</option>
-          </select>
+            options={[
+              { value: 'views', label: 'Más Vistos' },
+              { value: 'recent', label: 'Recién Agregados' },
+              { value: 'name', label: 'Título (A-Z)' },
+              { value: 'episodes', label: 'Más Episodios' },
+            ]}
+          />
         </div>
 
         {/* Genre Pills */}
@@ -179,23 +182,23 @@ export const CatalogPage: React.FC = () => {
       {/* Results Count */}
       <div className="flex items-center justify-between mb-6 text-xs text-slate-400">
         <span>
-          Mostrando <strong className="text-white">{animes.length}</strong> de{' '}
-          <strong className="text-white">{totalCount}</strong> animes encontrados
+          Mostrando <strong className="text-white">{seriesList.length}</strong> de{' '}
+          <strong className="text-white">{totalCount}</strong> series encontradas
         </span>
       </div>
 
-      {/* Anime Grid */}
+      {/* Series Grid */}
       {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {Array.from({ length: 12 }).map((_, i) => (
             <AnimeCardSkeleton key={i} />
           ))}
         </div>
-      ) : animes.length === 0 ? (
+      ) : seriesList.length === 0 ? (
         <div className="p-16 text-center rounded-3xl bg-[#0c101c] border border-slate-800/80">
           <Film className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <h3 className="font-bold text-white text-base font-['Outfit'] mb-1">
-            No se encontraron animes
+            No se encontraron series
           </h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             Prueba ajustando los filtros de búsqueda o seleccionando otro género.
@@ -203,8 +206,8 @@ export const CatalogPage: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {animes.map((anime) => (
-            <AnimeCard key={anime.id} anime={anime} />
+          {seriesList.map((item) => (
+            <AnimeCard key={item.id} anime={item} />
           ))}
         </div>
       )}

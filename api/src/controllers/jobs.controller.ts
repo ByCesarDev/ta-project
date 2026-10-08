@@ -105,10 +105,17 @@ export class JobsController {
         return;
       }
 
-      // 3. Resolve and freeze source configuration
-      const effectiveSourceUrl = (sourceUrl || anime.source_url || '').trim();
+      // 3. Resolve binding from anime_source_bindings or anime row
+      const { data: binding } = await supabaseAdmin
+        .from('anime_source_bindings')
+        .select('*')
+        .eq('anime_id', animeId)
+        .maybeSingle();
+
+      const effectiveSourceUrl = (sourceUrl || binding?.source_url || anime.source_url || '').trim();
       let sourceId = anime.source_id;
       let frozenConfig: Record<string, any> = {};
+      let discoveredVariants: any[] = binding?.audio_variants_config || [];
 
       if (effectiveSourceUrl) {
         sourceId = videoScraper.formatSlug(effectiveSourceUrl);
@@ -116,6 +123,7 @@ export class JobsController {
         try {
           const preview = await videoScraper.previewSource(effectiveSourceUrl);
           if (preview) {
+            discoveredVariants = preview.variants;
             frozenConfig = {
               source_title: preview.title,
               category: preview.category_name,
@@ -123,7 +131,7 @@ export class JobsController {
               variants: preview.variants,
             };
 
-            // Permanently save source_url, source_id and discovered_variants to anime row
+            // Permanently save to animes and anime_source_bindings
             await supabaseAdmin
               .from('animes')
               .update({
@@ -133,6 +141,15 @@ export class JobsController {
                 updated_at: new Date().toISOString(),
               })
               .eq('id', animeId);
+
+            await supabaseAdmin
+              .from('anime_source_bindings')
+              .upsert({
+                anime_id: animeId,
+                source_url: effectiveSourceUrl,
+                audio_variants_config: preview.variants,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'anime_id' });
           }
         } catch {
           // If preview fails, still proceed with url
@@ -144,6 +161,14 @@ export class JobsController {
         (frozenConfig.published_episodes?.length ?? anime.episodes) ||
         0;
 
+      const sourceConfigSnapshot = {
+        source_url: effectiveSourceUrl,
+        source_season_id: binding?.source_season_id || null,
+        audio_variants_config: discoveredVariants,
+        episode_offset_map: binding?.episode_offset_map || {},
+        frozen_config: frozenConfig,
+      };
+
       const job = await jobsService.createJob({
         animeId,
         requestedBy: req.user?.id,
@@ -151,6 +176,7 @@ export class JobsController {
         sourceUrl: effectiveSourceUrl || undefined,
         sourceId: sourceId || undefined,
         frozenConfig,
+        sourceConfig: sourceConfigSnapshot,
         targetMode: targetMode as 'all' | 'single' | 'pending',
         targetEpisodeNumber:
           typeof targetEpisodeNumber === 'number' ? targetEpisodeNumber : undefined,

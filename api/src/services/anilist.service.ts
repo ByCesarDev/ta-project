@@ -49,6 +49,27 @@ query ($query: String, $page: Int, $perPage: Int) {
         timeUntilAiring
         episode
       }
+      relations {
+        edges {
+          relationType
+          node {
+            id
+            title {
+              romaji
+              english
+              native
+              userPreferred
+            }
+            format
+            status
+            episodes
+            coverImage {
+              large
+              medium
+            }
+          }
+        }
+      }
     }
   }
 }
@@ -92,6 +113,27 @@ query ($id: Int) {
       airingAt
       timeUntilAiring
       episode
+    }
+    relations {
+      edges {
+        relationType
+        node {
+          id
+          title {
+            romaji
+            english
+            native
+            userPreferred
+          }
+          format
+          status
+          episodes
+          coverImage {
+            large
+            medium
+          }
+        }
+      }
     }
   }
 }

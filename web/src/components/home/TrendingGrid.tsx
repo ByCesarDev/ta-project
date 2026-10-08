@@ -1,11 +1,10 @@
 import React from 'react';
 import { Flame } from 'lucide-react';
-import { AnimeWithGenres } from '../../types/index.js';
 import { AnimeCard } from '../common/AnimeCard.js';
 import { AnimeCardSkeleton } from '../common/Skeleton.js';
 
 interface TrendingGridProps {
-  animes: AnimeWithGenres[];
+  animes: any[];
   isLoading?: boolean;
 }
 

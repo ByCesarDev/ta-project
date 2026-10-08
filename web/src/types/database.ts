@@ -621,6 +621,231 @@ export interface Database {
           }
         ];
       };
+      series: {
+        Row: {
+          id: number;
+          name: string;
+          slug: string;
+          description: string | null;
+          cover_image: string | null;
+          banner_image: string | null;
+          status: string;
+          claimed_by: string | null;
+          claimed_at: string | null;
+          views_count: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          name: string;
+          slug: string;
+          description?: string | null;
+          cover_image?: string | null;
+          banner_image?: string | null;
+          status?: string;
+          claimed_by?: string | null;
+          claimed_at?: string | null;
+          views_count?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          name?: string;
+          slug?: string;
+          description?: string | null;
+          cover_image?: string | null;
+          banner_image?: string | null;
+          status?: string;
+          claimed_by?: string | null;
+          claimed_at?: string | null;
+          views_count?: number;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      series_seasons: {
+        Row: {
+          id: number;
+          series_id: number;
+          season_number: number | null;
+          name: string;
+          kind: 'season' | 'movie' | 'special' | 'ova';
+          display_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          series_id: number;
+          season_number?: number | null;
+          name: string;
+          kind?: 'season' | 'movie' | 'special' | 'ova';
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          series_id?: number;
+          season_number?: number | null;
+          name?: string;
+          kind?: 'season' | 'movie' | 'special' | 'ova';
+          display_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "series_seasons_series_id_fkey";
+            columns: ["series_id"];
+            isOneToOne: false;
+            referencedRelation: "series";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      series_entries: {
+        Row: {
+          id: number;
+          season_id: number;
+          anime_id: number;
+          display_order: number;
+          part_label: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          season_id: number;
+          anime_id: number;
+          display_order?: number;
+          part_label?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          season_id?: number;
+          anime_id?: number;
+          display_order?: number;
+          part_label?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "series_entries_season_id_fkey";
+            columns: ["season_id"];
+            isOneToOne: false;
+            referencedRelation: "series_seasons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "series_entries_anime_id_fkey";
+            columns: ["anime_id"];
+            isOneToOne: true;
+            referencedRelation: "animes";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      anime_source_bindings: {
+        Row: {
+          id: number;
+          anime_id: number;
+          provider: string;
+          source_url: string;
+          source_season_id: string | null;
+          audio_variants_config: Json;
+          episode_offset_map: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          anime_id: number;
+          provider?: string;
+          source_url: string;
+          source_season_id?: string | null;
+          audio_variants_config?: Json;
+          episode_offset_map?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: number;
+          anime_id?: number;
+          provider?: string;
+          source_url?: string;
+          source_season_id?: string | null;
+          audio_variants_config?: Json;
+          episode_offset_map?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "anime_source_bindings_anime_id_fkey";
+            columns: ["anime_id"];
+            isOneToOne: true;
+            referencedRelation: "animes";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      series_slug_redirects: {
+        Row: {
+          old_slug: string;
+          target_series_id: number;
+          target_season_id: number | null;
+          created_at: string;
+        };
+        Insert: {
+          old_slug: string;
+          target_series_id: number;
+          target_season_id?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          old_slug?: string;
+          target_series_id?: number;
+          target_season_id?: number | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      user_favorites: {
+        Row: {
+          id: number;
+          user_id: string;
+          series_id: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: number;
+          user_id: string;
+          series_id: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: number;
+          user_id?: string;
+          series_id?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_favorites_series_id_fkey";
+            columns: ["series_id"];
+            isOneToOne: false;
+            referencedRelation: "series";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {

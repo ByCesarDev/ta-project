@@ -485,13 +485,99 @@ BEGIN
           AND status = 'available';
     END IF;
 
-    RETURN NULL;
-END;
-$$;
+-- ========================================================
+-- 22. SISTEMA DE SERIES Y TEMPORADAS (CLEAN ARCHITECTURE)
+-- ========================================================
+CREATE TABLE IF NOT EXISTS public.series (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    description TEXT,
+    cover_image TEXT,
+    banner_image TEXT,
+    status TEXT NOT NULL DEFAULT 'finalizado',
+    claimed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    claimed_at TIMESTAMPTZ,
+    views_count BIGINT NOT NULL DEFAULT 0,
+    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-DROP TRIGGER IF EXISTS trg_episode_sources_sync_availability ON public.episode_sources;
-CREATE TRIGGER trg_episode_sources_sync_availability
-    AFTER INSERT OR UPDATE OF is_active, episode_id OR DELETE ON public.episode_sources
-    FOR EACH ROW
-    EXECUTE FUNCTION public.trg_sync_episode_availability();
+CREATE INDEX IF NOT EXISTS idx_series_slug ON public.series(slug);
+CREATE INDEX IF NOT EXISTS idx_series_status ON public.series(status);
+CREATE INDEX IF NOT EXISTS idx_series_views ON public.series(views_count DESC);
+CREATE INDEX IF NOT EXISTS idx_series_claimed ON public.series(claimed_by);
+
+CREATE TABLE IF NOT EXISTS public.series_seasons (
+    id BIGSERIAL PRIMARY KEY,
+    series_id BIGINT NOT NULL REFERENCES public.series(id) ON DELETE RESTRICT,
+    season_number INT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'season' CHECK (kind IN ('season', 'movie', 'special', 'ova')),
+    display_order INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_seasons_series ON public.series_seasons(series_id, display_order);
+
+CREATE TABLE IF NOT EXISTS public.series_entries (
+    id BIGSERIAL PRIMARY KEY,
+    season_id BIGINT NOT NULL REFERENCES public.series_seasons(id) ON DELETE RESTRICT,
+    anime_id BIGINT NOT NULL UNIQUE REFERENCES public.animes(id) ON DELETE RESTRICT,
+    display_order INT NOT NULL DEFAULT 1,
+    part_label TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_entries_season ON public.series_entries(season_id, display_order);
+CREATE INDEX IF NOT EXISTS idx_series_entries_anime ON public.series_entries(anime_id);
+
+CREATE TABLE IF NOT EXISTS public.anime_source_bindings (
+    id BIGSERIAL PRIMARY KEY,
+    anime_id BIGINT NOT NULL UNIQUE REFERENCES public.animes(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL DEFAULT 'dramasfree',
+    source_url TEXT NOT NULL,
+    source_season_id TEXT,
+    audio_variants_config JSONB NOT NULL DEFAULT '[]'::jsonb,
+    episode_offset_map JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_anime_source_bindings_anime ON public.anime_source_bindings(anime_id);
+
+CREATE TABLE IF NOT EXISTS public.series_slug_redirects (
+    old_slug TEXT PRIMARY KEY,
+    target_series_id BIGINT NOT NULL REFERENCES public.series(id) ON DELETE CASCADE,
+    target_season_id BIGINT REFERENCES public.series_seasons(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_series_slug_redirects_target ON public.series_slug_redirects(target_series_id);
+
+CREATE TABLE IF NOT EXISTS public.user_favorites (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    series_id BIGINT NOT NULL REFERENCES public.series(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, series_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_favorites_user ON public.user_favorites(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_favorites_series ON public.user_favorites(series_id);
+
+ALTER TABLE public.scrape_jobs
+ADD COLUMN IF NOT EXISTS source_config JSONB DEFAULT NULL;
+
+DROP TRIGGER IF EXISTS update_series_updated_at ON public.series;
+CREATE TRIGGER update_series_updated_at BEFORE UPDATE ON public.series FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS update_series_seasons_updated_at ON public.series_seasons;
+CREATE TRIGGER update_series_seasons_updated_at BEFORE UPDATE ON public.series_seasons FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS update_anime_source_bindings_updated_at ON public.anime_source_bindings;
+CREATE TRIGGER update_anime_source_bindings_updated_at BEFORE UPDATE ON public.anime_source_bindings FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
 

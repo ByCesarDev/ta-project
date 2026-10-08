@@ -74,7 +74,7 @@ export const WatchlistPage: React.FC = () => {
           {watchlist.map((item) => (
             <div key={item.id} className="relative group">
               <AnimeCard anime={item.anime} />
-              <RemoveWatchlistButton animeId={item.anime_id} />
+              <RemoveWatchlistButton animeId={item.series_id || item.anime_id || item.anime?.id} />
             </div>
           ))}
         </div>

@@ -1,26 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageContainer } from '../components/layout/PageContainer.js';
-import { useEpisodeWithSources, useAnimeEpisodes } from '../hooks/useEpisodes.js';
+import { useWatchEpisode } from '../hooks/useSeries.js';
 import { VideoPlayer } from '../components/player/VideoPlayer.js';
-import { EpisodeNavigation } from '../components/player/EpisodeNavigation.js';
 import { EpisodeReactions } from '../components/player/EpisodeReactions.js';
 import { DisqusComments } from '../components/comments/DisqusComments.js';
 import { EpisodeSourceRow, StreamLanguage } from '../types/index.js';
 import { Skeleton } from '../components/common/Skeleton.js';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
+import { Badge } from '../components/common/Badge.js';
 
 export const WatchPage: React.FC = () => {
-  const { slug, episodeNumber } = useParams<{ slug: string; episodeNumber: string }>();
+  const { slug, episodeId, episodeNumber } = useParams<{
+    slug: string;
+    episodeId?: string;
+    episodeNumber?: string;
+  }>();
   const navigate = useNavigate();
 
-  const epNum = parseInt(episodeNumber || '1', 10);
-  const { data: episodeData, isLoading: loadingEpisode, error } = useEpisodeWithSources(
-    slug || '',
-    epNum
-  );
+  const rawIdentifier = episodeId || episodeNumber || '1';
+  const { data: watchData, isLoading, error } = useWatchEpisode(slug || '', rawIdentifier);
 
-  const { data: allEpisodes } = useAnimeEpisodes(episodeData?.anime?.id);
+  // Canonical URL sync: If the current URL slug is an alias or old anime slug, replace URL with canonical series slug
+  useEffect(() => {
+    if (watchData?.series?.slug && slug && watchData.series.slug !== slug && watchData.episode?.id) {
+      navigate(`/watch/${watchData.series.slug}/${watchData.episode.id}`, { replace: true });
+    }
+  }, [watchData, slug, navigate]);
 
   const [selectedAudioVariant, setSelectedAudioVariant] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<StreamLanguage>('sub');
@@ -29,25 +35,24 @@ export const WatchPage: React.FC = () => {
 
   // Available languages detected from sources
   const availableLanguages: StreamLanguage[] = React.useMemo(() => {
-    if (!episodeData?.sources || episodeData.sources.length === 0) return ['sub', 'dub'];
-    const langs = Array.from(new Set(episodeData.sources.map((s) => s.language)));
+    if (!watchData?.sources || watchData.sources.length === 0) return ['sub', 'dub'];
+    const langs = Array.from(new Set(watchData.sources.map((s) => s.language)));
     return langs.length > 0 ? langs : ['sub', 'dub'];
-  }, [episodeData]);
+  }, [watchData]);
 
-  // When episode sources load or audio/quality changes, select the best matching source
+  // When sources load, select best matching source
   useEffect(() => {
-    if (episodeData?.sources && episodeData.sources.length > 0) {
-      let matchedSources = episodeData.sources.filter(
+    if (watchData?.sources && watchData.sources.length > 0) {
+      let matchedSources = watchData.sources.filter(
         (s) => (s.audio_variant || s.language) === selectedAudioVariant
       );
 
       if (matchedSources.length === 0) {
-        // Fallback to first source
-        const first = episodeData.sources[0];
+        const first = watchData.sources[0];
         const defaultKey = first.audio_variant || first.language || 'sub';
         setSelectedAudioVariant(defaultKey);
         setSelectedLanguage(first.language || 'sub');
-        matchedSources = episodeData.sources.filter(
+        matchedSources = watchData.sources.filter(
           (s) => (s.audio_variant || s.language) === defaultKey
         );
       }
@@ -67,12 +72,12 @@ export const WatchPage: React.FC = () => {
     } else {
       setSelectedSource(null);
     }
-  }, [episodeData, selectedAudioVariant, selectedQuality]);
+  }, [watchData, selectedAudioVariant, selectedQuality]);
 
   const handleAudioVariantChange = (variantKey: string) => {
     setSelectedAudioVariant(variantKey);
-    if (episodeData?.sources) {
-      const matching = episodeData.sources.filter(
+    if (watchData?.sources) {
+      const matching = watchData.sources.filter(
         (s) => (s.audio_variant || s.language) === variantKey
       );
       if (matching.length > 0) {
@@ -91,8 +96,8 @@ export const WatchPage: React.FC = () => {
 
   const handleLanguageChange = (lang: StreamLanguage) => {
     setSelectedLanguage(lang);
-    if (episodeData?.sources) {
-      const matching = episodeData.sources.filter((s) => s.language === lang);
+    if (watchData?.sources) {
+      const matching = watchData.sources.filter((s) => s.language === lang);
       if (matching.length > 0) {
         setSelectedAudioVariant(matching[0].audio_variant || matching[0].language);
         if (selectedQuality !== 'Auto') {
@@ -109,8 +114,8 @@ export const WatchPage: React.FC = () => {
 
   const handleQualityChange = (qual: string) => {
     setSelectedQuality(qual);
-    if (episodeData?.sources) {
-      const currentSources = episodeData.sources.filter((s) => {
+    if (watchData?.sources) {
+      const currentSources = watchData.sources.filter((s) => {
         if (selectedAudioVariant) {
           return (s.audio_variant || s.language) === selectedAudioVariant;
         }
@@ -130,29 +135,29 @@ export const WatchPage: React.FC = () => {
     }
   };
 
-  if (loadingEpisode) {
+  if (isLoading) {
     return (
       <PageContainer>
         <div className="space-y-4 max-w-5xl mx-auto">
           <Skeleton className="h-6 w-1/3" />
-          <Skeleton className="w-full aspect-video-player rounded-3xl" />
+          <Skeleton className="w-full aspect-video rounded-3xl" />
           <Skeleton className="h-14 w-full rounded-2xl" />
         </div>
       </PageContainer>
     );
   }
 
-  if (error || !episodeData) {
+  if (error || !watchData) {
     return (
       <PageContainer>
         <div className="py-20 text-center space-y-4 max-w-md mx-auto">
           <h2 className="text-2xl font-bold text-white font-['Outfit']">Episodio no encontrado</h2>
           <p className="text-xs text-slate-400">
-            No pudimos localizar el episodio #{epNum} para esta serie. Verifica la URL o consulta la lista completa de episodios.
+            No pudimos localizar el episodio solicitado para esta serie.
           </p>
           <Link to={`/anime/${slug}`}>
             <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold">
-              Ver Ficha del Anime
+              Ver Ficha de la Serie
             </button>
           </Link>
         </div>
@@ -160,43 +165,53 @@ export const WatchPage: React.FC = () => {
     );
   }
 
-  const { anime, episode } = episodeData;
-  const animeTitle = anime.title_english || anime.title_romaji || anime.name;
+  const { series, season, episode, allEpisodes } = watchData;
+  const currentIndex = allEpisodes.findIndex((item) => item.episode.id === episode.id);
+  const prevEpItem = currentIndex > 0 ? allEpisodes[currentIndex - 1] : null;
+  const nextEpItem = currentIndex < allEpisodes.length - 1 ? allEpisodes[currentIndex + 1] : null;
 
   return (
     <PageContainer>
-      <div className="max-w-5xl mx-auto">
-        {/* Header Breadcrumb */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="max-w-5xl mx-auto space-y-4">
+        {/* Header Breadcrumb & Season Switcher */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
-            to={`/anime/${anime.slug}`}
+            to={`/anime/${series.slug}?season=${season?.id || ''}`}
             className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Volver a {animeTitle}
+            Volver a {series.name}
           </Link>
 
-          <span className="text-xs text-indigo-400 font-semibold font-['Outfit']">
-            Reproduciendo Episodio {episode.episode_number}
-          </span>
+          <div className="flex items-center gap-2">
+            {season && (
+              <Badge variant="purple" size="sm" className="flex items-center gap-1">
+                <Layers className="w-3 h-3" />
+                {season.name}
+              </Badge>
+            )}
+            <Badge variant="primary" size="sm">
+              Episodio {episode.episode_number}
+            </Badge>
+          </div>
         </div>
 
-        {/* Anime & Episode Title */}
-        <div className="mb-4">
+        {/* Title */}
+        <div>
           <h1 className="text-xl sm:text-2xl font-black text-white font-['Outfit'] tracking-tight">
-            {animeTitle} - Episodio {episode.episode_number}
+            {series.name} — {season?.name ? `${season.name}: ` : ''}Episodio {episode.episode_number}
           </h1>
           {episode.title && (
             <p className="text-xs text-slate-400 mt-0.5">{episode.title}</p>
           )}
         </div>
 
-        {/* Video Player (with embedded audio track, custom subtitles, and quality settings in cog) */}
+        {/* Video Player */}
         <VideoPlayer
           episodeId={episode.id}
           selectedSource={selectedSource}
-          availableSources={episodeData.sources}
-          animeTitle={animeTitle}
+          availableSources={watchData.sources}
+          animeTitle={series.name}
           episodeNumber={episode.episode_number}
           availableLanguages={availableLanguages}
           selectedLanguage={selectedLanguage}
@@ -205,30 +220,57 @@ export const WatchPage: React.FC = () => {
           onSelectAudioVariant={handleAudioVariantChange}
           selectedQuality={selectedQuality}
           onSelectQuality={handleQualityChange}
-          hasNextEpisode={Boolean(allEpisodes && allEpisodes.some((e) => e.episode_number === episode.episode_number + 1))}
-          onSelectNextEpisode={() => navigate(`/watch/${anime.slug}/${episode.episode_number + 1}`)}
+          hasNextEpisode={Boolean(nextEpItem)}
+          onSelectNextEpisode={() => {
+            if (nextEpItem) {
+              navigate(`/watch/${series.slug}/${nextEpItem.episode.id}`);
+            }
+          }}
         />
 
-        {/* Episode Navigation Bar (Anterior / Siguiente) */}
-        <EpisodeNavigation
-          animeSlug={anime.slug}
-          currentEpisodeNumber={episode.episode_number}
-          totalEpisodes={anime.episodes || allEpisodes?.length || 0}
-          availableEpisodes={allEpisodes}
-        />
+        {/* Episode Quick Switcher Bar */}
+        <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-[#0c101c] border border-slate-800 shadow-xl">
+          {/* Prev Button */}
+          <button
+            disabled={!prevEpItem}
+            onClick={() => prevEpItem && navigate(`/watch/${series.slug}/${prevEpItem.episode.id}`)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+              prevEpItem
+                ? 'bg-slate-800 text-white hover:bg-slate-700 shadow-md'
+                : 'opacity-40 cursor-not-allowed text-slate-500 bg-slate-900/50'
+            }`}
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Episodio Anterior
+          </button>
 
-        {/* Reactions & Actions Bar (Likes, Dislikes, Share, Bookmark) */}
+          {/* Next Button */}
+          <button
+            disabled={!nextEpItem}
+            onClick={() => nextEpItem && navigate(`/watch/${series.slug}/${nextEpItem.episode.id}`)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              nextEpItem
+                ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-600/30'
+                : 'opacity-40 cursor-not-allowed text-slate-500 bg-slate-900/50'
+            }`}
+          >
+            Siguiente Episodio
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Reactions */}
         <EpisodeReactions
-          animeSlug={anime.slug}
+          animeSlug={series.slug}
           episodeNumber={episode.episode_number}
-          animeTitle={animeTitle}
+          animeTitle={series.name}
         />
 
         {/* Disqus Community Comments */}
         <DisqusComments
-          animeSlug={anime.slug}
+          animeSlug={series.slug}
           episodeNumber={episode.episode_number}
-          animeTitle={animeTitle}
+          animeTitle={series.name}
         />
       </div>
     </PageContainer>

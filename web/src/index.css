@@ -12,6 +12,27 @@
     overflow-x: hidden;
   }
 
+  /* Universal Dark Select & Option Styling */
+  select {
+    color-scheme: dark;
+    background-color: #0c101c;
+    color: #f1f5f9;
+  }
+
+  select option, select optgroup {
+    background-color: #0c101c !important;
+    color: #f1f5f9 !important;
+    padding: 10px 14px;
+    font-weight: 500;
+  }
+
+  select option:hover,
+  select option:focus,
+  select option:checked {
+    background-color: #4f46e5 !important;
+    color: #ffffff !important;
+  }
+
   /* Custom Sleek Scrollbars */
   ::-webkit-scrollbar {
     width: 6px;

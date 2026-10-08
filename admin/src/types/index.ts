@@ -199,6 +199,75 @@ export interface AuditLog {
   } | null;
 }
 
+export type SeasonKind = 'season' | 'movie' | 'special' | 'ova';
+
+export interface Series {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  cover_image?: string | null;
+  banner_image?: string | null;
+  status: string;
+  claimed_by?: string | null;
+  claimed_at?: string | null;
+  views_count: number;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SeriesSeason {
+  id: number;
+  series_id: number;
+  season_number?: number | null;
+  name: string;
+  kind: SeasonKind;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SeriesEntry {
+  id: number;
+  season_id: number;
+  anime_id: number;
+  display_order: number;
+  part_label?: string | null;
+  created_at: string;
+}
+
+export interface AnimeSourceBinding {
+  id: number;
+  anime_id: number;
+  provider: string;
+  source_url: string;
+  source_season_id?: string | null;
+  audio_variants_config: VariantSummary[];
+  episode_offset_map: Record<string, number>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SeriesSlugRedirect {
+  old_slug: string;
+  target_series_id: number;
+  target_season_id?: number | null;
+  created_at: string;
+}
+
+export interface SeasonWithEntries extends SeriesSeason {
+  entries: (SeriesEntry & {
+    anime: Anime;
+  })[];
+}
+
+export interface SeriesWithSeasons extends Series {
+  seasons: SeasonWithEntries[];
+  total_seasons_count?: number;
+  total_episodes_count?: number;
+}
+
 export interface AniListSearchResult {
   media: {
     id: number;
@@ -206,11 +275,13 @@ export interface AniListSearchResult {
       romaji?: string;
       english?: string;
       native?: string;
+      userPreferred?: string;
     };
     description?: string;
     coverImage?: {
       extraLarge?: string;
       large?: string;
+      medium?: string;
     };
     bannerImage?: string;
     status?: string;
@@ -218,6 +289,27 @@ export interface AniListSearchResult {
     seasonYear?: number;
     format?: string;
     genres?: string[];
+    relations?: {
+      edges?: {
+        relationType: string;
+        node: {
+          id: number;
+          title?: {
+            romaji?: string;
+            english?: string;
+            native?: string;
+            userPreferred?: string;
+          };
+          format?: string;
+          status?: string;
+          episodes?: number;
+          coverImage?: {
+            large?: string;
+            medium?: string;
+          };
+        };
+      }[];
+    };
   }[];
   total: number;
   hasNextPage: boolean;

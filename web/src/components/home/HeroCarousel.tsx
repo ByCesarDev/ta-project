@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { AnimeWithGenres } from '../../types/index.js';
 import { Play, Bookmark, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '../common/Button.js';
 import { Badge } from '../common/Badge.js';
 import { useToggleWatchlist, useIsInWatchlist } from '../../hooks/useWatchlist.js';
 
 interface HeroCarouselProps {
-  animes: AnimeWithGenres[];
+  animes: any[];
   isLoading?: boolean;
 }
 
@@ -72,7 +71,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
         {/* Genres */}
         {currentAnime.genres && currentAnime.genres.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {currentAnime.genres.slice(0, 4).map((g) => (
+            {currentAnime.genres.slice(0, 4).map((g: any) => (
               <span
                 key={g.id}
                 className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700/60"

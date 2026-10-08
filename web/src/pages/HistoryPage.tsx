@@ -82,7 +82,9 @@ export const HistoryPage: React.FC = () => {
                 ? Math.min(100, Math.round((item.progress_seconds / item.total_seconds) * 100))
                 : 0;
 
-            const animeTitle = ep.anime.title_english || ep.anime.title_romaji || ep.anime.name;
+            const animeTitle = ep.anime.series_name || ep.anime.title_english || ep.anime.title_romaji || ep.anime.name;
+            const seriesSlug = ep.anime.series_slug || ep.anime.slug;
+            const watchTarget = ep.id || ep.episode_number;
 
             return (
               <div
@@ -100,7 +102,7 @@ export const HistoryPage: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
 
                   <Link
-                    to={`/watch/${ep.anime.slug}/${ep.episode_number}`}
+                    to={`/watch/${seriesSlug}/${watchTarget}`}
                     className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[1px]"
                   >
                     <div className="w-10 h-10 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
@@ -130,10 +132,14 @@ export const HistoryPage: React.FC = () => {
                 {/* Details */}
                 <div className="p-3 flex-1 flex flex-col justify-between">
                   <div>
-                    <h3 className="font-bold text-xs text-slate-100 group-hover:text-violet-400 line-clamp-1">
+                    <Link
+                      to={`/anime/${seriesSlug}`}
+                      className="font-bold text-xs text-slate-100 hover:text-violet-400 line-clamp-1 transition-colors block"
+                    >
                       {animeTitle}
-                    </h3>
+                    </Link>
                     <p className="text-[11px] text-slate-400 mt-0.5">
+                      {(ep as any).season_name ? `${(ep as any).season_name} • ` : ''}
                       {ep.title || `Episodio ${ep.episode_number}`}
                     </p>
                   </div>
@@ -143,7 +149,7 @@ export const HistoryPage: React.FC = () => {
                       {formatTime(item.progress_seconds)} / {formatTime(item.total_seconds)} ({percentage}%)
                     </span>
                     <Link
-                      to={`/watch/${ep.anime.slug}/${ep.episode_number}`}
+                      to={`/watch/${seriesSlug}/${watchTarget}`}
                       className="text-violet-400 hover:text-violet-300 font-semibold flex items-center gap-0.5"
                     >
                       Continuar →

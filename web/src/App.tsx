@@ -32,7 +32,8 @@ export const App: React.FC = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/directory" element={<CatalogPage />} />
             <Route path="/anime/:slug" element={<AnimeDetailPage />} />
-            <Route path="/watch/:slug/:episodeNumber" element={<WatchPage />} />
+            <Route path="/watch/:slug/:episodeId" element={<WatchPage />} />
+            <Route path="/watch/:slug" element={<WatchPage />} />
             <Route path="/watchlist" element={<WatchlistPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/login" element={<LoginPage />} />

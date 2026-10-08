@@ -190,7 +190,10 @@ export class ScrapeWorker {
         throw new Error(`Anime no encontrado con ID ${job.anime_id}: ${animeError?.message}`);
       }
 
-      const effectiveSource = (job.source_url || anime.source_url || anime.slug).trim();
+      const snapshotSource = (job.source_config && typeof job.source_config.source_url === 'string')
+        ? job.source_config.source_url
+        : job.source_url;
+      const effectiveSource = (snapshotSource || anime.source_url || anime.slug).trim();
       const targetMode = job.target_mode || 'all';
 
       jobLog.push({
@@ -326,8 +329,14 @@ export class ScrapeWorker {
         }
 
         try {
+          // Resolve any explicit source episode mapping from snapshot
+          const offsetMap = job.source_config?.episode_offset_map;
+          const sourceEpNum = offsetMap && offsetMap[String(ep.episode_number)] !== undefined
+            ? offsetMap[String(ep.episode_number)]
+            : ep.episode_number;
+
           // Extract all available audio versions for this episode
-          const rawServers = await videoScraper.scrapeAllEpisodeServers(effectiveSource, ep.episode_number);
+          const rawServers = await videoScraper.scrapeAllEpisodeServers(effectiveSource, sourceEpNum);
 
           if (rawServers.length === 0) {
             failed++;

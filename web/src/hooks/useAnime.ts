@@ -62,7 +62,14 @@ export function useRecentEpisodes() {
             id,
             name,
             slug,
-            cover_image
+            cover_image,
+            series_entries (
+              series_seasons (
+                series (
+                  slug
+                )
+              )
+            )
           )
         `)
         .eq('status', 'available')
@@ -70,7 +77,14 @@ export function useRecentEpisodes() {
         .limit(12);
 
       if (error) throw error;
-      return data || [];
+      return (data || []).map((ep: any) => {
+        const entryObj = Array.isArray(ep.animes?.series_entries) ? ep.animes.series_entries[0] : ep.animes?.series_entries;
+        const seriesSlug = entryObj?.series_seasons?.series?.slug || ep.animes?.slug;
+        return {
+          ...ep,
+          series_slug: seriesSlug,
+        };
+      });
     },
     staleTime: 1000 * 60 * 2,
   });

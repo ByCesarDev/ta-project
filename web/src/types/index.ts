@@ -12,6 +12,45 @@ export type GenreRow = Database['public']['Tables']['genres']['Row'];
 export type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 export type UserHistoryRow = Database['public']['Tables']['user_history']['Row'];
 export type WatchLaterRow = Database['public']['Tables']['watch_later']['Row'];
+export type SeriesRow = Database['public']['Tables']['series']['Row'];
+export type SeriesSeasonRow = Database['public']['Tables']['series_seasons']['Row'];
+export type SeriesEntryRow = Database['public']['Tables']['series_entries']['Row'];
+export type AnimeSourceBindingRow = Database['public']['Tables']['anime_source_bindings']['Row'];
+export type SeriesSlugRedirectRow = Database['public']['Tables']['series_slug_redirects']['Row'];
+export type UserFavoriteRow = Database['public']['Tables']['user_favorites']['Row'];
+
+export type SeasonKind = 'season' | 'movie' | 'special' | 'ova';
+
+export interface SeasonWithEntries extends SeriesSeasonRow {
+  entries?: (SeriesEntryRow & {
+    anime: AnimeRow & {
+      episodes?: EpisodeWithSources[];
+    };
+  })[];
+  series_entries?: (SeriesEntryRow & {
+    anime: AnimeRow & {
+      episodes?: EpisodeWithSources[];
+    };
+  })[];
+}
+
+export interface SeriesWithSeasons extends SeriesRow {
+  seasons: SeasonWithEntries[];
+  genres?: GenreRow[];
+  total_seasons_count?: number;
+  total_episodes_count?: number;
+  active_season?: SeasonWithEntries;
+}
+
+export interface SeriesFilters {
+  search?: string;
+  genreSlug?: string;
+  status?: string;
+  format?: string;
+  sortBy?: 'views' | 'recent' | 'name' | 'episodes';
+  page?: number;
+  limit?: number;
+}
 
 export interface AnimeWithGenres extends AnimeRow {
   anime_genres?: {
@@ -44,7 +83,10 @@ export interface HistoryItem {
   is_completed: boolean;
   updated_at: string;
   episode: EpisodeRow & {
-    anime: AnimeRow;
+    anime: AnimeRow & {
+      series_slug?: string;
+      series_name?: string;
+    };
   };
 }
 

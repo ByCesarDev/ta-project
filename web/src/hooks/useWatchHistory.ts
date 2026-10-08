@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.js';
-import { HistoryItem, AnimeRow, EpisodeRow } from '../types/index.js';
+import { HistoryItem } from '../types/index.js';
 
 export function useWatchHistory() {
   const { user } = useAuth();
@@ -30,7 +30,22 @@ export function useWatchHistory() {
               id,
               name,
               slug,
-              cover_image
+              title_romaji,
+              title_english,
+              cover_image,
+              series_entries (
+                series_seasons (
+                  id,
+                  name,
+                  season_number,
+                  kind,
+                  series (
+                    id,
+                    name,
+                    slug
+                  )
+                )
+              )
             )
           )
         `)
@@ -39,8 +54,15 @@ export function useWatchHistory() {
 
       if (error) throw error;
 
-      return (data || []).map((item) => {
-        const ep = item.episodes as unknown as EpisodeRow & { animes: AnimeRow };
+      return (data || []).map((item: any) => {
+        const ep = item.episodes;
+        const anime = ep?.animes;
+        const entryObj = Array.isArray(anime?.series_entries) ? anime.series_entries[0] : anime?.series_entries;
+        const season = entryObj?.series_seasons;
+        const parentSeries = season?.series;
+        const seriesSlug = parentSeries?.slug || anime?.slug;
+        const seriesName = parentSeries?.name || anime?.name;
+        const seasonName = season?.name;
         return {
           id: item.id,
           episode_id: item.episode_id,
@@ -50,7 +72,12 @@ export function useWatchHistory() {
           updated_at: item.updated_at,
           episode: {
             ...ep,
-            anime: ep?.animes,
+            season_name: seasonName,
+            anime: {
+              ...anime,
+              series_slug: seriesSlug,
+              series_name: seriesName,
+            },
           },
         } as unknown as HistoryItem;
       });
@@ -160,6 +187,142 @@ export function useSaveProgress() {
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['history', user?.id, 'episode', vars.episodeId] });
+      queryClient.invalidateQueries({ queryKey: ['history', user?.id] });
+    },
+  });
+}
+
+export function useToggleEpisodeWatched() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      episodeId,
+      currentlyCompleted,
+      duration = 1440,
+    }: {
+      episodeId: number;
+      currentlyCompleted?: boolean;
+      duration?: number;
+    }) => {
+      const willBeCompleted = !currentlyCompleted;
+      const progressSeconds = willBeCompleted ? duration : 0;
+      const totalSeconds = duration;
+
+      // Local storage fallback
+      try {
+        localStorage.setItem(
+          `ta_ep_progress_${episodeId}`,
+          JSON.stringify({
+            progress_seconds: progressSeconds,
+            total_seconds: totalSeconds,
+            is_completed: willBeCompleted,
+            updated_at: new Date().toISOString(),
+          })
+        );
+      } catch {
+        // ignore
+      }
+
+      if (!user) return { is_completed: willBeCompleted };
+
+      if (willBeCompleted) {
+        const { error } = await supabase
+          .from('user_history')
+          .upsert(
+            {
+              user_id: user.id,
+              episode_id: episodeId,
+              progress_seconds: progressSeconds,
+              total_seconds: totalSeconds,
+              is_completed: true,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'user_id,episode_id' }
+          );
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('user_history')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('episode_id', episodeId);
+        if (error) throw error;
+      }
+
+      return { is_completed: willBeCompleted };
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['history', user?.id, 'episode', vars.episodeId] });
+      queryClient.invalidateQueries({ queryKey: ['history', user?.id] });
+    },
+  });
+}
+
+export function useToggleSeasonWatched() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      episodeIds,
+      markAsWatched,
+      defaultDuration = 1440,
+    }: {
+      episodeIds: number[];
+      markAsWatched: boolean;
+      defaultDuration?: number;
+    }) => {
+      if (!episodeIds || episodeIds.length === 0) return;
+
+      // Update localStorage
+      episodeIds.forEach((id) => {
+        try {
+          if (markAsWatched) {
+            localStorage.setItem(
+              `ta_ep_progress_${id}`,
+              JSON.stringify({
+                progress_seconds: defaultDuration,
+                total_seconds: defaultDuration,
+                is_completed: true,
+                updated_at: new Date().toISOString(),
+              })
+            );
+          } else {
+            localStorage.removeItem(`ta_ep_progress_${id}`);
+          }
+        } catch {
+          // ignore
+        }
+      });
+
+      if (!user) return;
+
+      if (markAsWatched) {
+        const rows = episodeIds.map((id) => ({
+          user_id: user.id,
+          episode_id: id,
+          progress_seconds: defaultDuration,
+          total_seconds: defaultDuration,
+          is_completed: true,
+          updated_at: new Date().toISOString(),
+        }));
+
+        const { error } = await supabase
+          .from('user_history')
+          .upsert(rows, { onConflict: 'user_id,episode_id' });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('user_history')
+          .delete()
+          .eq('user_id', user.id)
+          .in('episode_id', episodeIds);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['history', user?.id] });
     },
   });
