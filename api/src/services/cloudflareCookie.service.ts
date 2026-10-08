@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import puppeteer from 'puppeteer-core';
+import { supabaseAdmin } from '../config/supabaseAdmin.js';
 
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
@@ -16,9 +17,11 @@ export interface ClearanceData {
 
 export class CloudflareCookieService {
   private memoryCache: ClearanceData | null = null;
+  private lastDbSync: number = 0;
 
   constructor() {
     this.loadFromDisk();
+    this.syncFromDatabase().catch(() => {});
   }
 
   private loadFromDisk(): void {
@@ -32,14 +35,63 @@ export class CloudflareCookieService {
     }
   }
 
-  public getClearance(): ClearanceData | null {
-    if (!this.memoryCache) {
-      this.loadFromDisk();
+  /**
+   * Syncs latest clearance token from Supabase audit_logs table
+   */
+  public async syncFromDatabase(): Promise<ClearanceData | null> {
+    try {
+      if (typeof supabaseAdmin?.from !== 'function') {
+        return this.memoryCache;
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('audit_logs')
+        .select('metadata, created_at')
+        .eq('action', 'CLOUDFLARE_CLEARANCE_SYNC')
+        .eq('entity_type', 'SYSTEM_CONFIG')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data?.metadata) {
+        const meta = data.metadata as any;
+        if (meta.cookie) {
+          const synced: ClearanceData = {
+            cookie: meta.cookie,
+            userAgent: meta.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            updatedAt: meta.updatedAt || data.created_at,
+          };
+          this.memoryCache = synced;
+          this.lastDbSync = Date.now();
+
+          // Write disk backup
+          try {
+            const dir = path.dirname(STORAGE_FILE);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(STORAGE_FILE, JSON.stringify(synced, null, 2), 'utf8');
+          } catch {}
+
+          return synced;
+        }
+      }
+    } catch (err: any) {
+      console.warn('[CloudflareCookieService] DB sync warning:', err.message);
     }
     return this.memoryCache;
   }
 
-  public saveClearance(cookie: string, userAgent?: string): void {
+  public getClearance(): ClearanceData | null {
+    if (!this.memoryCache) {
+      this.loadFromDisk();
+    }
+    // Periodically refresh from DB in background if cache is older than 60s
+    if (Date.now() - this.lastDbSync > 60000) {
+      this.syncFromDatabase().catch(() => {});
+    }
+    return this.memoryCache;
+  }
+
+  public async saveClearance(cookie: string, userAgent?: string): Promise<void> {
     const cleanCookie = cookie.trim().replace(/^cf_clearance=/, '');
     const data: ClearanceData = {
       cookie: cleanCookie,
@@ -49,6 +101,24 @@ export class CloudflareCookieService {
       updatedAt: new Date().toISOString(),
     };
     this.memoryCache = data;
+    this.lastDbSync = Date.now();
+
+    // 1. Persist to Supabase database (Global cloud persistence)
+    try {
+      const { error: dbError } = await supabaseAdmin.from('audit_logs').insert({
+        action: 'CLOUDFLARE_CLEARANCE_SYNC',
+        entity_type: 'SYSTEM_CONFIG',
+        entity_id: 'cf_clearance',
+        metadata: data,
+      });
+      if (dbError) {
+        console.warn('[CloudflareCookieService] DB save warning:', dbError.message);
+      }
+    } catch (dbErr: any) {
+      console.warn('[CloudflareCookieService] DB exception:', dbErr.message);
+    }
+
+    // 2. Persist to local disk backup
     try {
       const dir = path.dirname(STORAGE_FILE);
       if (!fs.existsSync(dir)) {
@@ -56,7 +126,7 @@ export class CloudflareCookieService {
       }
       fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2), 'utf8');
     } catch (err: any) {
-      console.warn('[CloudflareCookieService] Error writing to disk:', err.message);
+      console.warn('[CloudflareCookieService] Disk write warning:', err.message);
     }
   }
 
@@ -124,13 +194,13 @@ export class CloudflareCookieService {
           const cookieVal = cfCookie?.value || '';
           const ua = await page.evaluate(() => navigator.userAgent);
           if (cookieVal) {
-            this.saveClearance(cookieVal, ua);
+            await this.saveClearance(cookieVal, ua);
           }
           await browser.close();
           return {
             success: true,
             cookie: cookieVal,
-            message: '¡Verificación completada con éxito! Sesión guardada para el scraper.',
+            message: '¡Verificación completada con éxito! Sesión guardada en Base de Datos para el scraper.',
           };
         }
 
