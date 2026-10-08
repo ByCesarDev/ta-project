@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../config/supabaseAdmin.js';
 import { env } from '../config/env.js';
 import { jobsService } from '../services/jobs.service.js';
 import { videoScraper } from '../scrapers/videoScraper.service.js';
+import { thumbnailService } from '../services/thumbnail.service.js';
 import { ScrapeJob, ScrapedServer } from '../types/index.js';
 
 /**
@@ -398,6 +399,11 @@ export class ScrapeWorker {
                 .eq('id', ep.id);
 
               processed++;
+
+              // Auto-generate dynamic frame thumbnail in background if not already present
+              thumbnailService.generateEpisodeThumbnail(ep.id).catch((thumbErr) => {
+                console.warn(`[ScrapeWorker] Auto-thumbnail generation for Ep ${ep.episode_number} skipped:`, thumbErr.message);
+              });
 
               const variantLabels = Array.from(
                 new Set(validServers.map((s) => s.language_label || s.audio_language))
