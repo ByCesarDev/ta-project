@@ -6,13 +6,13 @@ import { ScrapedAnimeSummary, ScrapedServer, StreamLanguage, SubtitleTrack } fro
 import { cloudflareCookieService } from '../../services/cloudflareCookie.service.js';
 
 export const CLUSTER_MIRRORS = [
+  'https://peliculaplay.com',
+  'https://ver.123pelicula.com',
+  'https://es.cuevana4br.com',
   'https://flixlat.com',
   'https://www3.dramasfree.com',
   'https://ww1.123flmsfree.com',
   'https://play.cuevana19.com',
-  'https://peliculaplay.com',
-  'https://ver.123pelicula.com',
-  'https://es.cuevana4br.com',
   'https://ww20.321moviesfree.com',
 ];
 
@@ -31,13 +31,135 @@ export const DRAMASFREE_MOBILE_HEADERS: Record<string, string> = {
   'Upgrade-Insecure-Requests': '1',
 };
 
-export const KNOWN_SLUG_MAP: Record<string, string> = {
-  'the-seven-deadly-sins': 'sNA1hjhxFcJpD4ZwSK9En-The-Seven-Deadly-Sins',
-  'nanatsu-no-taizai': 'sNA1hjhxFcJpD4ZwSK9En-The-Seven-Deadly-Sins',
-  'solo-leveling': 'zDkeCb59JRZE0yPQZwiSX-Solo-Leveling',
-  'solo-leveling-season-2': 'KEtkF3W58YdmhQbbe4KSo-Solo-Leveling-Season-2-Arise-from-the-Shadow',
-  'solo-leveling-arise-from-the-shadow': 'KEtkF3W58YdmhQbbe4KSo-Solo-Leveling-Season-2-Arise-from-the-Shadow',
-};
+export class DynamicClusterResolver {
+  public cache: Map<string, string> = new Map();
+  public visitedParams: Set<string> = new Set();
+  public seeds: string[] = [
+    'fLlJJ08QFlnGTLNPD9uFs-Demon-Slayer-Kimetsu-no-Yaiba',
+    'gCt2oc0DFw51NrR5EAVrx-Jujutsu-Kaisen',
+    'sNA1hjhxFcJpD4ZwSK9En-The-Seven-Deadly-Sins',
+    '8ftPGNE9T3R1OACxVVjTl-Jujutsu-Kaisen-0-The-Movie',
+    'zDkeCb59JRZE0yPQZwiSX-Solo-Leveling',
+    '4nw3c40KjANLxASvu0cuV-Tougen-Anki',
+  ];
+
+  constructor() {
+    for (const seed of this.seeds) {
+      this.indexParam(seed);
+    }
+  }
+
+  public normalize(str: string): string {
+    if (!str) return '';
+    return str
+      .toLowerCase()
+      .replace(/\[.*?\]/g, '')
+      .replace(/temporada\s*\d+/gi, '')
+      .replace(/season\s*\d+/gi, '')
+      .replace(/2nd\s*season/gi, '')
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  public indexParam(param: string, title?: string): void {
+    if (!param) return;
+    const cleanParam = param.trim();
+    const titlePart = cleanParam.replace(/^[a-zA-Z0-9]{20,24}-/, '');
+    const normParamTitle = this.normalize(titlePart);
+    if (normParamTitle) {
+      this.cache.set(normParamTitle, cleanParam);
+    }
+    if (title) {
+      const normTitle = this.normalize(title);
+      if (normTitle) {
+        this.cache.set(normTitle, cleanParam);
+      }
+    }
+  }
+
+  public harvestPageData(html: string): void {
+    const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]+?)<\/script>/);
+    if (!match) return;
+    try {
+      const nextData = JSON.parse(match[1]);
+      const pp = nextData.props?.pageProps;
+      if (!pp) return;
+
+      if (pp.websiteParam) {
+        this.indexParam(pp.websiteParam, pp.name);
+      }
+      if (Array.isArray(pp.seasons)) {
+        for (const s of pp.seasons) {
+          if (s.websiteParam) this.indexParam(s.websiteParam, s.name);
+        }
+      }
+      if (Array.isArray(pp.refList)) {
+        for (const r of pp.refList) {
+          if (r.websiteParam) this.indexParam(r.websiteParam, r.name);
+        }
+      }
+      if (Array.isArray(pp.dubbingList)) {
+        for (const d of pp.dubbingList) {
+          if (d.websiteParam) this.indexParam(d.websiteParam, d.name);
+        }
+      }
+    } catch {
+      // Ignore parse error
+    }
+  }
+
+  public async resolveCandidates(
+    candidates: string[],
+    fetcher: (param: string) => Promise<string | null>
+  ): Promise<string | null> {
+    for (const c of candidates) {
+      if (!c) continue;
+      const hashMatch = c.match(/([a-zA-Z0-9]{20,24}-[a-zA-Z0-9-]+)/);
+      if (hashMatch) return hashMatch[1];
+
+      const norm = this.normalize(c);
+      if (this.cache.has(norm)) return this.cache.get(norm)!;
+    }
+
+    for (const c of candidates) {
+      const norm = this.normalize(c);
+      if (!norm) continue;
+      for (const [key, param] of this.cache.entries()) {
+        if (key === norm || key.includes(norm) || norm.includes(key)) {
+          return param;
+        }
+      }
+    }
+
+    // Crawl queue
+    const queue = [...this.seeds];
+    while (queue.length > 0) {
+      const p = queue.shift()!;
+      if (this.visitedParams.has(p)) continue;
+      this.visitedParams.add(p);
+
+      const html = await fetcher(p);
+      if (html) {
+        this.harvestPageData(html);
+
+        for (const c of candidates) {
+          const norm = this.normalize(c);
+          if (!norm) continue;
+          for (const [key, param] of this.cache.entries()) {
+            if (key === norm || key.includes(norm) || norm.includes(key)) {
+              return param;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+}
+
+export const dynamicClusterResolver = new DynamicClusterResolver();
 
 export class DramasFreeProvider implements IStreamProvider {
   public readonly name = 'dramasfree';
@@ -47,7 +169,16 @@ export class DramasFreeProvider implements IStreamProvider {
   public lastDiagnostics: string[] = [];
 
   public formatSlug(slug: string): string {
-    return slug
+    if (!slug) return '';
+    const urlMatch = slug.match(/\/(?:drama|movie)\/([^\/\?#]+)/);
+    const raw = urlMatch ? urlMatch[1] : slug;
+
+    const hashMatch = raw.match(/([a-zA-Z0-9]{20,24}-[a-zA-Z0-9-]+)/);
+    if (hashMatch) {
+      return hashMatch[1];
+    }
+
+    return raw
       .toLowerCase()
       .trim()
       .replace(/[^\w\s-]/g, '')
@@ -82,6 +213,9 @@ export class DramasFreeProvider implements IStreamProvider {
         if (response.status === 200 && response.data) {
           this.lastErrorReason = undefined;
           this.lastDiagnostics.push(`[200 OK] ${mirror}`);
+          if (typeof response.data === 'string') {
+            dynamicClusterResolver.harvestPageData(response.data);
+          }
           return { data: response.data, status: response.status, mirror };
         } else {
           this.lastDiagnostics.push(`[${response.status}] ${mirror}`);
@@ -140,24 +274,36 @@ export class DramasFreeProvider implements IStreamProvider {
     const cleanSlug = this.formatSlug(dramaSlug);
     const epNum = String(episodeNumber).trim();
 
-    // 1. Resolve candidate slugs using KNOWN_SLUG_MAP and fallback parameters
+    // 1. Collect candidate slugs and titles
+    const candidates = [
+      dramaSlug,
+      cleanSlug,
+      fallbackSlug,
+      fallbackSlug ? this.formatSlug(fallbackSlug) : undefined,
+    ].filter(Boolean) as string[];
+
+    // 2. Resolve parameter dynamically through dynamic cluster resolver
+    const resolvedParam = await dynamicClusterResolver.resolveCandidates(candidates, async (param) => {
+      const res = await this.fetchWithMirrorFailover(`/es/detail/drama/${param}/1`);
+      return res && typeof res.data === 'string' ? res.data : null;
+    });
+
     const candidateSlugs: string[] = [];
-
-    const mapped = KNOWN_SLUG_MAP[cleanSlug] || (fallbackSlug ? KNOWN_SLUG_MAP[this.formatSlug(fallbackSlug)] : undefined);
-    if (mapped) candidateSlugs.push(mapped);
-
-    if (!candidateSlugs.includes(dramaSlug)) candidateSlugs.push(dramaSlug);
+    if (resolvedParam) candidateSlugs.push(resolvedParam);
     if (!candidateSlugs.includes(cleanSlug)) candidateSlugs.push(cleanSlug);
+    if (!candidateSlugs.includes(dramaSlug)) candidateSlugs.push(dramaSlug);
     if (fallbackSlug) {
       const cleanFallback = this.formatSlug(fallbackSlug);
-      if (!candidateSlugs.includes(fallbackSlug)) candidateSlugs.push(fallbackSlug);
       if (!candidateSlugs.includes(cleanFallback)) candidateSlugs.push(cleanFallback);
+      if (!candidateSlugs.includes(fallbackSlug)) candidateSlugs.push(fallbackSlug);
     }
 
     for (const slug of candidateSlugs) {
       const candidatePaths = [
         `/es/detail/drama/${slug}/${epNum}`,
         `/detail/drama/${slug}/${epNum}`,
+        `/es/detail/movie/${slug}`,
+        `/detail/movie/${slug}`,
         `/es/detail/drama/${slug}`,
         `/detail/drama/${slug}`,
       ];
@@ -214,7 +360,11 @@ export class DramasFreeProvider implements IStreamProvider {
         });
 
         if (targetEntry?.websiteParam) {
-          const targetPath = `/es/detail/drama/${targetEntry.websiteParam}/${episodeNumber}`;
+          const type = targetEntry.category === 0 ? 'movie' : 'drama';
+          const targetPath =
+            type === 'movie'
+              ? `/es/detail/movie/${targetEntry.websiteParam}`
+              : `/es/detail/drama/${targetEntry.websiteParam}/${episodeNumber}`;
           const targetRes = await this.fetchWithMirrorFailover(targetPath);
 
           if (targetRes && targetRes.status === 200 && targetRes.data) {

@@ -61,7 +61,112 @@ interface TotalAnimePlayerProps {
 }
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-const STANDARD_FALLBACK_QUALITIES = ['Auto', '1080p', '720p', '540p', '360p'];
+
+// Helper to extract numeric resolution value for sorting descending
+function getQualityNumericValue(quality: string): number {
+  if (!quality) return 0;
+  const lower = quality.toLowerCase().trim();
+  if (lower === 'auto') return 999999;
+  
+  const match = lower.match(/(\d{3,4})/);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+
+  if (lower.includes('4k') || lower.includes('2160')) return 2160;
+  if (lower.includes('2k') || lower.includes('1440')) return 1440;
+  if (lower.includes('fhd') || lower.includes('1080')) return 1080;
+  if (lower.includes('hd') || lower.includes('720')) return 720;
+  if (lower.includes('sd') || lower.includes('480')) return 480;
+  if (lower.includes('360')) return 360;
+  if (lower.includes('240')) return 240;
+
+  return 0;
+}
+
+// Clean label normalizer (e.g. "1080" -> "1080p", "720p" -> "720p", "Auto" -> "Auto")
+function cleanQualityLabel(qual: string): string {
+  if (!qual) return 'Auto';
+  const trimmed = qual.trim();
+  if (trimmed.toLowerCase() === 'auto') return 'Auto';
+  
+  const numMatch = trimmed.match(/^(\d{3,4})(?:p)?$/i);
+  if (numMatch) {
+    return `${numMatch[1]}p`;
+  }
+  
+  const lower = trimmed.toLowerCase();
+  if (lower === 'fhd' || lower === '1080') return '1080p';
+  if (lower === 'hd' || lower === '720') return '720p';
+  if (lower === 'sd' || lower === '480') return '480p';
+
+  return trimmed;
+}
+
+// Extract clean resolution string from Hls Level
+function extractHlsLevelLabel(
+  lvl: {
+    height?: number;
+    width?: number;
+    name?: string;
+    attrs?: Record<string, any>;
+    bitrate?: number;
+  },
+  idx: number,
+  totalLevels: number
+): string {
+  // 1. Direct height if available
+  if (lvl.height && lvl.height > 0) {
+    return `${lvl.height}p`;
+  }
+
+  // 2. Attributes resolution (e.g., RESOLUTION="1920x1080")
+  if (lvl.attrs && typeof lvl.attrs === 'object') {
+    const res = lvl.attrs.RESOLUTION || lvl.attrs.resolution;
+    if (res && typeof res === 'string' && res.includes('x')) {
+      const parts = res.split('x');
+      const h = parseInt(parts[1], 10);
+      if (!isNaN(h) && h > 0) return `${h}p`;
+    }
+  }
+
+  // 3. Width heuristics
+  if (lvl.width && lvl.width > 0) {
+    if (lvl.width >= 1920) return '1080p';
+    if (lvl.width >= 1280) return '720p';
+    if (lvl.width >= 960) return '540p';
+    if (lvl.width >= 840) return '480p';
+    if (lvl.width >= 640) return '360p';
+    return '240p';
+  }
+
+  // 4. Level name (e.g., "1080p", "HD_720")
+  if (lvl.name) {
+    const match = lvl.name.match(/(\d{3,4})p?/i);
+    if (match) return `${match[1]}p`;
+  }
+
+  // 5. Inferred from bitrate
+  if (lvl.bitrate && lvl.bitrate > 0) {
+    if (lvl.bitrate >= 3_500_000) return '1080p';
+    if (lvl.bitrate >= 1_800_000) return '720p';
+    if (lvl.bitrate >= 1_000_000) return '540p';
+    if (lvl.bitrate >= 500_000) return '480p';
+    return '360p';
+  }
+
+  // 6. Common standard ladder fallback
+  const standardLadders: Record<number, string[]> = {
+    1: ['1080p'],
+    2: ['1080p', '720p'],
+    3: ['1080p', '720p', '480p'],
+    4: ['1080p', '720p', '540p', '360p'],
+    5: ['1080p', '720p', '540p', '480p', '360p'],
+  };
+
+  const ladder = standardLadders[totalLevels] || ['1080p', '720p', '540p', '480p', '360p'];
+  return ladder[idx] || `Calidad ${idx + 1}`;
+}
 
 export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   episodeId,
@@ -306,7 +411,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         setIsBuffering(false);
         if (data?.levels && data.levels.length > 0) {
           const parsed = data.levels.map((lvl, idx) => ({
-            label: lvl.height ? `${lvl.height}p` : `Nivel ${idx + 1}`,
+            label: extractHlsLevelLabel(lvl, idx, data.levels.length),
             level: idx,
           }));
           setHlsQualityLevels(parsed);
@@ -363,6 +468,20 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
       hls.on(Hls.Events.LEVEL_LOADED, () => {
         setIsBuffering(false);
+        if (hls.levels && hls.levels.length > 0) {
+          const hasResolvedHeights = hls.levels.some((l) => l.height > 0);
+          if (hasResolvedHeights) {
+            const updated = hls.levels.map((lvl, idx) => ({
+              label: extractHlsLevelLabel(lvl, idx, hls.levels.length),
+              level: idx,
+            }));
+            setHlsQualityLevels((prev) => {
+              const prevStr = prev.map((p) => `${p.level}:${p.label}`).join('|');
+              const nextStr = updated.map((p) => `${p.level}:${p.label}`).join('|');
+              return prevStr === nextStr ? prev : updated;
+            });
+          }
+        }
       });
 
       hls.on(Hls.Events.ERROR, (_, data) => {
@@ -841,27 +960,47 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     lastTouchTimeRef.current = { time: now, x: touch.clientX };
   };
 
-  // Derive all available quality options seamlessly
+  // Derive all available quality options cleanly: Cleaned and Sorted Descending (1080p > 720p > 540p > 360p)
   const qualityOptions = useMemo(() => {
-    const set = new Set<string>(['Auto']);
+    const qualitiesMap = new Map<string, number>();
 
     // 1. From HLS levels
     if (hlsQualityLevels.length > 0) {
-      hlsQualityLevels.forEach((lvl) => set.add(lvl.label));
+      hlsQualityLevels.forEach((lvl) => {
+        const cleaned = cleanQualityLabel(lvl.label);
+        if (cleaned && cleaned.toLowerCase() !== 'auto') {
+          qualitiesMap.set(cleaned, getQualityNumericValue(cleaned));
+        }
+      });
     }
 
     // 2. From availableSources in active language
     const currentLangSources = availableSources.filter((s) => s.language === selectedLanguage);
     currentLangSources.forEach((s) => {
-      if (s.quality) set.add(s.quality);
+      if (s.quality) {
+        const cleaned = cleanQualityLabel(s.quality);
+        if (cleaned && cleaned.toLowerCase() !== 'auto') {
+          qualitiesMap.set(cleaned, getQualityNumericValue(cleaned));
+        }
+      }
     });
 
-    // 3. Fallback ladder if only Auto exists
-    if (set.size <= 1) {
-      STANDARD_FALLBACK_QUALITIES.forEach((q) => set.add(q));
+    // 3. Fallback ladder if no specific qualities detected
+    if (qualitiesMap.size === 0) {
+      ['1080p', '720p', '540p', '360p'].forEach((q) => {
+        qualitiesMap.set(q, getQualityNumericValue(q));
+      });
     }
 
-    return Array.from(set);
+    // Sort by numerical resolution descending (1080p -> 720p -> 540p -> 480p -> 360p)
+    const sorted = Array.from(qualitiesMap.keys()).sort((a, b) => {
+      const valA = qualitiesMap.get(a) || getQualityNumericValue(a);
+      const valB = qualitiesMap.get(b) || getQualityNumericValue(b);
+      return valB - valA;
+    });
+
+    // 'Auto' is always the primary/first option
+    return ['Auto', ...sorted];
   }, [hlsQualityLevels, availableSources, selectedLanguage]);
 
   // Subtitle selection handler
@@ -902,7 +1041,10 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       if (qual === 'Auto') {
         hlsRef.current.currentLevel = -1;
       } else {
-        const hlsMatch = hlsQualityLevels.find((lvl) => lvl.label === qual);
+        const targetVal = getQualityNumericValue(qual);
+        const hlsMatch = hlsQualityLevels.find((lvl) => {
+          return cleanQualityLabel(lvl.label) === qual || getQualityNumericValue(lvl.label) === targetVal;
+        });
         if (hlsMatch) {
           hlsRef.current.currentLevel = hlsMatch.level;
         }
@@ -1565,20 +1707,35 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                       <div className="text-[10px] uppercase font-bold text-slate-400 px-2 pb-1 border-b border-slate-800">
                         Calidad de Video
                       </div>
-                      {qualityOptions.map((qual) => (
-                        <button
-                          key={qual}
-                          onClick={() => handleSelectQuality(qual)}
-                          className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
-                            activeQuality === qual
-                              ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
-                              : 'hover:bg-white/10 text-slate-200'
-                          }`}
-                        >
-                          <span>{qual}</span>
-                          {activeQuality === qual && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                        </button>
-                      ))}
+                      {qualityOptions.map((qual) => {
+                        const isSelected = activeQuality === qual;
+                        return (
+                          <button
+                            key={qual}
+                            onClick={() => handleSelectQuality(qual)}
+                            className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                              isSelected
+                                ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                                : 'hover:bg-white/10 text-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span>{qual}</span>
+                              {qual === '1080p' && (
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono font-bold">
+                                  FHD
+                                </span>
+                              )}
+                              {qual === '720p' && (
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-bold">
+                                  HD
+                                </span>
+                              )}
+                            </div>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
 
