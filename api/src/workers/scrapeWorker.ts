@@ -157,10 +157,17 @@ export class ScrapeWorker {
 
           if (servers.length === 0) {
             failed++;
+            const { dramasFreeProvider } = await import('../scrapers/providers/dramasfree.provider.js');
+            const reason = dramasFreeProvider.lastErrorReason || 'Sin respuesta válida de los espejos';
+            const isCloudflare = reason.includes('403') || reason.includes('Cloudflare');
+
             jobLog.push({
-              level: 'warn',
+              level: isCloudflare ? 'error' : 'warn',
               episode_number: ep.episode_number,
-              message: `Episodio ${ep.episode_number}: Sin fuentes encontradas en los espejos del cluster`,
+              message: `Episodio ${ep.episode_number}: ${isCloudflare ? 'Bloqueo por Cloudflare Turnstile' : 'Sin fuentes en catálogo'}`,
+              detail: isCloudflare
+                ? 'Cloudflare rechazó las peticiones en los 8 espejos. Sincroniza la cookie cf_clearance en el Panel Admin para activar el scraping.'
+                : `Razón técnica: ${reason}`,
               timestamp: new Date().toISOString(),
             });
           } else {

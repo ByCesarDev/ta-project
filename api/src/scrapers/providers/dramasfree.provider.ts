@@ -21,6 +21,7 @@ export class DramasFreeProvider implements IStreamProvider {
   public readonly name = 'dramasfree';
   public readonly baseUrl: string = CLUSTER_MIRRORS[0];
   public readonly isEnabled = true;
+  public lastErrorReason?: string;
   private client: AxiosInstance;
 
   constructor() {
@@ -51,12 +52,13 @@ export class DramasFreeProvider implements IStreamProvider {
    */
   private async fetchWithMirrorFailover(path: string): Promise<{ data: any; status: number } | null> {
     const cfHeaders = cloudflareCookieService.getHeaders();
+    let got403Count = 0;
 
     for (const mirror of CLUSTER_MIRRORS) {
       try {
         const url = `${mirror}${path.startsWith('/') ? '' : '/'}${path}`;
         const response = await axios.get(url, {
-          timeout: 7000,
+          timeout: 6000,
           headers: {
             ...cfHeaders,
             Referer: `${mirror}/`,
@@ -65,13 +67,23 @@ export class DramasFreeProvider implements IStreamProvider {
         });
 
         if (response.status === 200 && response.data) {
+          this.lastErrorReason = undefined;
           return { data: response.data, status: response.status };
+        } else if (response.status === 403) {
+          got403Count++;
         }
       } catch {
         // Try next mirror in pool
         continue;
       }
     }
+
+    if (got403Count > 0) {
+      this.lastErrorReason = '403: Bloqueado por Cloudflare Turnstile (Requiere cookie cf_clearance activa)';
+    } else {
+      this.lastErrorReason = '404: Ruta no encontrada en los 8 mirrors del cluster';
+    }
+
     return null;
   }
 
