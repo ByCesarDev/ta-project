@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase.js';
 import { Table, Column } from '../components/common/Table.js';
 import { Modal } from '../components/common/Modal.js';
 import { AuditLog } from '../types/index.js';
-import { formatDate } from '../lib/utils.js';
+import { formatDate, getAvatarUrl } from '../lib/utils.js';
 
 export const AuditLogsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -82,7 +82,7 @@ export const AuditLogsPage: React.FC = () => {
         <div className="flex items-center gap-2">
           {log.profiles?.avatar_url ? (
             <img
-              src={log.profiles.avatar_url}
+              src={getAvatarUrl(log.profiles.avatar_url)}
               alt=""
               className="w-6 h-6 rounded-full object-cover border border-slate-700"
             />

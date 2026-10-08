@@ -9,6 +9,7 @@ import {
   Shield,
   ExternalLink,
   Tv,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { cn } from '../../lib/utils.js';
@@ -26,6 +27,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { name: 'Catálogo de Animes', href: '/animes', icon: Film },
     { name: 'Cola de Scraping', href: '/jobs', icon: Cpu },
     { name: 'Alertas de Emisión', href: '/notifications', icon: Bell },
+    { name: 'Gestión de Avatares', href: '/avatars', icon: Sparkles },
   ];
 
   const adminNavigation = [

@@ -16,8 +16,16 @@ export type SeriesRow = Database['public']['Tables']['series']['Row'];
 export type SeriesSeasonRow = Database['public']['Tables']['series_seasons']['Row'];
 export type SeriesEntryRow = Database['public']['Tables']['series_entries']['Row'];
 export type AnimeSourceBindingRow = Database['public']['Tables']['anime_source_bindings']['Row'];
-export type SeriesSlugRedirectRow = Database['public']['Tables']['series_slug_redirects']['Row'];
 export type UserFavoriteRow = Database['public']['Tables']['user_favorites']['Row'];
+
+export interface AvatarItem {
+  id: number;
+  filename: string;
+  is_default: boolean;
+  url: string;
+  created_at: string;
+  updated_at: string;
+}
 
 export type SeasonKind = 'season' | 'movie' | 'special' | 'ova';
 

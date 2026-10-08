@@ -12,6 +12,7 @@ import { JobsPage } from './pages/JobsPage.js';
 import { NotificationsPage } from './pages/NotificationsPage.js';
 import { UsersPage } from './pages/UsersPage.js';
 import { AuditLogsPage } from './pages/AuditLogsPage.js';
+import { AvatarsPage } from './pages/AvatarsPage.js';
 
 export const App: React.FC = () => {
   return (
@@ -29,6 +30,7 @@ export const App: React.FC = () => {
               <Route path="/animes/:id/episodes" element={<EpisodesPage />} />
               <Route path="/jobs" element={<JobsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/avatars" element={<AvatarsPage />} />
 
               {/* Admin-Only Routes */}
               <Route element={<ProtectedRoute requireAdmin />}>

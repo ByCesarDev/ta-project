@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.js';
 import { Table, Column } from '../components/common/Table.js';
 import { UserWithRole, UserRole, UserStatus } from '../types/index.js';
-import { formatDate } from '../lib/utils.js';
+import { formatDate, getAvatarUrl } from '../lib/utils.js';
 
 export const UsersPage: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -122,7 +122,7 @@ export const UsersPage: React.FC = () => {
         <div className="flex items-center gap-3">
           {user.avatar_url ? (
             <img
-              src={user.avatar_url}
+              src={getAvatarUrl(user.avatar_url)}
               alt={user.username}
               className="w-10 h-10 rounded-xl object-cover border border-slate-700/60"
             />

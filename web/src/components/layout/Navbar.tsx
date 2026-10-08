@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '../common/Button.js';
+import { getAvatarUrl } from '../../lib/utils.js';
 
 export const Navbar: React.FC = () => {
   const { user, profile, signOut } = useAuth();
@@ -97,7 +98,7 @@ export const Navbar: React.FC = () => {
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-xs shadow-md border border-indigo-400/30 overflow-hidden">
                   {profile?.avatar_url ? (
                     <img
-                      src={profile.avatar_url}
+                      src={getAvatarUrl(profile.avatar_url)}
                       alt={profile.username}
                       className="w-full h-full object-cover"
                     />

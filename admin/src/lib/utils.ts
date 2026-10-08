@@ -40,3 +40,29 @@ export function formatRelativeTime(dateString?: string | null): string {
     return dateString;
   }
 }
+
+/**
+ * Universal Avatar URL resolver with privacy proxy support
+ */
+export function getAvatarUrl(avatarPathOrUrl?: string | null): string {
+  const rawApiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:4000';
+  const apiBase = rawApiUrl.endsWith('/api/v1') ? rawApiUrl : `${rawApiUrl}/api/v1`;
+
+  if (!avatarPathOrUrl || avatarPathOrUrl.trim() === '') {
+    return `${apiBase}/avatars/default-avatar.png`;
+  }
+
+  // If already an external URL (e.g. Google OAuth photo or custom host)
+  if (avatarPathOrUrl.startsWith('http://') || avatarPathOrUrl.startsWith('https://')) {
+    if (avatarPathOrUrl.includes('/storage/v1/object/public/avatars/')) {
+      const parts = avatarPathOrUrl.split('/storage/v1/object/public/avatars/');
+      const filename = parts[1]?.split('?')[0];
+      return `${apiBase}/avatars/${filename}`;
+    }
+    return avatarPathOrUrl;
+  }
+
+  // If it's a relative filename stored in DB (e.g. 'user-1.jpeg', 'default-avatar.png')
+  const cleanFilename = avatarPathOrUrl.startsWith('/') ? avatarPathOrUrl.slice(1) : avatarPathOrUrl;
+  return `${apiBase}/avatars/${cleanFilename}`;
+}

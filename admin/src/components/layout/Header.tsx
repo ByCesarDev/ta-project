@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext.js';
 import { Badge } from '../common/Badge.js';
 import { CloudflareManagerModal } from '../cloudflare/CloudflareManagerModal.js';
 import { apiClient } from '../../lib/api.js';
+import { getAvatarUrl } from '../../lib/utils.js';
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -64,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle }) => {
         <div className="flex items-center gap-3">
           {profile?.avatar_url ? (
             <img
-              src={profile.avatar_url}
+              src={getAvatarUrl(profile.avatar_url)}
               alt={profile.username}
               className="w-10 h-10 rounded-xl object-cover border border-slate-700/80"
             />

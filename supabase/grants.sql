@@ -50,8 +50,8 @@ GRANT INSERT, UPDATE, DELETE ON TABLE
     public.watch_later
 TO authenticated;
 
--- 3.3 Privilegios por Columna en 'profiles' (Evita modificación de ID o timestamps)
-GRANT UPDATE (username, avatar_url, bio) ON TABLE public.profiles TO authenticated;
+-- 3.3 Privilegios por Columna en 'profiles' (Evita modificación de ID)
+GRANT UPDATE (username, avatar_url, bio, updated_at) ON TABLE public.profiles TO authenticated;
 
 -- 3.4 Gestión Administrativa de Roles y Settings (Restringido por RLS a Admin)
 GRANT INSERT, UPDATE, DELETE ON TABLE public.user_roles TO authenticated;

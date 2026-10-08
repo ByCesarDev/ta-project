@@ -599,7 +599,7 @@ GRANT INSERT, UPDATE, DELETE ON TABLE
     public.watch_later 
 TO authenticated;
 
-GRANT UPDATE (username, avatar_url, bio) ON TABLE public.profiles TO authenticated;
+GRANT UPDATE (username, avatar_url, bio, updated_at) ON TABLE public.profiles TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON TABLE public.user_roles TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON TABLE public.app_settings TO authenticated;
 

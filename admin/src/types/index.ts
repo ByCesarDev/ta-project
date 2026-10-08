@@ -44,6 +44,15 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface AvatarItem {
+  id: number;
+  filename: string;
+  is_default: boolean;
+  url: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UserRoleRecord {
   user_id: string;
   role: UserRole;
