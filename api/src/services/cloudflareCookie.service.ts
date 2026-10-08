@@ -4,7 +4,9 @@ import puppeteer from 'puppeteer-core';
 
 const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const STORAGE_FILE = path.join(process.cwd(), 'api', '.cf_clearance.json');
+const STORAGE_FILE = process.cwd().endsWith('api')
+  ? path.join(process.cwd(), '.cf_clearance.json')
+  : path.join(process.cwd(), 'api', '.cf_clearance.json');
 
 export interface ClearanceData {
   cookie: string;
@@ -48,6 +50,10 @@ export class CloudflareCookieService {
     };
     this.memoryCache = data;
     try {
+      const dir = path.dirname(STORAGE_FILE);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
       fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2), 'utf8');
     } catch (err: any) {
       console.warn('[CloudflareCookieService] Error writing to disk:', err.message);
