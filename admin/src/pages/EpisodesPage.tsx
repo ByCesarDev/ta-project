@@ -16,8 +16,10 @@ import { Button } from '../components/common/Button.js';
 import { Badge } from '../components/common/Badge.js';
 import { Table, Column } from '../components/common/Table.js';
 import { EpisodeSourcesModal } from '../components/episodes/EpisodeSourcesModal.js';
+import { ScrapeAnimeModal } from '../components/animes/ScrapeAnimeModal.js';
 import { Episode, Anime } from '../types/index.js';
 import { useAuth } from '../context/AuthContext.js';
+import { Sparkles } from 'lucide-react';
 
 export const EpisodesPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +28,8 @@ export const EpisodesPage: React.FC = () => {
 
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
   const [isSourcesModalOpen, setIsSourcesModalOpen] = useState(false);
+  const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
+  const [targetEpisodeNumberToScrape, setTargetEpisodeNumberToScrape] = useState<number | undefined>(undefined);
   const [isCreatingEpisode, setIsCreatingEpisode] = useState(false);
 
   // Fetch Anime details
@@ -176,6 +180,19 @@ export const EpisodesPage: React.FC = () => {
       cell: (ep) => (
         <div className="flex items-center justify-end gap-2">
           <Button
+            variant="ghost"
+            size="sm"
+            icon={<Sparkles className="w-3.5 h-3.5 text-indigo-400" />}
+            onClick={() => {
+              setTargetEpisodeNumberToScrape(ep.episode_number);
+              setIsScrapeModalOpen(true);
+            }}
+            title="Scrapear este episodio con Seekee/Cluster"
+          >
+            Scrapear
+          </Button>
+
+          <Button
             variant="primary"
             size="sm"
             icon={<Server className="w-3.5 h-3.5" />}
@@ -237,14 +254,26 @@ export const EpisodesPage: React.FC = () => {
             </div>
           </div>
 
-          <Button
-            variant="primary"
-            icon={<Plus className="w-4 h-4" />}
-            isLoading={isCreatingEpisode}
-            onClick={handleCreateNextEpisode}
-          >
-            Añadir Siguiente Episodio
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="secondary"
+              icon={<Sparkles className="w-4 h-4 text-indigo-400" />}
+              onClick={() => {
+                setTargetEpisodeNumberToScrape(undefined);
+                setIsScrapeModalOpen(true);
+              }}
+            >
+              Scrapear Anime
+            </Button>
+            <Button
+              variant="primary"
+              icon={<Plus className="w-4 h-4" />}
+              isLoading={isCreatingEpisode}
+              onClick={handleCreateNextEpisode}
+            >
+              Añadir Siguiente Episodio
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -262,6 +291,15 @@ export const EpisodesPage: React.FC = () => {
         onClose={() => setIsSourcesModalOpen(false)}
         episode={selectedEpisode}
         animeName={anime?.name || ''}
+        onSuccess={() => refetch()}
+      />
+
+      {/* Scrape Anime / Episode Modal */}
+      <ScrapeAnimeModal
+        isOpen={isScrapeModalOpen}
+        onClose={() => setIsScrapeModalOpen(false)}
+        anime={anime || null}
+        targetEpisodeNumber={targetEpisodeNumberToScrape}
         onSuccess={() => refetch()}
       />
     </div>

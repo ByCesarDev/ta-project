@@ -11,13 +11,13 @@ import {
   Eye,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase.js';
-import { apiClient } from '../lib/api.js';
 import { Button } from '../components/common/Button.js';
 import { Badge } from '../components/common/Badge.js';
 import { Table, Column } from '../components/common/Table.js';
 import { ClaimAnimeButton } from '../components/animes/ClaimAnimeButton.js';
 import { AniListImportModal } from '../components/animes/AniListImportModal.js';
 import { AnimeFormModal } from '../components/animes/AnimeFormModal.js';
+import { ScrapeAnimeModal } from '../components/animes/ScrapeAnimeModal.js';
 import { Anime, AnimeStatus } from '../types/index.js';
 
 export const AnimesPage: React.FC = () => {
@@ -25,8 +25,9 @@ export const AnimesPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isAniListModalOpen, setIsAniListModalOpen] = useState(false);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
   const [selectedAnimeToEdit, setSelectedAnimeToEdit] = useState<Anime | null>(null);
-  const [triggeringJobId, setTriggeringJobId] = useState<number | null>(null);
+  const [selectedAnimeToScrape, setSelectedAnimeToScrape] = useState<Anime | null>(null);
 
   // Query Animes from Supabase
   const { data: animes, isLoading, refetch } = useQuery({
@@ -57,22 +58,6 @@ export const AnimesPage: React.FC = () => {
       (a.title_romaji && a.title_romaji.toLowerCase().includes(q))
     );
   });
-
-  const handleStartScrapeJob = async (anime: Anime) => {
-    setTriggeringJobId(anime.id);
-    try {
-      await apiClient.post('/jobs/scrape', {
-        animeId: anime.id,
-        totalEpisodes: anime.episodes,
-      });
-      alert(`Job de scraping encolado con éxito para ${anime.name}.`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Error al encolar job';
-      alert(`Error: ${message}`);
-    } finally {
-      setTriggeringJobId(null);
-    }
-  };
 
   const columns: Column<Anime>[] = [
     {
@@ -158,16 +143,18 @@ export const AnimesPage: React.FC = () => {
             </Button>
           </Link>
 
-          {/* Trigger Scrape Job */}
+          {/* Trigger Scrape Modal */}
           <Button
             variant="secondary"
             size="sm"
-            isLoading={triggeringJobId === anime.id}
             icon={<Cpu className="w-3.5 h-3.5 text-amber-400" />}
-            onClick={() => handleStartScrapeJob(anime)}
-            title="Iniciar job de scraping automático de servidores"
+            onClick={() => {
+              setSelectedAnimeToScrape(anime);
+              setIsScrapeModalOpen(true);
+            }}
+            title="Configurar e iniciar scraping de fuentes"
           >
-            Scrape
+            Scrapear
           </Button>
 
           {/* Edit Anime */}
@@ -269,6 +256,17 @@ export const AnimesPage: React.FC = () => {
         isOpen={isFormModalOpen}
         onClose={() => setIsFormModalOpen(false)}
         animeToEdit={selectedAnimeToEdit}
+        onSuccess={() => refetch()}
+      />
+
+      {/* Scrape Modal */}
+      <ScrapeAnimeModal
+        isOpen={isScrapeModalOpen}
+        onClose={() => {
+          setIsScrapeModalOpen(false);
+          setSelectedAnimeToScrape(null);
+        }}
+        anime={selectedAnimeToScrape}
         onSuccess={() => refetch()}
       />
     </div>

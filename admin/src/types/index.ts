@@ -3,7 +3,37 @@ export type UserStatus = 'active' | 'suspended' | 'banned';
 export type AnimeStatus = 'emision' | 'finalizado' | 'proximamente';
 export type EpisodeStatus = 'pending' | 'available' | 'unavailable';
 export type StreamLanguage = 'sub' | 'dub';
-export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'partial' | 'failed';
+
+export interface SubtitleTrack {
+  id: string;
+  language: string;
+  label: string;
+  url: string;
+  isDefault?: boolean;
+}
+
+export interface VariantSummary {
+  variant_id: string;
+  name: string;
+  audio_language: string;
+  language_label: string;
+  category?: number;
+  website_param: string;
+  episodes_count?: number;
+  is_dub: boolean;
+}
+
+export interface SourcePreviewResult {
+  source_url: string;
+  source_id: string;
+  title: string;
+  cover_image?: string;
+  total_episodes_found: number;
+  published_episodes: number[];
+  variants: VariantSummary[];
+  category_name: 'drama' | 'movie';
+}
 
 export interface Profile {
   id: string;
@@ -60,6 +90,10 @@ export interface Anime {
   start_date?: string;
   end_date?: string;
   views_count: number;
+  source_url?: string | null;
+  source_id?: string | null;
+  source_type?: string;
+  discovered_variants?: VariantSummary[];
   genres?: Genre[];
   created_at: string;
   updated_at: string;
@@ -69,6 +103,7 @@ export interface Episode {
   id: number;
   anime_id: number;
   episode_number: number;
+  source_episode_id?: string | null;
   title?: string;
   description?: string;
   duration?: number;
@@ -90,9 +125,14 @@ export interface EpisodeSource {
   embed_url: string;
   direct_stream_url?: string | null;
   language: StreamLanguage;
+  audio_variant?: string;
+  audio_language?: string;
+  language_label?: string | null;
+  source_key?: string;
   quality: string;
   priority: number;
   is_active: boolean;
+  subtitles?: SubtitleTrack[];
   last_verified_at?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -105,7 +145,12 @@ export interface ScrapeJob {
   total_episodes: number;
   processed_episodes: number;
   failed_episodes: number;
-  error_log: { episode_number?: number; error?: string; timestamp?: string; message?: string }[];
+  source_url?: string | null;
+  source_id?: string | null;
+  frozen_config?: Record<string, any>;
+  target_mode?: 'all' | 'single' | 'pending';
+  target_episode_number?: number | null;
+  error_log: { episode_number?: number; error?: string; timestamp?: string; message?: string; level?: string; detail?: string }[];
   requested_by?: string;
   created_at: string;
   updated_at: string;

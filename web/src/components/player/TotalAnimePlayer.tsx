@@ -53,6 +53,8 @@ interface TotalAnimePlayerProps {
   availableLanguages?: StreamLanguage[];
   selectedLanguage?: StreamLanguage;
   onSelectLanguage?: (lang: StreamLanguage) => void;
+  selectedAudioVariant?: string;
+  onSelectAudioVariant?: (variant: string) => void;
   selectedQuality?: string;
   onSelectQuality?: (quality: string) => void;
   subtitles?: SubtitleTrack[];
@@ -177,6 +179,8 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   availableLanguages = ['sub', 'dub'],
   selectedLanguage = 'sub',
   onSelectLanguage,
+  selectedAudioVariant,
+  onSelectAudioVariant,
   selectedQuality = 'Auto',
   onSelectQuality,
   subtitles = [],
@@ -974,8 +978,13 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       });
     }
 
-    // 2. From availableSources in active language
-    const currentLangSources = availableSources.filter((s) => s.language === selectedLanguage);
+    // 2. From availableSources in active language or variant
+    const currentLangSources = availableSources.filter((s) => {
+      if (selectedAudioVariant) {
+        return (s.audio_variant || s.language) === selectedAudioVariant;
+      }
+      return s.language === selectedLanguage;
+    });
     currentLangSources.forEach((s) => {
       if (s.quality) {
         const cleaned = cleanQualityLabel(s.quality);
@@ -1001,7 +1010,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
     // 'Auto' is always the primary/first option
     return ['Auto', ...sorted];
-  }, [hlsQualityLevels, availableSources, selectedLanguage]);
+  }, [hlsQualityLevels, availableSources, selectedLanguage, selectedAudioVariant]);
 
   // Subtitle selection handler
   const handleSelectSubtitle = (subId: string | null) => {
@@ -1405,10 +1414,17 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                           <span>Pista de audio</span>
                         </div>
                         <div className="flex items-center gap-1 text-slate-400 text-[11px]">
-                          <span>
-                            {selectedLanguage === 'dub' ? 'Doblaje Latino' : 'Subtitulado'}
+                          <span className="max-w-[110px] truncate">
+                            {(() => {
+                              const found = availableSources.find(
+                                (s) => (selectedAudioVariant && (s.audio_variant === selectedAudioVariant || s.language === selectedAudioVariant)) ||
+                                       (!selectedAudioVariant && s.language === selectedLanguage)
+                              );
+                              if (found?.language_label) return found.language_label;
+                              return selectedLanguage === 'dub' ? 'Español Latino' : 'Japonés (Sub)';
+                            })()}
                           </span>
-                          <ChevronRight className="w-3.5 h-3.5" />
+                          <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />
                         </div>
                       </button>
 
@@ -1473,37 +1489,72 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                         Seleccionar Audio
                       </div>
 
-                      {/* Source-level languages */}
-                      {availableLanguages.map((lang) => {
-                        const isSelected = selectedLanguage === lang;
-                        const label =
-                          lang === 'dub'
-                            ? 'Doblaje (Español Latino)'
-                            : 'Subtitulado (Original/Japonés)';
-                        return (
-                          <button
-                            key={lang}
-                            onClick={() => {
-                              onSelectLanguage?.(lang);
-                              setSettingsTab('main');
-                            }}
-                            className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
-                              isSelected
-                                ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
-                                : 'hover:bg-white/10 text-slate-200'
-                            }`}
-                          >
-                            <span>{label}</span>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                          </button>
-                        );
-                      })}
+                      {/* Source-level audio variants */}
+                      {(() => {
+                        const seen = new Set<string>();
+                        const options: { key: string; label: string; language: StreamLanguage }[] = [];
+                        
+                        if (availableSources && availableSources.length > 0) {
+                          for (const s of availableSources) {
+                            const key = s.audio_variant || s.language || 'default';
+                            if (!seen.has(key)) {
+                              seen.add(key);
+                              let label = s.language_label;
+                              if (!label) {
+                                if (s.language === 'dub') label = 'Español Latino (Doblaje)';
+                                else if (s.language === 'sub') label = 'Japonés (Subtitulado)';
+                                else label = s.audio_language || 'Audio Principal';
+                              }
+                              options.push({ key, label, language: s.language || 'sub' });
+                            }
+                          }
+                        } else {
+                          availableLanguages.forEach((lang) => {
+                            options.push({
+                              key: lang,
+                              label: lang === 'dub' ? 'Doblaje (Español Latino)' : 'Subtitulado (Japonés)',
+                              language: lang,
+                            });
+                          });
+                        }
 
-                      {/* Embedded HLS audio tracks if stream has multiple */}
+                        return options.map((opt) => {
+                          const isSelected = selectedAudioVariant
+                            ? selectedAudioVariant === opt.key
+                            : selectedLanguage === opt.language;
+
+                          return (
+                            <button
+                              key={opt.key}
+                              onClick={() => {
+                                if (onSelectAudioVariant) {
+                                  onSelectAudioVariant(opt.key);
+                                } else if (onSelectLanguage) {
+                                  onSelectLanguage(opt.language);
+                                }
+                                setSettingsTab('main');
+                              }}
+                              className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors ${
+                                isSelected
+                                  ? 'bg-indigo-600/30 text-indigo-300 font-semibold border border-indigo-500/30'
+                                  : 'hover:bg-white/10 text-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 text-left">
+                                <Volume2 className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                                <span className="text-xs">{opt.label}</span>
+                              </div>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />}
+                            </button>
+                          );
+                        });
+                      })()}
+
+                      {/* Embedded HLS audio tracks if stream has multiple internal audio tracks */}
                       {hlsAudioTracks.length > 1 && (
                         <>
                           <div className="text-[10px] uppercase font-bold text-slate-400 px-2 pt-2 pb-1 border-b border-slate-800">
-                            Pistas HLS
+                            Pistas HLS Internas
                           </div>
                           {hlsAudioTracks.map((track) => {
                             const isSelected = activeHlsAudioTrack === track.id;

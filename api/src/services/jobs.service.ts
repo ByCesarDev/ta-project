@@ -1,26 +1,52 @@
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
 import { env } from '../config/env.js';
-import { JobStatus, ScrapeJob } from '../types/index.js';
+import { JobStatus, ScrapeJob, SourcePreviewResult } from '../types/index.js';
+import { videoScraper } from '../scrapers/videoScraper.service.js';
+
+export interface CreateJobOptions {
+  animeId: number;
+  requestedBy?: string;
+  totalEpisodes?: number;
+  sourceUrl?: string;
+  sourceId?: string;
+  frozenConfig?: Record<string, any>;
+  targetMode?: 'all' | 'single' | 'pending';
+  targetEpisodeNumber?: number;
+}
 
 export class JobsService {
   /**
    * Creates a new scrape job in pending state
    */
   public async createJob(
-    animeId: number,
+    optsOrAnimeId: CreateJobOptions | number,
     requestedBy?: string,
     totalEpisodes: number = 0
   ): Promise<ScrapeJob> {
+    const opts: CreateJobOptions =
+      typeof optsOrAnimeId === 'number'
+        ? {
+            animeId: optsOrAnimeId,
+            requestedBy,
+            totalEpisodes,
+          }
+        : optsOrAnimeId;
+
     const { data, error } = await supabaseAdmin
       .from('scrape_jobs')
       .insert({
-        anime_id: animeId,
+        anime_id: opts.animeId,
         status: 'pending' as JobStatus,
-        total_episodes: totalEpisodes,
+        total_episodes: opts.totalEpisodes || 0,
         processed_episodes: 0,
         failed_episodes: 0,
         error_log: [],
-        requested_by: requestedBy || null,
+        requested_by: opts.requestedBy || null,
+        source_url: opts.sourceUrl || null,
+        source_id: opts.sourceId || null,
+        frozen_config: opts.frozenConfig || {},
+        target_mode: opts.targetMode || 'all',
+        target_episode_number: opts.targetEpisodeNumber ?? null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -32,6 +58,13 @@ export class JobsService {
     }
 
     return data as ScrapeJob;
+  }
+
+  /**
+   * Previews a source without creating a job
+   */
+  public async previewSource(sourceUrl: string): Promise<SourcePreviewResult | null> {
+    return videoScraper.previewSource(sourceUrl);
   }
 
   /**
@@ -53,13 +86,11 @@ export class JobsService {
 
   /**
    * Retrieves next pending job and marks it as processing with atomic lease and zombie recovery
-   * In production, fails closed if atomic RPC fails.
    */
   public async claimNextPendingJob(workerId: string = 'worker-default'): Promise<ScrapeJob | null> {
     const isProd = env.NODE_ENV === 'production';
 
     try {
-      // 1. Primary path: PostgreSQL RPC with atomic FOR UPDATE SKIP LOCKED & zombie rescue
       const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('claim_next_scrape_job', {
         p_worker_id: workerId,
       });
@@ -72,16 +103,15 @@ export class JobsService {
       } else if (Array.isArray(rpcData) && rpcData.length > 0) {
         return rpcData[0] as ScrapeJob;
       } else {
-        return null; // No pending jobs available
+        return null;
       }
     } catch (err) {
       if (isProd) {
         throw err;
       }
-      // Fall through to development/test fallback only
     }
 
-    // 2. Fallback (Development & Test only): Resilient zombie recovery using COALESCE(heartbeat_at, locked_at)
+    // Fallback for development
     try {
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       await supabaseAdmin
@@ -95,10 +125,9 @@ export class JobsService {
         .eq('status', 'processing')
         .lt('locked_at', tenMinutesAgo);
     } catch {
-      // ignore fallback error
+      // ignore
     }
 
-    // 3. Select oldest pending job
     const { data: pendingJobs, error: selectError } = await supabaseAdmin
       .from('scrape_jobs')
       .select('*')
@@ -111,17 +140,15 @@ export class JobsService {
     }
 
     const job = pendingJobs[0];
-
-    // Atomically transition status from pending to processing with lease
     const now = new Date().toISOString();
     const { data: updatedJob, error: updateError } = await supabaseAdmin
       .from('scrape_jobs')
       .update({
         status: 'processing' as JobStatus,
+        attempts: (job.attempts || 0) + 1,
         locked_at: now,
         locked_by: workerId,
         heartbeat_at: now,
-        attempts: (job.attempts || 0) + 1,
         updated_at: now,
       })
       .eq('id', job.id)
@@ -130,46 +157,37 @@ export class JobsService {
       .maybeSingle();
 
     if (updateError || !updatedJob) {
-      return null; // Another worker claimed it first
+      return null;
     }
 
     return updatedJob as ScrapeJob;
   }
 
   /**
-   * Updates worker heartbeat for an in-flight job lease
+   * Heartbeat updater with worker fencing
    */
-  public async updateHeartbeat(jobId: string, workerId: string = 'worker-default'): Promise<boolean> {
+  public async updateHeartbeat(jobId: string, workerId: string): Promise<boolean> {
     try {
-      const { data: rpcSuccess, error: rpcError } = await supabaseAdmin.rpc('record_job_heartbeat', {
-        p_job_id: jobId,
-        p_worker_id: workerId,
-      });
+      const { data, error } = await supabaseAdmin
+        .from('scrape_jobs')
+        .update({
+          heartbeat_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', jobId)
+        .eq('status', 'processing')
+        .eq('locked_by', workerId)
+        .select('id')
+        .maybeSingle();
 
-      if (!rpcError && typeof rpcSuccess === 'boolean') {
-        return rpcSuccess;
-      }
+      return !error && !!data;
     } catch {
-      // Fall through to direct update
+      return false;
     }
-
-    const { data, error } = await supabaseAdmin
-      .from('scrape_jobs')
-      .update({
-        heartbeat_at: new Date().toISOString(),
-      })
-      .eq('id', jobId)
-      .eq('status', 'processing')
-      .eq('locked_by', workerId)
-      .select('id')
-      .maybeSingle();
-
-    return !error && !!data;
   }
 
   /**
-   * Updates progress of an in-flight job with worker fencing
-   * Returns true if update succeeded, false if worker lost lease
+   * Progress updater with worker fencing
    */
   public async updateProgress(
     jobId: string,
@@ -209,17 +227,16 @@ export class JobsService {
       .select('id')
       .maybeSingle();
 
-    return !error && !!data;
+    return !error && !data;
   }
 
   /**
-   * Completes or fails a job with worker fencing and clears lock lease
-   * Returns true if finished, false if worker lost lease
+   * Completes, partials or fails a job with worker fencing and clears lock lease
    */
   public async finishJob(
     jobId: string,
     workerId: string,
-    status: 'completed' | 'failed',
+    status: 'completed' | 'partial' | 'failed',
     processedEpisodes: number,
     failedEpisodes: number,
     errorLog: unknown[]
@@ -259,7 +276,7 @@ export class JobsService {
       .select('id')
       .maybeSingle();
 
-    return !error && !!data;
+    return !error && !data;
   }
 }
 

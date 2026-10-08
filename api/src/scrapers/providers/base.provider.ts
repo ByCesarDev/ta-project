@@ -1,4 +1,10 @@
-import { ScrapedAnimeDetails, ScrapedAnimeSummary, ScrapedServer, StreamLanguage } from '../../types/index.js';
+import {
+  ScrapedAnimeDetails,
+  ScrapedAnimeSummary,
+  ScrapedServer,
+  SourcePreviewResult,
+  StreamLanguage,
+} from '../../types/index.js';
 
 export interface IStreamProvider {
   readonly name: string;
@@ -16,6 +22,11 @@ export interface IStreamProvider {
   getAnimeDetails?(slug: string): Promise<ScrapedAnimeDetails | null>;
 
   /**
+   * Previews a source without downloading all fragments
+   */
+  previewSource?(sourceUrlOrParam: string): Promise<SourcePreviewResult | null>;
+
+  /**
    * Scrapes servers and embed links for a specific episode
    */
   getEpisodeServers(
@@ -23,5 +34,13 @@ export interface IStreamProvider {
     episodeNumber: number | string,
     language?: StreamLanguage,
     fallbackSlug?: string
+  ): Promise<ScrapedServer[]>;
+
+  /**
+   * Scrapes all available audio versions for a specific episode
+   */
+  getAllEpisodeServers?(
+    sourceUrlOrParam: string,
+    episodeNumber: number | string
   ): Promise<ScrapedServer[]>;
 }

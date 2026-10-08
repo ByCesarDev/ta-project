@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 import { corsMiddleware } from './middlewares/cors.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import apiRouter from './routes/index.js';
+import { ScrapeWorker } from './workers/scrapeWorker.js';
 
 const app = express();
 
@@ -61,9 +62,16 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`📡 Health Check: http://localhost:${env.PORT}/health`);
   });
 
+  // Start background queue worker
+  const scrapeWorker = new ScrapeWorker();
+  scrapeWorker.start().catch((err) => {
+    console.error('[ScrapeWorker] Background worker failed to start:', err);
+  });
+
   // Graceful shutdown handling
   const shutdown = (signal: string) => {
     console.log(`\n🛑 Received ${signal}. Shutting down gracefully...`);
+    scrapeWorker.stop();
     server.close(() => {
       console.log('✅ HTTP server closed. Process exiting.');
       process.exit(0);

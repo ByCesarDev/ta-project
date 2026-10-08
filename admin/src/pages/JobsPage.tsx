@@ -65,6 +65,7 @@ export const JobsPage: React.FC = () => {
           pending: { variant: 'warning' as const, icon: Clock, label: 'Pendiente' },
           processing: { variant: 'primary' as const, icon: Loader2, label: 'Procesando' },
           completed: { variant: 'success' as const, icon: CheckCircle2, label: 'Completado' },
+          partial: { variant: 'warning' as const, icon: AlertTriangle, label: 'Parcial' },
           failed: { variant: 'danger' as const, icon: AlertTriangle, label: 'Fallido' },
         }[job.status] || { variant: 'default' as const, icon: Clock, label: job.status };
 

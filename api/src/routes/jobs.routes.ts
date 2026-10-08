@@ -13,8 +13,14 @@ router.get('/cloudflare/status', jobsController.getCloudflareStatus);
 router.post('/cloudflare/save', jobsController.saveCloudflareClearance);
 router.post('/cloudflare/solve', jobsController.solveCloudflareClearance);
 
+// POST /api/v1/jobs/preview-source - Preview anime source and variants
+router.post('/preview-source', jobsController.previewSource);
+
 // POST /api/v1/jobs/scrape - Queue a scrape job
 router.post('/scrape', strictRateLimiter, jobsController.createScrapeJob);
+
+// POST /api/v1/jobs/bulk-rescrape - Re-scrape all configured animes
+router.post('/bulk-rescrape', strictRateLimiter, jobsController.bulkRescrape);
 
 // GET /api/v1/jobs/:jobId - Get job status
 router.get('/:jobId', jobsController.getJobStatus);

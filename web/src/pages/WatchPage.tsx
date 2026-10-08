@@ -22,6 +22,7 @@ export const WatchPage: React.FC = () => {
 
   const { data: allEpisodes } = useAnimeEpisodes(episodeData?.anime?.id);
 
+  const [selectedAudioVariant, setSelectedAudioVariant] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<StreamLanguage>('sub');
   const [selectedQuality, setSelectedQuality] = useState<string>('Auto');
   const [selectedSource, setSelectedSource] = useState<EpisodeSourceRow | null>(null);
@@ -33,25 +34,32 @@ export const WatchPage: React.FC = () => {
     return langs.length > 0 ? langs : ['sub', 'dub'];
   }, [episodeData]);
 
-  // When episode sources load or language/quality changes, select the best matching source
+  // When episode sources load or audio/quality changes, select the best matching source
   useEffect(() => {
     if (episodeData?.sources && episodeData.sources.length > 0) {
-      let langSources = episodeData.sources.filter((s) => s.language === selectedLanguage);
-      if (langSources.length === 0) {
-        // Fallback to whatever language is available
-        const firstAvailableLang = episodeData.sources[0].language;
-        setSelectedLanguage(firstAvailableLang);
-        langSources = episodeData.sources.filter((s) => s.language === firstAvailableLang);
+      let matchedSources = episodeData.sources.filter(
+        (s) => (s.audio_variant || s.language) === selectedAudioVariant
+      );
+
+      if (matchedSources.length === 0) {
+        // Fallback to first source
+        const first = episodeData.sources[0];
+        const defaultKey = first.audio_variant || first.language || 'sub';
+        setSelectedAudioVariant(defaultKey);
+        setSelectedLanguage(first.language || 'sub');
+        matchedSources = episodeData.sources.filter(
+          (s) => (s.audio_variant || s.language) === defaultKey
+        );
       }
 
-      if (langSources.length > 0) {
+      if (matchedSources.length > 0) {
         if (selectedQuality !== 'Auto') {
-          const qualityMatch = langSources.find(
+          const qualityMatch = matchedSources.find(
             (s) => s.quality === selectedQuality || s.quality?.toLowerCase().includes(selectedQuality.toLowerCase())
           );
-          setSelectedSource(qualityMatch || langSources[0]);
+          setSelectedSource(qualityMatch || matchedSources[0]);
         } else {
-          setSelectedSource(langSources[0]);
+          setSelectedSource(matchedSources[0]);
         }
       } else {
         setSelectedSource(null);
@@ -59,13 +67,34 @@ export const WatchPage: React.FC = () => {
     } else {
       setSelectedSource(null);
     }
-  }, [episodeData, selectedLanguage, selectedQuality]);
+  }, [episodeData, selectedAudioVariant, selectedQuality]);
+
+  const handleAudioVariantChange = (variantKey: string) => {
+    setSelectedAudioVariant(variantKey);
+    if (episodeData?.sources) {
+      const matching = episodeData.sources.filter(
+        (s) => (s.audio_variant || s.language) === variantKey
+      );
+      if (matching.length > 0) {
+        setSelectedLanguage(matching[0].language || 'sub');
+        if (selectedQuality !== 'Auto') {
+          const qualityMatch = matching.find(
+            (s) => s.quality === selectedQuality || s.quality?.toLowerCase().includes(selectedQuality.toLowerCase())
+          );
+          setSelectedSource(qualityMatch || matching[0]);
+        } else {
+          setSelectedSource(matching[0]);
+        }
+      }
+    }
+  };
 
   const handleLanguageChange = (lang: StreamLanguage) => {
     setSelectedLanguage(lang);
     if (episodeData?.sources) {
       const matching = episodeData.sources.filter((s) => s.language === lang);
       if (matching.length > 0) {
+        setSelectedAudioVariant(matching[0].audio_variant || matching[0].language);
         if (selectedQuality !== 'Auto') {
           const qualityMatch = matching.find(
             (s) => s.quality === selectedQuality || s.quality?.toLowerCase().includes(selectedQuality.toLowerCase())
@@ -81,15 +110,21 @@ export const WatchPage: React.FC = () => {
   const handleQualityChange = (qual: string) => {
     setSelectedQuality(qual);
     if (episodeData?.sources) {
-      const langSources = episodeData.sources.filter((s) => s.language === selectedLanguage);
-      if (langSources.length > 0) {
+      const currentSources = episodeData.sources.filter((s) => {
+        if (selectedAudioVariant) {
+          return (s.audio_variant || s.language) === selectedAudioVariant;
+        }
+        return s.language === selectedLanguage;
+      });
+
+      if (currentSources.length > 0) {
         if (qual !== 'Auto') {
-          const match = langSources.find(
+          const match = currentSources.find(
             (s) => s.quality === qual || s.quality?.toLowerCase().includes(qual.toLowerCase())
           );
           if (match) setSelectedSource(match);
         } else {
-          setSelectedSource(langSources[0]);
+          setSelectedSource(currentSources[0]);
         }
       }
     }
@@ -166,6 +201,8 @@ export const WatchPage: React.FC = () => {
           availableLanguages={availableLanguages}
           selectedLanguage={selectedLanguage}
           onSelectLanguage={handleLanguageChange}
+          selectedAudioVariant={selectedAudioVariant}
+          onSelectAudioVariant={handleAudioVariantChange}
           selectedQuality={selectedQuality}
           onSelectQuality={handleQualityChange}
           hasNextEpisode={Boolean(allEpisodes && allEpisodes.some((e) => e.episode_number === episode.episode_number + 1))}

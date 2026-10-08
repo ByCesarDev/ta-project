@@ -2,7 +2,14 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { normalizeServer } from '../serverParsers.js';
 import { IStreamProvider } from './base.provider.js';
-import { ScrapedAnimeSummary, ScrapedServer, StreamLanguage, SubtitleTrack } from '../../types/index.js';
+import {
+  ScrapedAnimeSummary,
+  ScrapedServer,
+  SourcePreviewResult,
+  StreamLanguage,
+  SubtitleTrack,
+  VariantSummary,
+} from '../../types/index.js';
 import { cloudflareCookieService } from '../../services/cloudflareCookie.service.js';
 
 export const CLUSTER_MIRRORS = [
@@ -30,6 +37,85 @@ export const DRAMASFREE_MOBILE_HEADERS: Record<string, string> = {
   'Sec-Fetch-User': '?1',
   'Upgrade-Insecure-Requests': '1',
 };
+
+/**
+ * Normalizes and infers stable audio variant metadata from page props or dubbingList entry
+ */
+export function parseAudioMetadata(entry: {
+  websiteParam?: string;
+  name?: string;
+  dubLang?: string;
+  dubMode?: string | number;
+  category?: number;
+}): {
+  variant_id: string;
+  audio_language: string;
+  language_label: string;
+  is_dub: boolean;
+} {
+  const variant_id = entry.websiteParam || 'default';
+  const name = entry.name || '';
+  const nameLower = name.toLowerCase();
+  const isDub =
+    String(entry.dubMode) === '1' ||
+    nameLower.includes('doblaje') ||
+    nameLower.includes('latino') ||
+    nameLower.includes('español') ||
+    nameLower.includes('castellano') ||
+    nameLower.includes('english') ||
+    nameLower.includes('dub');
+
+  let audio_language = 'und';
+  let language_label = name;
+
+  if (entry.dubLang) {
+    const dl = entry.dubLang.toLowerCase();
+    if (dl === 'es' || dl === 'es-419' || dl === 'lat') {
+      audio_language = 'es-419';
+      language_label = 'Español Latino';
+    } else if (dl === 'es-es' || dl === 'castellano') {
+      audio_language = 'es-ES';
+      language_label = 'Español (España)';
+    } else if (dl === 'en' || dl === 'en-us') {
+      audio_language = 'en-US';
+      language_label = 'Inglés';
+    } else if (dl === 'pt' || dl === 'pt-br') {
+      audio_language = 'pt-BR';
+      language_label = 'Portugués';
+    } else if (dl === 'ja') {
+      audio_language = 'ja';
+      language_label = 'Japonés (Original)';
+    } else {
+      audio_language = entry.dubLang;
+    }
+  }
+
+  if (audio_language === 'und') {
+    if (nameLower.includes('latino') || (isDub && (nameLower.includes('español') || nameLower.includes('spanish')))) {
+      audio_language = 'es-419';
+      language_label = 'Español Latino';
+    } else if (nameLower.includes('castellano') || nameLower.includes('españa')) {
+      audio_language = 'es-ES';
+      language_label = 'Español (España)';
+    } else if (nameLower.includes('inglés') || nameLower.includes('english')) {
+      audio_language = 'en-US';
+      language_label = 'Inglés';
+    } else if (nameLower.includes('portugués') || nameLower.includes('portuguese')) {
+      audio_language = 'pt-BR';
+      language_label = 'Portugués';
+    } else if (!isDub || nameLower.includes('japonés') || nameLower.includes('japones') || nameLower.includes('original') || nameLower.includes('sub')) {
+      audio_language = 'ja';
+      language_label = 'Japonés (Original)';
+    }
+  }
+
+  return {
+    variant_id,
+    audio_language,
+    language_label: language_label || (isDub ? 'Doblaje' : 'Japonés (Original)'),
+    is_dub: isDub,
+  };
+}
 
 export class DynamicClusterResolver {
   public cache: Map<string, string> = new Map();
@@ -229,6 +315,139 @@ export class DramasFreeProvider implements IStreamProvider {
     return null;
   }
 
+  /**
+   * Previews a source without downloading video fragments, discovering all audio variants and published episodes
+   */
+  public async previewSource(sourceUrlOrParam: string): Promise<SourcePreviewResult | null> {
+    if (!sourceUrlOrParam) return null;
+    const cleanParam = this.formatSlug(sourceUrlOrParam);
+    if (!cleanParam) return null;
+
+    const isMovieUrl = sourceUrlOrParam.includes('/movie/');
+    const initialCategory: 'drama' | 'movie' = isMovieUrl ? 'movie' : 'drama';
+
+    const testPaths = [
+      `/es/detail/${initialCategory}/${cleanParam}/1`,
+      `/es/detail/${initialCategory}/${cleanParam}`,
+      `/es/detail/drama/${cleanParam}/1`,
+      `/es/detail/movie/${cleanParam}`,
+      `/detail/drama/${cleanParam}/1`,
+      `/detail/movie/${cleanParam}`,
+    ];
+
+    let pageProps: any = null;
+    let actualType: 'drama' | 'movie' = initialCategory;
+
+    for (const p of testPaths) {
+      const res = await this.fetchWithMirrorFailover(p);
+      if (res && res.status === 200 && res.data) {
+        const match = typeof res.data === 'string'
+          ? res.data.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]+?)<\/script>/)
+          : null;
+        if (match) {
+          try {
+            const nextData = JSON.parse(match[1]);
+            const pp = nextData?.props?.pageProps;
+            if (pp) {
+              pageProps = pp;
+              actualType = pp.category === 0 ? 'movie' : 'drama';
+              break;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+
+    if (!pageProps) return null;
+
+    const title = pageProps.name || pageProps.title || cleanParam;
+    const cover_image = pageProps.coverVerticalUrl || pageProps.imageUrl || undefined;
+
+    // Extract real published episodes numbers
+    const published_episodes: number[] = [];
+    if (actualType === 'movie') {
+      published_episodes.push(1);
+    } else if (Array.isArray(pageProps.episodeVo) && pageProps.episodeVo.length > 0) {
+      for (const e of pageProps.episodeVo) {
+        const epNum = Number(e.seriesNo ?? e.episodeNo);
+        if (!isNaN(epNum) && !published_episodes.includes(epNum)) {
+          published_episodes.push(epNum);
+        }
+      }
+      published_episodes.sort((a, b) => a - b);
+    } else if (pageProps.episodeCount && pageProps.episodeCount > 0) {
+      for (let i = 1; i <= pageProps.episodeCount; i++) {
+        published_episodes.push(i);
+      }
+    } else {
+      published_episodes.push(1);
+    }
+
+    // Discover all variants: Base version + dubbingList
+    const variants: VariantSummary[] = [];
+    const seenVariants = new Set<string>();
+
+    // 1. Root / Current Page Variant
+    const rootMeta = parseAudioMetadata({
+      websiteParam: pageProps.websiteParam || cleanParam,
+      name: pageProps.name,
+      dubLang: pageProps.dubLang,
+      dubMode: pageProps.dubMode,
+      category: pageProps.category,
+    });
+    seenVariants.add(rootMeta.variant_id);
+    variants.push({
+      variant_id: rootMeta.variant_id,
+      name: pageProps.name || title,
+      audio_language: rootMeta.audio_language,
+      language_label: rootMeta.language_label,
+      category: pageProps.category,
+      website_param: rootMeta.variant_id,
+      episodes_count: published_episodes.length,
+      is_dub: rootMeta.is_dub,
+    });
+
+    // 2. All variants in dubbingList
+    if (Array.isArray(pageProps.dubbingList)) {
+      for (const d of pageProps.dubbingList) {
+        const param = d.websiteParam || d.paramIds || d.id;
+        if (param && !seenVariants.has(param)) {
+          seenVariants.add(param);
+          const meta = parseAudioMetadata({
+            websiteParam: param,
+            name: d.name,
+            dubLang: d.dubLang,
+            dubMode: d.dubMode,
+            category: d.category,
+          });
+          variants.push({
+            variant_id: meta.variant_id,
+            name: d.name || meta.language_label,
+            audio_language: meta.audio_language,
+            language_label: meta.language_label,
+            category: d.category,
+            website_param: param,
+            episodes_count: d.episodeCount || published_episodes.length,
+            is_dub: meta.is_dub,
+          });
+        }
+      }
+    }
+
+    return {
+      source_url: sourceUrlOrParam,
+      source_id: cleanParam,
+      title,
+      cover_image,
+      total_episodes_found: published_episodes.length,
+      published_episodes,
+      variants,
+      category_name: actualType,
+    };
+  }
+
   public async search(query: string): Promise<ScrapedAnimeSummary[]> {
     try {
       const cleanQuery = query.replace(/-/g, ' ').trim();
@@ -265,6 +484,66 @@ export class DramasFreeProvider implements IStreamProvider {
     }
   }
 
+  /**
+   * Scrapes all available audio versions for a specific episode concurrently
+   */
+  public async getAllEpisodeServers(
+    sourceUrlOrParam: string,
+    episodeNumber: number | string
+  ): Promise<ScrapedServer[]> {
+    const preview = await this.previewSource(sourceUrlOrParam);
+    if (!preview || preview.variants.length === 0) {
+      return this.getEpisodeServers(sourceUrlOrParam, episodeNumber);
+    }
+
+    const allServers: ScrapedServer[] = [];
+    const epNum = Number(episodeNumber);
+    const category = preview.category_name;
+
+    const variantPromises = preview.variants.map(async (variant) => {
+      try {
+        const epPath =
+          category === 'movie'
+            ? `/es/detail/movie/${variant.website_param}`
+            : `/es/detail/drama/${variant.website_param}/${epNum}`;
+
+        const res = await this.fetchWithMirrorFailover(epPath);
+        if (!res || res.status !== 200 || !res.data) return [];
+
+        const match = typeof res.data === 'string'
+          ? res.data.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]+?)<\/script>/)
+          : null;
+        if (!match) return [];
+
+        const nextData = JSON.parse(match[1]);
+        const pageProps = nextData?.props?.pageProps;
+        if (!pageProps || !Array.isArray(pageProps.mediaInfoList)) return [];
+
+        // Extract subtitles strictly confirmed for this episode
+        const subList = this.extractSubtitlesStrict(pageProps, epNum);
+        return this.parseMediaInfoList(
+          pageProps.mediaInfoList,
+          variant.is_dub ? 'dub' : 'sub',
+          subList,
+          variant.variant_id,
+          variant.audio_language,
+          variant.language_label
+        );
+      } catch {
+        return [];
+      }
+    });
+
+    const results = await Promise.allSettled(variantPromises);
+    for (const r of results) {
+      if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+        allServers.push(...r.value);
+      }
+    }
+
+    return allServers;
+  }
+
   public async getEpisodeServers(
     dramaSlug: string,
     episodeNumber: number | string,
@@ -274,7 +553,6 @@ export class DramasFreeProvider implements IStreamProvider {
     const cleanSlug = this.formatSlug(dramaSlug);
     const epNum = String(episodeNumber).trim();
 
-    // 1. Collect candidate slugs and titles
     const candidates = [
       dramaSlug,
       cleanSlug,
@@ -282,7 +560,6 @@ export class DramasFreeProvider implements IStreamProvider {
       fallbackSlug ? this.formatSlug(fallbackSlug) : undefined,
     ].filter(Boolean) as string[];
 
-    // 2. Resolve parameter dynamically through dynamic cluster resolver
     const resolvedParam = await dynamicClusterResolver.resolveCandidates(candidates, async (param) => {
       const res = await this.fetchWithMirrorFailover(`/es/detail/drama/${param}/1`);
       return res && typeof res.data === 'string' ? res.data : null;
@@ -337,26 +614,34 @@ export class DramasFreeProvider implements IStreamProvider {
       const pageProps = nextData?.props?.pageProps;
       if (!pageProps) return this.parseEpisodeHtml(html, targetLanguage);
 
-      const pageDubMode = String(pageProps.dubMode || '0');
-      const isPageDub = pageDubMode === '1' || (pageProps.name || '').toLowerCase().includes('doblaje');
-      const currentPageLang: StreamLanguage = isPageDub ? 'dub' : 'sub';
+      const epNum = parseInt(episodeNumber, 10);
+      const rootMeta = parseAudioMetadata({
+        websiteParam: pageProps.websiteParam,
+        name: pageProps.name,
+        dubLang: pageProps.dubLang,
+        dubMode: pageProps.dubMode,
+        category: pageProps.category,
+      });
 
-      // Extract subtitle tracks for this episode
-      const subList = this.extractSubtitlesFromProps(pageProps, episodeNumber);
+      const currentPageLang: StreamLanguage = rootMeta.is_dub ? 'dub' : 'sub';
+      const subList = this.extractSubtitlesStrict(pageProps, epNum);
 
-      // If current page matches target language, parse mediaInfoList directly
       if (currentPageLang === targetLanguage && Array.isArray(pageProps.mediaInfoList) && pageProps.mediaInfoList.length > 0) {
-        return this.parseMediaInfoList(pageProps.mediaInfoList, targetLanguage, subList);
+        return this.parseMediaInfoList(
+          pageProps.mediaInfoList,
+          targetLanguage,
+          subList,
+          rootMeta.variant_id,
+          rootMeta.audio_language,
+          rootMeta.language_label
+        );
       }
 
-      // If current page is opposite language, check dubbingList to switch to matching version
+      // Check dubbingList for matching target language
       if (Array.isArray(pageProps.dubbingList) && pageProps.dubbingList.length > 0) {
         const targetEntry = pageProps.dubbingList.find((d: any) => {
-          if (targetLanguage === 'dub') {
-            return String(d.dubMode) === '1' || d.dubLang === 'es' || (d.name || '').toLowerCase().includes('doblaje');
-          } else {
-            return String(d.dubMode) === '0' && (!d.dubLang || d.dubLang === 'ja');
-          }
+          const meta = parseAudioMetadata(d);
+          return targetLanguage === 'dub' ? meta.is_dub : !meta.is_dub;
         });
 
         if (targetEntry?.websiteParam) {
@@ -373,33 +658,66 @@ export class DramasFreeProvider implements IStreamProvider {
               const targetNextData = JSON.parse(targetMatch[1]);
               const targetProps = targetNextData?.props?.pageProps;
               if (targetProps?.mediaInfoList && targetProps.mediaInfoList.length > 0) {
-                const targetSubs = this.extractSubtitlesFromProps(targetProps, episodeNumber);
-                return this.parseMediaInfoList(targetProps.mediaInfoList, targetLanguage, targetSubs.length > 0 ? targetSubs : subList);
+                const targetSubs = this.extractSubtitlesStrict(targetProps, epNum);
+                const targetMeta = parseAudioMetadata({
+                  websiteParam: targetProps.websiteParam || targetEntry.websiteParam,
+                  name: targetProps.name,
+                  dubLang: targetProps.dubLang,
+                  dubMode: targetProps.dubMode,
+                });
+                return this.parseMediaInfoList(
+                  targetProps.mediaInfoList,
+                  targetLanguage,
+                  targetSubs.length > 0 ? targetSubs : subList,
+                  targetMeta.variant_id,
+                  targetMeta.audio_language,
+                  targetMeta.language_label
+                );
               }
             }
           }
         }
       }
 
-      // Fallback to current page media list if available
-      return this.parseMediaInfoList(pageProps.mediaInfoList, currentPageLang, subList);
+      // Fallback
+      return this.parseMediaInfoList(
+        pageProps.mediaInfoList,
+        currentPageLang,
+        subList,
+        rootMeta.variant_id,
+        rootMeta.audio_language,
+        rootMeta.language_label
+      );
     } catch {
       return this.parseEpisodeHtml(html, targetLanguage);
     }
   }
 
-  private extractSubtitlesFromProps(pageProps: any, episodeNumber: string): SubtitleTrack[] {
+  /**
+   * Strictly extracts subtitle tracks for the exact episode without unconfirmed fallbacks
+   */
+  private extractSubtitlesStrict(pageProps: any, epNum: number): SubtitleTrack[] {
     if (!pageProps) return [];
-    const epNum = parseInt(episodeNumber, 10);
-    const targetEpVo = Array.isArray(pageProps.episodeVo)
-      ? pageProps.episodeVo.find((e: any) => e.episodeNo === epNum || e.seriesNo === epNum) || pageProps.episodeVo[0]
-      : null;
-    const rawSubs = targetEpVo?.subtitlingList || pageProps.subtitlingList || [];
-    if (!Array.isArray(rawSubs)) return [];
+    let rawSubs: any[] = [];
+
+    // 1. Check matching episode in episodeVo
+    if (Array.isArray(pageProps.episodeVo)) {
+      const match = pageProps.episodeVo.find((e: any) => Number(e.episodeNo) === epNum || Number(e.seriesNo) === epNum);
+      if (match && Array.isArray(match.subtitlingList)) {
+        rawSubs = match.subtitlingList;
+      }
+    }
+
+    // 2. If movie or confirmed single episode page, check root subtitlingList
+    if (rawSubs.length === 0 && (pageProps.category === 0 || Number(pageProps.currentEpisodeNo) === epNum)) {
+      if (Array.isArray(pageProps.subtitlingList)) {
+        rawSubs = pageProps.subtitlingList;
+      }
+    }
 
     const subList: SubtitleTrack[] = [];
     for (const sub of rawSubs) {
-      if (sub.subtitlingUrl) {
+      if (sub && sub.subtitlingUrl) {
         subList.push({
           id: sub.languageAbbr || sub.language?.toLowerCase() || 'und',
           language: sub.languageAbbr || 'und',
@@ -411,7 +729,14 @@ export class DramasFreeProvider implements IStreamProvider {
     return subList;
   }
 
-  private parseMediaInfoList(mediaInfoList: any[], language: StreamLanguage, subList: SubtitleTrack[] = []): ScrapedServer[] {
+  private parseMediaInfoList(
+    mediaInfoList: any[],
+    language: StreamLanguage,
+    subList: SubtitleTrack[] = [],
+    audio_variant: string = 'default',
+    audio_language: string = 'und',
+    language_label?: string
+  ): ScrapedServer[] {
     const serversMap = new Map<string, ScrapedServer>();
     if (!Array.isArray(mediaInfoList) || mediaInfoList.length === 0) return [];
 
@@ -429,20 +754,25 @@ export class DramasFreeProvider implements IStreamProvider {
             ? '360p'
             : '1080p';
         const priority = def === 'GROOT_SD' ? 10 : def === 'GROOT_LD' ? 20 : def === 'GROOT_FD' ? 30 : 5;
+        const displayLabel = language_label ? `${language_label} ` : '';
 
         const server: ScrapedServer = {
           provider: 'dramasfree',
-          server_name: `DramasFree (${quality})`,
+          server_name: `DramasFree (${displayLabel}${quality})`,
           embed_url: `${media.mediaUrl}${subHash}`,
           direct_stream_url: `${media.mediaUrl}${subHash}`,
           language,
+          audio_variant,
+          audio_language,
+          language_label,
+          source_key: def,
           quality,
           priority,
           is_active: true,
           subtitles: subList.length > 0 ? subList : undefined,
         };
 
-        const key = `dramasfree_${quality}_${language}`;
+        const key = `dramasfree_${audio_variant}_${def}_${quality}`;
         if (!serversMap.has(key)) {
           serversMap.set(key, server);
         }
@@ -460,11 +790,22 @@ export class DramasFreeProvider implements IStreamProvider {
         const nextData = JSON.parse(nextDataMatch[1]);
         const pageProps = nextData?.props?.pageProps;
         if (pageProps?.mediaInfoList) {
-          const pageDubMode = String(pageProps.dubMode || '0');
-          const isPageDub = pageDubMode === '1' || (pageProps.name || '').toLowerCase().includes('doblaje');
-          const lang: StreamLanguage = isPageDub ? 'dub' : 'sub';
-          const subs = this.extractSubtitlesFromProps(pageProps, '1');
-          return this.parseMediaInfoList(pageProps.mediaInfoList, lang, subs);
+          const rootMeta = parseAudioMetadata({
+            websiteParam: pageProps.websiteParam,
+            name: pageProps.name,
+            dubLang: pageProps.dubLang,
+            dubMode: pageProps.dubMode,
+          });
+          const lang: StreamLanguage = rootMeta.is_dub ? 'dub' : 'sub';
+          const subs = this.extractSubtitlesStrict(pageProps, 1);
+          return this.parseMediaInfoList(
+            pageProps.mediaInfoList,
+            lang,
+            subs,
+            rootMeta.variant_id,
+            rootMeta.audio_language,
+            rootMeta.language_label
+          );
         }
       } catch {
         // Fallback

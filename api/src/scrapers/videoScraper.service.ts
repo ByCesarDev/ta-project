@@ -4,7 +4,13 @@ import { dramasFreeProvider } from './providers/dramasfree.provider.js';
 import { soloLatinoProvider } from './providers/soloLatino.provider.js';
 import { IStreamProvider } from './providers/base.provider.js';
 import { normalizeServer } from './serverParsers.js';
-import { ScrapedAnimeDetails, ScrapedAnimeSummary, ScrapedServer, StreamLanguage } from '../types/index.js';
+import {
+  ScrapedAnimeDetails,
+  ScrapedAnimeSummary,
+  ScrapedServer,
+  SourcePreviewResult,
+  StreamLanguage,
+} from '../types/index.js';
 
 // Providers that strictly cannot be resolved to native video and require proprietary third-party iframes
 const NON_NATIVE_EMBED_PROVIDERS = new Set([
@@ -150,6 +156,23 @@ export class VideoScraperService {
     });
 
     return Array.from(serversMap.values()).sort((a, b) => a.priority - b.priority);
+  }
+
+  /**
+   * Previews a source without downloading video fragments
+   */
+  public async previewSource(sourceUrlOrParam: string): Promise<SourcePreviewResult | null> {
+    return dramasFreeProvider.previewSource(sourceUrlOrParam);
+  }
+
+  /**
+   * Scrapes all available audio versions for a specific episode concurrently across all variants
+   */
+  public async scrapeAllEpisodeServers(
+    sourceUrlOrParam: string,
+    episodeNumber: number | string
+  ): Promise<ScrapedServer[]> {
+    return dramasFreeProvider.getAllEpisodeServers(sourceUrlOrParam, episodeNumber);
   }
 
   /**

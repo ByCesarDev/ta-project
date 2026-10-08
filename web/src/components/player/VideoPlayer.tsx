@@ -12,6 +12,8 @@ interface VideoPlayerProps {
   availableLanguages?: StreamLanguage[];
   selectedLanguage?: StreamLanguage;
   onSelectLanguage?: (lang: StreamLanguage) => void;
+  selectedAudioVariant?: string;
+  onSelectAudioVariant?: (variant: string) => void;
   selectedQuality?: string;
   onSelectQuality?: (quality: string) => void;
   subtitles?: SubtitleTrack[];
@@ -28,6 +30,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   availableLanguages,
   selectedLanguage,
   onSelectLanguage,
+  selectedAudioVariant,
+  onSelectAudioVariant,
   selectedQuality,
   onSelectQuality,
   subtitles,
@@ -44,6 +48,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       availableLanguages={availableLanguages}
       selectedLanguage={selectedLanguage}
       onSelectLanguage={onSelectLanguage}
+      selectedAudioVariant={selectedAudioVariant}
+      onSelectAudioVariant={onSelectAudioVariant}
       selectedQuality={selectedQuality}
       onSelectQuality={onSelectQuality}
       subtitles={subtitles}

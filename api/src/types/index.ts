@@ -4,7 +4,7 @@ export type UserRole = 'user' | 'moderator' | 'admin';
 export type UserStatus = 'active' | 'suspended' | 'banned';
 export type EpisodeStatus = 'pending' | 'available' | 'unavailable';
 export type StreamLanguage = 'sub' | 'dub';
-export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'partial' | 'failed';
 
 export interface AuthenticatedUser {
   id: string;
@@ -23,6 +23,7 @@ export interface SubtitleTrack {
   language: string;
   label: string;
   url: string;
+  isDefault?: boolean;
 }
 
 export interface ScrapedServer {
@@ -31,10 +32,36 @@ export interface ScrapedServer {
   embed_url: string;
   direct_stream_url?: string;
   language: StreamLanguage;
+  audio_variant?: string;
+  audio_language?: string;
+  language_label?: string;
+  source_key?: string;
   quality: string;
   priority: number;
   is_active?: boolean;
   subtitles?: SubtitleTrack[];
+}
+
+export interface VariantSummary {
+  variant_id: string;
+  name: string;
+  audio_language: string;
+  language_label: string;
+  category?: number;
+  website_param: string;
+  episodes_count?: number;
+  is_dub: boolean;
+}
+
+export interface SourcePreviewResult {
+  source_url: string;
+  source_id: string;
+  title: string;
+  cover_image?: string;
+  total_episodes_found: number;
+  published_episodes: number[];
+  variants: VariantSummary[];
+  category_name: 'drama' | 'movie';
 }
 
 export interface ScrapedAnimeSummary {
@@ -114,6 +141,10 @@ export interface NormalizedAnimeInsert {
   air_timezone?: string;
   start_date?: string;
   end_date?: string;
+  source_url?: string | null;
+  source_id?: string | null;
+  source_type?: string;
+  discovered_variants?: VariantSummary[];
 }
 
 export interface ScrapeJob {
@@ -130,8 +161,11 @@ export interface ScrapeJob {
   heartbeat_at?: string | null;
   error_log: unknown[];
   requested_by?: string | null;
+  source_url?: string | null;
+  source_id?: string | null;
+  frozen_config?: Record<string, any>;
+  target_mode?: 'all' | 'single' | 'pending';
+  target_episode_number?: number | null;
   created_at: string;
   updated_at: string;
 }
-
-

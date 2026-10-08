@@ -58,14 +58,20 @@ export interface AnimeFilters {
 
 export interface ServerOption {
   id: number;
+  episode_id: number;
   provider: string;
   server_name: string;
   embed_url: string;
   direct_stream_url?: string | null;
   language: StreamLanguage;
+  audio_variant?: string;
+  audio_language?: string;
+  language_label?: string | null;
+  source_key?: string;
   quality: string;
   priority: number;
   is_active: boolean;
+  subtitles?: SubtitleTrack[];
 }
 
 export interface SubtitleTrack {
@@ -85,6 +91,10 @@ export interface PlayableStream {
   direct_url?: string | null;
   quality?: string;
   language?: StreamLanguage;
+  audio_variant?: string;
+  audio_language?: string;
+  language_label?: string;
+  source_key?: string;
   headers?: Record<string, string>;
   is_fallback?: boolean;
   error_message?: string;
