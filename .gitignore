@@ -53,4 +53,6 @@ scratch/
 scratch_*.html
 *.cf_clearance.json
 .cf_clearance.json
+.chrome_profile/
+api/.chrome_profile/
 
