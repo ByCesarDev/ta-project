@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { normalizeServer } from '../serverParsers.js';
 import { IStreamProvider } from './base.provider.js';
@@ -22,21 +22,6 @@ export class DramasFreeProvider implements IStreamProvider {
   public readonly baseUrl: string = CLUSTER_MIRRORS[0];
   public readonly isEnabled = true;
   public lastErrorReason?: string;
-  private client: AxiosInstance;
-
-  constructor() {
-    this.client = axios.create({
-      baseURL: this.baseUrl,
-      timeout: 10000,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
-        Referer: 'https://www3.dramasfree.com/',
-      },
-    });
-  }
 
   public formatSlug(slug: string): string {
     return slug

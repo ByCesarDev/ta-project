@@ -188,11 +188,11 @@ export class CloudflareCookieService {
       while (Date.now() - startTime < 30000) {
         const cookies = await page.cookies();
         const cfCookie = cookies.find((c) => c.name === 'cf_clearance');
-        const hasNextData = await page.evaluate(() => !!document.getElementById('__NEXT_DATA__'));
+        const hasNextData = await page.evaluate(() => !!(globalThis as any).document?.getElementById('__NEXT_DATA__'));
 
         if (cfCookie?.value || hasNextData) {
           const cookieVal = cfCookie?.value || '';
-          const ua = await page.evaluate(() => navigator.userAgent);
+          const ua = await page.evaluate(() => (globalThis as any).navigator?.userAgent || '');
           if (cookieVal) {
             await this.saveClearance(cookieVal, ua);
           }
