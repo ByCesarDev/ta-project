@@ -220,7 +220,7 @@ export const WatchPage: React.FC = () => {
 
   return (
     <PageContainer>
-      <div className="max-w-5xl mx-auto space-y-5">
+      <div className="mx-auto space-y-5">
         {/* Discrete Back Link to Series */}
         <div className="pt-1">
           <Link
