@@ -19,8 +19,14 @@ export class ThumbnailController {
       return;
     }
 
+    const { sourceId, provider, timestamp } = req.body || {};
+
     try {
-      const result = await thumbnailService.generateEpisodeThumbnail(episodeId);
+      const result = await thumbnailService.generateEpisodeThumbnail(episodeId, {
+        sourceId: sourceId ? parseInt(String(sourceId), 10) : undefined,
+        provider: provider ? String(provider) : undefined,
+        timestamp: timestamp ? String(timestamp) : undefined,
+      });
 
       if (!result.success) {
         res.status(400).json({
@@ -34,7 +40,10 @@ export class ThumbnailController {
         success: true,
         thumbnail_url: result.thumbnail_url,
         filename: result.filename,
-        message: 'Portada de episodio generada exitosamente.',
+        source_used: result.source_used,
+        message: result.source_used
+          ? `Portada generada exitosamente usando servidor: ${result.source_used}.`
+          : 'Portada de episodio generada exitosamente.',
       });
     } catch (err: any) {
       res.status(500).json({
@@ -51,6 +60,7 @@ export class ThumbnailController {
   public async generateAnimeThumbnails(req: AuthenticatedRequest, res: Response): Promise<void> {
     const rawId = Array.isArray(req.params.animeId) ? req.params.animeId[0] : req.params.animeId;
     const animeId = parseInt(String(rawId), 10);
+    const { provider } = req.body || {};
 
     if (isNaN(animeId)) {
       res.status(400).json({
@@ -61,7 +71,9 @@ export class ThumbnailController {
     }
 
     try {
-      const summary = await thumbnailService.generateAnimeThumbnailsBulk(animeId);
+      const summary = await thumbnailService.generateAnimeThumbnailsBulk(animeId, {
+        provider: provider ? String(provider) : undefined,
+      });
       res.status(200).json({
         success: true,
         summary,

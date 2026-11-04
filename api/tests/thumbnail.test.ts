@@ -69,3 +69,4 @@ describe('ThumbnailService - Frame Extraction & Management', () => {
     });
   });
 });
+

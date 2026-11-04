@@ -2,11 +2,18 @@ import { spawn } from 'child_process';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
 import { streamResolverService } from './streamResolver.service.js';
 
+export interface GenerateThumbnailOptions {
+  sourceId?: number;
+  provider?: string;
+  timestamp?: string;
+}
+
 export interface ThumbnailGenerationResult {
   success: boolean;
   episode_id: number;
   thumbnail_url?: string;
   filename?: string;
+  source_used?: string;
   error?: string;
 }
 
@@ -111,8 +118,12 @@ export class ThumbnailService {
 
   /**
    * Generates and uploads a dynamic frame thumbnail for a specific episode.
+   * Allows picking a specific source ID, preferred provider, or custom timestamp.
    */
-  public async generateEpisodeThumbnail(episodeId: number): Promise<ThumbnailGenerationResult> {
+  public async generateEpisodeThumbnail(
+    episodeId: number,
+    options?: GenerateThumbnailOptions
+  ): Promise<ThumbnailGenerationResult> {
     try {
       // 1. Fetch episode data
       const { data: episode, error: epError } = await supabaseAdmin
@@ -126,42 +137,79 @@ export class ThumbnailService {
       }
 
       // 2. Fetch active sources for this episode
-      const { data: sources, error: srcError } = await supabaseAdmin
+      let sourceQuery = supabaseAdmin
         .from('episode_sources')
         .select('*')
-        .eq('episode_id', episodeId)
-        .eq('is_active', true)
-        .order('priority', { ascending: false });
+        .eq('episode_id', episodeId);
 
-      if (srcError || !sources || sources.length === 0) {
-        throw new Error(`No hay servidores de video activos para el episodio ${episode.episode_number}`);
+      if (options?.sourceId) {
+        sourceQuery = sourceQuery.eq('id', options.sourceId);
+      } else {
+        sourceQuery = sourceQuery.eq('is_active', true);
+      }
+
+      const { data: rawSources, error: srcError } = await sourceQuery.order('priority', { ascending: false });
+
+      if (srcError || !rawSources || rawSources.length === 0) {
+        throw new Error(
+          options?.sourceId
+            ? `Servidor seleccionado (ID: ${options.sourceId}) no encontrado o inactivo.`
+            : `No hay servidores de video activos para el episodio ${episode.episode_number}`
+        );
+      }
+
+      // If a preferred provider was requested, prioritize those sources
+      let sources = rawSources;
+      if (options?.provider && !options.sourceId) {
+        const preferred = rawSources.filter(
+          (s) =>
+            s.provider.toLowerCase() === options.provider?.toLowerCase() ||
+            (s.server_name && s.server_name.toLowerCase() === options.provider?.toLowerCase())
+        );
+        if (preferred.length > 0) {
+          sources = [...preferred, ...rawSources.filter((s) => !preferred.includes(s))];
+        }
       }
 
       let frameBuffer: Buffer | null = null;
+      let usedSourceLabel: string = '';
       let lastError: string = '';
 
-      // 3. Try resolving each active source until a valid frame is captured
+      // 3. Try resolving chosen sources until a valid frame is captured
       for (const source of sources) {
         try {
           const playable = await streamResolverService.resolveSource(source);
 
-          if (playable.type === 'hls' || playable.type === 'mp4' || (playable.direct_url && !playable.direct_url.includes('iframe'))) {
+          if (
+            playable.type === 'hls' ||
+            playable.type === 'mp4' ||
+            (playable.direct_url && !playable.direct_url.includes('iframe'))
+          ) {
             const streamUrl = playable.direct_url || playable.url;
-            const timestamp = this.getRandomTimestamp(episode.duration);
+            const timestamp = options?.timestamp?.trim() || this.getRandomTimestamp(episode.duration);
 
             try {
               frameBuffer = await this.extractFrameFromStream(streamUrl, timestamp, playable.headers);
             } catch (err: any) {
-              // Retry with safe 60s fallback timestamp
-              frameBuffer = await this.extractFrameFromStream(streamUrl, '00:01:30', playable.headers);
+              if (!options?.timestamp) {
+                // Retry with safe 90s fallback timestamp
+                frameBuffer = await this.extractFrameFromStream(streamUrl, '00:01:30', playable.headers);
+              } else {
+                throw err;
+              }
             }
 
             if (frameBuffer && frameBuffer.length > 500) {
+              usedSourceLabel = `${source.server_name || source.provider} (${source.quality || 'HD'})`;
               break; // Successfully captured frame!
             }
           }
         } catch (err: any) {
           lastError = err.message || 'Error resolviendo stream';
+          if (options?.sourceId) {
+            // Specific source explicitly requested: throw immediate error
+            throw new Error(`Error con el servidor ${source.server_name || source.provider}: ${lastError}`);
+          }
           continue;
         }
       }
@@ -210,6 +258,7 @@ export class ThumbnailService {
         episode_id: episodeId,
         thumbnail_url: thumbnailUrl,
         filename: uniqueFilename,
+        source_used: usedSourceLabel,
       };
     } catch (err: any) {
       return {
@@ -222,8 +271,12 @@ export class ThumbnailService {
 
   /**
    * Bulk generates thumbnails for all available episodes of an anime.
+   * Can specify a preferred provider (e.g. 'streamwish', 'mega', etc.)
    */
-  public async generateAnimeThumbnailsBulk(animeId: number): Promise<{
+  public async generateAnimeThumbnailsBulk(
+    animeId: number,
+    options?: { provider?: string }
+  ): Promise<{
     total: number;
     successCount: number;
     failedCount: number;
@@ -244,7 +297,9 @@ export class ThumbnailService {
     let failedCount = 0;
 
     for (const ep of episodes) {
-      const res = await this.generateEpisodeThumbnail(ep.id);
+      const res = await this.generateEpisodeThumbnail(ep.id, {
+        provider: options?.provider,
+      });
       results.push(res);
       if (res.success) {
         successCount++;

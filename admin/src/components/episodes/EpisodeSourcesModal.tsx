@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ExternalLink, Save, Loader2, Tv, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { Plus, Trash2, ExternalLink, Save, Loader2, Tv, AlertTriangle, CheckCircle2, XCircle, Camera } from 'lucide-react';
 import { Modal } from '../common/Modal.js';
 import { Button } from '../common/Button.js';
 import { Episode, EpisodeSource, StreamLanguage } from '../../types/index.js';
@@ -28,6 +28,8 @@ export const EpisodeSourcesModal: React.FC<EpisodeSourcesModalProps> = ({
   const [deletedIds, setDeletedIds] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [capturingSourceId, setCapturingSourceId] = useState<number | null>(null);
+  const [captureFeedback, setCaptureFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -191,6 +193,30 @@ export const EpisodeSourcesModal: React.FC<EpisodeSourcesModalProps> = ({
     }
   };
 
+  const handleCaptureFromSource = async (sourceId?: number) => {
+    if (!episode || !sourceId) return;
+    setCapturingSourceId(sourceId);
+    setCaptureFeedback(null);
+    try {
+      const res = await apiClient.post<{ success: boolean; thumbnail_url: string; message: string }>(
+        `/thumbnails/episodes/${episode.id}/generate`,
+        { sourceId }
+      );
+      setCaptureFeedback({
+        type: 'success',
+        message: res.data.message || '¡Portada capturada exitosamente desde este servidor!',
+      });
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
+      setCaptureFeedback({
+        type: 'error',
+        message: err.response?.data?.message || err.message || 'Error al capturar portada desde este servidor.',
+      });
+    } finally {
+      setCapturingSourceId(null);
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -209,6 +235,23 @@ export const EpisodeSourcesModal: React.FC<EpisodeSourcesModalProps> = ({
           <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
             <XCircle className="w-4 h-4 shrink-0 text-rose-400" />
             <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {captureFeedback && (
+          <div
+            className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 font-medium animate-in slide-in-from-top duration-200 ${
+              captureFeedback.type === 'success'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+            }`}
+          >
+            {captureFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+            )}
+            <span>{captureFeedback.message}</span>
           </div>
         )}
 
@@ -320,8 +363,23 @@ export const EpisodeSourcesModal: React.FC<EpisodeSourcesModalProps> = ({
                         />
                       </div>
 
-                      {/* Actions: External link & Admin Delete */}
-                      <div className="flex items-center gap-2 pt-4 md:pt-4 shrink-0">
+                      {/* Actions: Capture, External link & Admin Delete */}
+                      <div className="flex items-center gap-1.5 pt-4 md:pt-4 shrink-0">
+                        {source.id && (
+                          <button
+                            type="button"
+                            onClick={() => handleCaptureFromSource(source.id)}
+                            disabled={capturingSourceId === source.id}
+                            className="p-2 rounded-lg bg-indigo-600/15 text-indigo-400 hover:bg-indigo-600/25 border border-indigo-500/30 hover:border-indigo-400 transition-colors"
+                            title="📸 Extraer portada desde este servidor"
+                          >
+                            {capturingSourceId === source.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                            ) : (
+                              <Camera className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                         {source.embed_url && (
                           <a
                             href={source.embed_url}

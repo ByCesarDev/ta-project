@@ -19,3 +19,4 @@ thumbnailRouter.post(
 );
 
 export default thumbnailRouter;
+

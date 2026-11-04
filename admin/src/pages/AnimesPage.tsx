@@ -75,10 +75,11 @@ export const AnimesPage: React.FC = () => {
     isLoading: isAnimesLoading,
     refetch: refetchAnimes,
   } = useQuery({
-    queryKey: ['admin-animes-list', statusFilter],
+    queryKey: ['admin-animes-list', statusFilter, searchQuery],
     queryFn: async () => {
       const { data } = await apiClient.get('/animes', {
         params: {
+          search: searchQuery.trim() || undefined,
           status: statusFilter !== 'all' ? statusFilter : undefined,
           limit: 50,
         },
