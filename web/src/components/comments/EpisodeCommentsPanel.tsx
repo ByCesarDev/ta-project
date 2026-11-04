@@ -1,25 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
-import { DisqusComments } from './DisqusComments.js';
+import { MessageSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { EpisodeComments } from './EpisodeComments.js';
+import { useEpisodeComments } from '../../hooks/useComments.js';
 
 interface EpisodeCommentsPanelProps {
-  animeSlug: string;
-  episodeNumber: number;
-  animeTitle: string;
+  episodeId: number;
+  animeSlug?: string;
+  episodeNumber?: number;
+  animeTitle?: string;
 }
 
 export const EpisodeCommentsPanel: React.FC<EpisodeCommentsPanelProps> = ({
-  animeSlug,
-  episodeNumber,
-  animeTitle,
+  episodeId,
 }) => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [hasLoaded, setHasLoaded] = useState<boolean>(false);
 
+  // Prefetch or read comments count
+  const { data: commentsData } = useEpisodeComments(episodeId);
+  const totalComments = commentsData?.total_count;
+
   // Close panel and reset when episode changes
   useEffect(() => {
     setIsOpen(false);
-  }, [animeSlug, episodeNumber]);
+  }, [episodeId]);
 
   const handleToggle = () => {
     setIsOpen((prev) => {
@@ -38,7 +42,7 @@ export const EpisodeCommentsPanel: React.FC<EpisodeCommentsPanelProps> = ({
         onClick={handleToggle}
         aria-expanded={isOpen}
         aria-controls="episode-comments-content"
-        className="w-full flex items-center justify-between p-4 sm:p-5 hover:bg-slate-900/40 transition-colors text-left"
+        className="w-full flex items-center justify-between p-4 sm:p-5 hover:bg-slate-900/40 transition-colors text-left cursor-pointer"
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
@@ -47,6 +51,11 @@ export const EpisodeCommentsPanel: React.FC<EpisodeCommentsPanelProps> = ({
           <div>
             <h3 className="font-bold text-white text-sm sm:text-base font-['Outfit'] flex items-center gap-2">
               <span>Comentarios</span>
+              {typeof totalComments === 'number' && (
+                <span className="px-2 py-0.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-slate-300 text-xs font-medium">
+                  {totalComments}
+                </span>
+              )}
             </h3>
             <p className="text-xs text-slate-400">
               {isOpen ? 'Ocultar discusión de la comunidad' : 'Toca para abrir la conversación y opiniones'}
@@ -55,15 +64,6 @@ export const EpisodeCommentsPanel: React.FC<EpisodeCommentsPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
-          <a
-            href="https://disqus.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-[11px] text-slate-500 hover:text-slate-400 hidden sm:flex items-center gap-1 transition-colors"
-          >
-            Disqus <ExternalLink className="w-3 h-3" />
-          </a>
           <div className="w-7 h-7 rounded-lg bg-slate-800/60 flex items-center justify-center text-slate-400">
             {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </div>
@@ -76,15 +76,9 @@ export const EpisodeCommentsPanel: React.FC<EpisodeCommentsPanelProps> = ({
           id="episode-comments-content"
           className={`p-4 sm:p-6 border-t border-slate-800/80 ${isOpen ? 'block' : 'hidden'}`}
         >
-          <DisqusComments
-            animeSlug={animeSlug}
-            episodeNumber={episodeNumber}
-            animeTitle={animeTitle}
-            variant="bare"
-          />
+          <EpisodeComments episodeId={episodeId} />
         </div>
       )}
     </div>
   );
 };
-

@@ -243,7 +243,7 @@ export interface ScrapeJob {
   source_id?: string | null;
   source_config?: Record<string, any> | null;
   frozen_config?: Record<string, any>;
-  target_mode?: 'all' | 'single' | 'pending';
+  target_mode?: 'all' | 'single' | 'pending' | 'stale';
   target_episode_number?: number | null;
   created_at: string;
   updated_at: string;

@@ -24,6 +24,8 @@ const baseSchema = z.object({
     ? z.string({ required_error: 'CORS_ORIGINS is mandatory in production' }).min(1)
     : z.string().default('http://localhost:5173,http://localhost:5174,http://localhost:3000,https://totalanime.com,https://admin.totalanime.com'),
   WORKER_POLL_INTERVAL_MS: z.coerce.number().default(5000),
+  TURSO_DATABASE_URL: z.string().optional(),
+  TURSO_AUTH_TOKEN: z.string().optional(),
 });
 
 // Normalization: map SUPABASE_SERVICE_ROLE_KEY to SUPABASE_SECRET_KEY if secret key is missing

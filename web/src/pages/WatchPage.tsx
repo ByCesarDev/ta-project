@@ -287,9 +287,10 @@ export const WatchPage: React.FC = () => {
           )}
         </div>
 
-        {/* Collapsible Disqus Comments */}
+        {/* Collapsible Native Comments (Turso) */}
         <div className="pt-2">
           <EpisodeCommentsPanel
+            episodeId={episode.id}
             animeSlug={series.slug}
             episodeNumber={episode.episode_number}
             animeTitle={series.name}
