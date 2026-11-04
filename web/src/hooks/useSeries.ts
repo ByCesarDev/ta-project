@@ -632,41 +632,43 @@ export function useWatchEpisode(seriesSlug: string, episodeIdOrNumber: string | 
       }
 
       // 2. Find target episode across all seasons and entries
-      let foundEpisode: any = null;
-      let foundSeason: any = null;
-      let foundAnime: any = null;
-      let allFlatEpisodes: Array<{ episode: any; season: any; anime: any }> = [];
-
-      const targetId = Number(episodeIdOrNumber);
+      const allFlatEpisodes: Array<{ episode: any; season: any; anime: any }> = [];
 
       for (const season of seriesRes.seasons || []) {
         for (const entry of season.series_entries || []) {
           const anime = entry.anime;
           if (anime && Array.isArray(anime.episodes)) {
             for (const ep of anime.episodes) {
-              const epItem = { episode: ep, season, anime };
-              allFlatEpisodes.push(epItem);
-
-              if (ep.id === targetId || ep.episode_number === targetId) {
-                foundEpisode = ep;
-                foundSeason = season;
-                foundAnime = anime;
-              }
+              allFlatEpisodes.push({ episode: ep, season, anime });
             }
           }
         }
       }
 
-      // If not found by ID directly, default to first episode
-      if (!foundEpisode && allFlatEpisodes.length > 0) {
-        foundEpisode = allFlatEpisodes[0].episode;
-        foundSeason = allFlatEpisodes[0].season;
-        foundAnime = allFlatEpisodes[0].anime;
+      const targetNum = Number(episodeIdOrNumber);
+
+      // Priority 1: Exact match by unique Episode ID (DB primary key)
+      let matchedItem = !isNaN(targetNum)
+        ? allFlatEpisodes.find((item) => item.episode.id === targetNum)
+        : null;
+
+      // Priority 2: Fallback match by episode_number (selects the first season matching in display order)
+      if (!matchedItem && !isNaN(targetNum)) {
+        matchedItem = allFlatEpisodes.find((item) => Number(item.episode.episode_number) === targetNum);
       }
 
-      if (!foundEpisode) {
+      // Priority 3: Fallback default to first episode of the series
+      if (!matchedItem && allFlatEpisodes.length > 0) {
+        matchedItem = allFlatEpisodes[0];
+      }
+
+      if (!matchedItem) {
         throw new Error('Episodio no encontrado');
       }
+
+      const foundEpisode = matchedItem.episode;
+      const foundSeason = matchedItem.season;
+      const foundAnime = matchedItem.anime;
 
       // 3. Fetch active episode sources
       const { data: sources, error: srcErr } = await supabase
