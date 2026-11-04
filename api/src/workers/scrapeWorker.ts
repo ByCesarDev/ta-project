@@ -5,6 +5,7 @@ import { jobsService } from '../services/jobs.service.js';
 import { videoScraper } from '../scrapers/videoScraper.service.js';
 import { thumbnailService } from '../services/thumbnail.service.js';
 import { ScrapeJob, ScrapedServer } from '../types/index.js';
+import { isSourceStale } from '../utils/streamExpiration.js';
 
 /**
  * Validates actual HLS playback by downloading and inspecting the master playlist,
@@ -233,18 +234,28 @@ export class ScrapeWorker {
       let targetEpisodeNumbers: number[] = [];
       if (targetMode === 'single' && typeof job.target_episode_number === 'number') {
         targetEpisodeNumbers = [job.target_episode_number];
-      } else if (targetMode === 'pending') {
+      } else if (targetMode === 'pending' || targetMode === 'stale') {
         // Find existing episodes with active sources
         const { data: epSources } = await supabaseAdmin
           .from('episodes')
-          .select('episode_number, episode_sources(id, is_active)')
+          .select('episode_number, episode_sources(id, is_active, last_verified_at)')
           .eq('anime_id', anime.id);
 
         const epsWithSources = new Set<number>();
         if (epSources) {
           for (const ep of epSources) {
-            const hasActive = Array.isArray(ep.episode_sources) && ep.episode_sources.some((s: any) => s.is_active);
-            if (hasActive) epsWithSources.add(Number(ep.episode_number));
+            if (Array.isArray(ep.episode_sources)) {
+              if (targetMode === 'pending') {
+                const hasActive = ep.episode_sources.some((s: any) => s.is_active);
+                if (hasActive) epsWithSources.add(Number(ep.episode_number));
+              } else if (targetMode === 'stale') {
+                // If any active source was verified recently (e.g. within 7 days), consider fresh
+                const hasFresh = ep.episode_sources.some(
+                  (s: any) => s.is_active && s.last_verified_at && !isSourceStale(s.last_verified_at, 24 * 7)
+                );
+                if (hasFresh) epsWithSources.add(Number(ep.episode_number));
+              }
+            }
           }
         }
         targetEpisodeNumbers = publishedEpisodes.filter((num) => !epsWithSources.has(num));
@@ -252,7 +263,7 @@ export class ScrapeWorker {
           jobLog.push({
             level: 'info',
             timestamp: new Date().toISOString(),
-            message: `✨ Todos los episodios ya cuentan con fuentes activas. Nada que procesar.`,
+            message: `✨ Todos los episodios ya cuentan con fuentes ${targetMode === 'stale' ? 'recientes' : 'activas'}. Nada que procesar.`,
           });
           await jobsService.finishJob(job.id, this.workerId, 'completed', 0, 0, jobLog);
           return;

@@ -2,6 +2,7 @@ import axios from 'axios';
 import { sanitizeEmbedUrl, isPrivateOrLoopbackHost } from '../scrapers/serverParsers.js';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
 import { ytdlpExtractorService } from './ytdlpExtractor.service.js';
+import { checkStreamUrlExpiration } from '../utils/streamExpiration.js';
 
 export interface PlayableSource {
   source_id?: number;
@@ -62,33 +63,46 @@ export class StreamResolverService {
   /**
    * Resolves an episode source into a playable direct stream (HLS/MP4) or safe iframe fallback.
    */
-  public async resolveSource(source: {
-    id?: number;
-    provider: string;
-    server_name?: string;
-    embed_url: string;
-    direct_stream_url?: string | null;
-    quality?: string;
-    language?: string;
-  }): Promise<PlayableSource> {
+  public async resolveSource(
+    source: {
+      id?: number;
+      provider: string;
+      server_name?: string;
+      embed_url: string;
+      direct_stream_url?: string | null;
+      quality?: string;
+      language?: string;
+      last_verified_at?: string | null;
+    },
+    options?: { forceRefresh?: boolean }
+  ): Promise<PlayableSource> {
     const provider = source.provider.toLowerCase();
     const serverName = source.server_name || source.provider;
     const embedUrl = source.embed_url;
+    const forceRefresh = Boolean(options?.forceRefresh);
 
-    // 1. Direct Stream URL already stored in Database
-    if (source.direct_stream_url && source.direct_stream_url.trim().length > 0) {
+    // 1. Direct Stream URL already stored in Database (with expiration check)
+    if (!forceRefresh && source.direct_stream_url && source.direct_stream_url.trim().length > 0) {
       const direct = source.direct_stream_url.trim();
-      const type = direct.includes('.m3u8') ? 'hls' : direct.includes('.mp4') ? 'mp4' : 'hls';
-      return {
-        source_id: source.id,
-        provider,
-        server_name: serverName,
-        type,
-        url: direct,
-        direct_url: direct,
-        quality: source.quality,
-        language: source.language,
-      };
+      const expCheck = checkStreamUrlExpiration(direct);
+
+      if (!expCheck.isExpired) {
+        const type = direct.includes('.m3u8') ? 'hls' : direct.includes('.mp4') ? 'mp4' : 'hls';
+        return {
+          source_id: source.id,
+          provider,
+          server_name: serverName,
+          type,
+          url: direct,
+          direct_url: direct,
+          quality: source.quality,
+          language: source.language,
+        };
+      } else {
+        console.info(
+          `[StreamResolver] Direct stream URL for source ${source.id || provider} has expired. Re-extracting from embed...`
+        );
+      }
     }
 
     // 2. Direct HLS or MP4 in embed_url
@@ -118,7 +132,22 @@ export class StreamResolverService {
       };
     }
 
-    // 3. Fast Specialized Regex Extraction with Stream Proxy Support
+    // 3. Instant resolution for embed-native hosts (e.g. Mega, DoodStream)
+    if (provider.includes('mega') || provider.includes('dood')) {
+      return {
+        source_id: source.id,
+        provider,
+        server_name: serverName,
+        type: 'iframe',
+        url: embedUrl,
+        direct_url: null,
+        quality: source.quality,
+        language: source.language,
+        is_fallback: true,
+      };
+    }
+
+    // 4. Fast Specialized Regex Extraction with Stream Proxy Support
     try {
       const resolved = await this.extractFromHost(embedUrl, provider);
       if (resolved && resolved.success) {

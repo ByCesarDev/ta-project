@@ -7,6 +7,8 @@ import { streamResolverService } from '../services/streamResolver.service.js';
 import { AuthenticatedRequest, StreamLanguage } from '../types/index.js';
 
 export class StreamController {
+  private readonly activeScrapes = new Set<string>();
+
   constructor() {
     this.getStreamSources = this.getStreamSources.bind(this);
     this.validateSource = this.validateSource.bind(this);
@@ -85,7 +87,9 @@ export class StreamController {
       if (episodeId && !forceRefresh) {
         const { data: dbSources, error: sourcesError } = await supabaseAdmin
           .from('episode_sources')
-          .select('id, provider, server_name, embed_url, direct_stream_url, language, quality, priority')
+          .select(
+            'id, provider, server_name, embed_url, direct_stream_url, language, quality, priority, audio_variant, audio_language, language_label, source_key, subtitles, last_verified_at'
+          )
           .eq('episode_id', episodeId)
           .eq('is_active', true)
           .eq('language', lang)
@@ -103,16 +107,50 @@ export class StreamController {
         }
       }
 
-      // 4. Live Scraper Fallback
-      const fallbackSlug = anime?.title_romaji
-        ? videoScraper.formatSlug(anime.title_romaji)
-        : undefined;
-      const scrapedServers = await videoScraper.scrapeEpisodeServers(
-        animeSlug,
-        epNum,
-        lang,
-        fallbackSlug
-      );
+      // 4. Live Scraper Fallback with in-memory concurrent deduplication
+      const scrapeKey = `${animeSlug}_${epNum}_${lang}`;
+      if (this.activeScrapes.has(scrapeKey)) {
+        // Wait briefly for the concurrent scrape to finish
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        if (episodeId) {
+          const { data: rechecked } = await supabaseAdmin
+            .from('episode_sources')
+            .select(
+              'id, provider, server_name, embed_url, direct_stream_url, language, quality, priority, audio_variant, audio_language, language_label, source_key, subtitles, last_verified_at'
+            )
+            .eq('episode_id', episodeId)
+            .eq('is_active', true)
+            .eq('language', lang)
+            .order('priority', { ascending: true });
+
+          if (rechecked && rechecked.length > 0) {
+            res.status(200).json({
+              source: 'cache',
+              anime: { id: anime?.id, name: anime?.name, slug: anime?.slug },
+              episode_number: epNum,
+              language: lang,
+              servers: rechecked,
+            });
+            return;
+          }
+        }
+      }
+
+      this.activeScrapes.add(scrapeKey);
+      let scrapedServers: any[] = [];
+      try {
+        const fallbackSlug = anime?.title_romaji
+          ? videoScraper.formatSlug(anime.title_romaji)
+          : undefined;
+        scrapedServers = await videoScraper.scrapeEpisodeServers(
+          animeSlug,
+          epNum,
+          lang,
+          fallbackSlug
+        );
+      } finally {
+        this.activeScrapes.delete(scrapeKey);
+      }
 
       // Security: Filter active (verified) servers for public playback
       const activeScrapedServers = scrapedServers.filter((s) => s.is_active);
@@ -126,7 +164,7 @@ export class StreamController {
         return;
       }
 
-      // Asynchronously persist discovered servers to DB respecting s.is_active quarantine flag
+      // Asynchronously persist discovered servers to DB respecting multi-audio constraint
       if (episodeId) {
         for (const s of scrapedServers) {
           supabaseAdmin
@@ -137,19 +175,25 @@ export class StreamController {
                 provider: s.provider,
                 server_name: s.server_name,
                 embed_url: s.embed_url,
+                direct_stream_url: s.direct_stream_url || null,
                 language: s.language,
-                quality: s.quality,
-                priority: s.priority,
+                audio_variant: s.audio_variant || s.language || 'default',
+                audio_language: s.audio_language || (s.language === 'dub' ? 'es-419' : 'ja'),
+                language_label: s.language_label || (s.language === 'dub' ? 'Español Latino' : 'Japonés (Sub)'),
+                source_key: s.source_key || 'default',
+                quality: s.quality || '1080p',
+                priority: s.priority ?? 10,
                 is_active: Boolean(s.is_active),
                 last_verified_at: new Date().toISOString(),
+                subtitles: s.subtitles || [],
               },
-              { onConflict: 'episode_id,provider,language,quality' }
+              { onConflict: 'episode_id,provider,audio_variant,source_key,quality' }
             )
             .then(async ({ error }) => {
               if (error) {
                 console.warn('[StreamController] Error persisting source:', error.message);
               } else {
-                await streamController.syncEpisodeAvailability(episodeId);
+                await this.syncEpisodeAvailability(episodeId);
               }
             });
         }
@@ -323,10 +367,15 @@ export class StreamController {
           embed_url: sanitizedUrl,
           direct_stream_url: s.direct_stream_url || null,
           language: lang,
+          audio_variant: s.audio_variant || lang || 'default',
+          audio_language: s.audio_language || (lang === 'dub' ? 'es-419' : 'ja'),
+          language_label: s.language_label || (lang === 'dub' ? 'Español Latino' : 'Japonés (Sub)'),
+          source_key: s.source_key || 'default',
           quality: qual,
           priority: s.priority ?? 10,
           is_active: activeStatus,
           last_verified_at: new Date().toISOString(),
+          subtitles: s.subtitles || [],
         });
       }
 
@@ -353,7 +402,7 @@ export class StreamController {
       if (newSources.length > 0) {
         let { data: insertedData, error: insertError } = await supabaseAdmin
           .from('episode_sources')
-          .upsert(newSources, { onConflict: 'episode_id,provider,language,quality' })
+          .upsert(newSources, { onConflict: 'episode_id,provider,audio_variant,source_key,quality' })
           .select('*');
 
         // Resilient fallback if PostgreSQL sequence episode_sources_id_seq is out of sync with MAX(id)
@@ -480,7 +529,8 @@ export class StreamController {
         return;
       }
 
-      const playable = await streamResolverService.resolveSource(source);
+      const forceRefresh = req.query.refresh === 'true';
+      const playable = await streamResolverService.resolveSource(source, { forceRefresh });
       res.status(200).json(playable);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to resolve streaming source';
@@ -497,6 +547,7 @@ export class StreamController {
    */
   public async resolveDirectSource(req: AuthenticatedRequest, res: Response): Promise<void> {
     const { embed_url, provider = 'custom', server_name, direct_stream_url, quality, language } = req.body;
+    const forceRefresh = req.query.refresh === 'true' || req.body.force_refresh === true;
 
     if (!embed_url || typeof embed_url !== 'string') {
       res.status(400).json({
@@ -507,14 +558,17 @@ export class StreamController {
     }
 
     try {
-      const playable = await streamResolverService.resolveSource({
-        embed_url,
-        provider,
-        server_name,
-        direct_stream_url,
-        quality,
-        language,
-      });
+      const playable = await streamResolverService.resolveSource(
+        {
+          embed_url,
+          provider,
+          server_name,
+          direct_stream_url,
+          quality,
+          language,
+        },
+        { forceRefresh }
+      );
       res.status(200).json(playable);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to resolve streaming source';

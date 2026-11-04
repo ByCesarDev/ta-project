@@ -1,4 +1,5 @@
 import { EpisodeSourceRow, PlayableStream } from '../types/index.js';
+import { checkStreamUrlExpiration } from './streamExpiration.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -18,9 +19,13 @@ function normalizeStreamUrl(url: string): string {
 /**
  * Resolves an EpisodeSource into a playable stream (HLS/MP4) or safe fallback
  */
-export async function resolveStreamSource(source: EpisodeSourceRow): Promise<PlayableStream> {
+export async function resolveStreamSource(
+  source: EpisodeSourceRow,
+  options?: { forceRefresh?: boolean }
+): Promise<PlayableStream> {
   const providerLower = (source.provider || '').toLowerCase();
   const serverName = source.server_name || source.provider;
+  const forceRefresh = Boolean(options?.forceRefresh);
 
   // Extract embedded subtitles from source.subtitles or hash if present
   let embeddedSubtitles: Array<{ id: string; language: string; label: string; url?: string }> = [];
@@ -44,22 +49,27 @@ export async function resolveStreamSource(source: EpisodeSourceRow): Promise<Pla
     }
   }
 
-  // 1. Direct Stream URL already stored in database
-  if (source.direct_stream_url && source.direct_stream_url.trim().length > 0) {
+  // 1. Direct Stream URL already stored in database (with expiration check)
+  if (!forceRefresh && source.direct_stream_url && source.direct_stream_url.trim().length > 0) {
     const direct = normalizeStreamUrl(source.direct_stream_url.trim());
     const cleanDirect = direct.split('#')[0];
-    const type = cleanDirect.includes('.m3u8') ? 'hls' : cleanDirect.includes('.mp4') ? 'mp4' : 'hls';
-    return {
-      source_id: source.id,
-      provider: source.provider,
-      server_name: serverName,
-      type,
-      url: cleanDirect,
-      direct_url: cleanDirect,
-      quality: source.quality,
-      language: source.language,
-      subtitles: embeddedSubtitles.length > 0 ? embeddedSubtitles : undefined,
-    };
+    const expCheck = checkStreamUrlExpiration(cleanDirect);
+
+    if (!expCheck.isExpired) {
+      const type = cleanDirect.includes('.m3u8') ? 'hls' : cleanDirect.includes('.mp4') ? 'mp4' : 'hls';
+      return {
+        source_id: source.id,
+        provider: source.provider,
+        server_name: serverName,
+        type,
+        url: cleanDirect,
+        direct_url: cleanDirect,
+        quality: source.quality,
+        language: source.language,
+        subtitles: embeddedSubtitles.length > 0 ? embeddedSubtitles : undefined,
+      };
+    }
+    // Expired direct stream URL! Will re-resolve via backend
   }
 
   // 2. Direct HLS or MP4 file in embed_url
@@ -116,15 +126,15 @@ export async function resolveStreamSource(source: EpisodeSourceRow): Promise<Pla
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     const resolveEndpoint = source.id
-      ? `${API_BASE_URL}/api/v1/stream/sources/${source.id}/resolve`
-      : `${API_BASE_URL}/api/v1/stream/resolve`;
+      ? `${API_BASE_URL}/api/v1/stream/sources/${source.id}/resolve${forceRefresh ? '?refresh=true' : ''}`
+      : `${API_BASE_URL}/api/v1/stream/resolve${forceRefresh ? '?refresh=true' : ''}`;
 
     const res = source.id
       ? await fetch(resolveEndpoint, { signal: controller.signal })
       : await fetch(resolveEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(source),
+          body: JSON.stringify({ ...source, force_refresh: forceRefresh }),
           signal: controller.signal,
         });
 

@@ -301,4 +301,21 @@ describe('TotalAnime Web: Episode Reactions & Player Settings', () => {
   });
 });
 
+describe('TotalAnime Web: Stream URL Expiration Lifecycle', () => {
+  it('should detect when an expiration token is valid or expired in stream URLs', async () => {
+    const { checkStreamUrlExpiration } = await import('../src/lib/streamExpiration.js');
+
+    const futureUnix = Math.floor(Date.now() / 1000) + 7200;
+    const validUrl = `https://cdn.peliculaplay.com/video.m3u8?exp=${futureUnix}`;
+    expect(checkStreamUrlExpiration(validUrl).isExpired).toBe(false);
+
+    const pastUnix = Math.floor(Date.now() / 1000) - 300;
+    const expiredUrl = `https://cdn.peliculaplay.com/video.m3u8?exp=${pastUnix}`;
+    expect(checkStreamUrlExpiration(expiredUrl).isExpired).toBe(true);
+
+    const noExpUrl = `https://cdn.peliculaplay.com/video.m3u8`;
+    expect(checkStreamUrlExpiration(noExpUrl).isExpired).toBe(false);
+  });
+});
+
 

@@ -197,6 +197,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   const pendingSeekTimeRef = useRef<number | null>(null);
   const wasPlayingRef = useRef<boolean>(true);
   const prevSourceIdRef = useRef<number | string | null>(selectedSource?.id ?? null);
+  const hasRetriedRenewalRef = useRef<boolean>(false);
 
   // Playback state
   const [stream, setStream] = useState<PlayableStream | null>(null);
@@ -399,12 +400,14 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     wasPlayingRef.current = true;
     prevSourceIdRef.current = selectedSource?.id ?? null;
     currentFetchedSubUrlRef.current = null;
+    hasRetriedRenewalRef.current = false;
   }, [episodeId]);
 
   // Synchronize playback position whenever selectedSource changes (e.g. language or quality switch)
   useEffect(() => {
     if (prevSourceIdRef.current !== selectedSource?.id) {
       prevSourceIdRef.current = selectedSource?.id ?? null;
+      hasRetriedRenewalRef.current = false;
       // Capture exact position before source switches
       const currentPos = videoRef.current?.currentTime || currentTimeRef.current;
       if (currentPos > 0) {
@@ -634,23 +637,66 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         }
       });
 
-      let fatalErrorCount = 0;
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
-          fatalErrorCount++;
-          if (fatalErrorCount > 3) {
-            hls.destroy();
-            setStream((prev) => (prev ? { ...prev, type: 'iframe', is_fallback: true } : null));
-            return;
-          }
-
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              // Automatic single-retry renewal for expired stream URLs
+              if (!hasRetriedRenewalRef.current && selectedSource) {
+                hasRetriedRenewalRef.current = true;
+                setResumeToast('Renovando enlace de reproducción...');
+                setTimeout(() => setResumeToast(null), 3000);
+
+                const currentPos = video.currentTime || currentTimeRef.current;
+                if (currentPos > 0) {
+                  pendingSeekTimeRef.current = currentPos;
+                }
+
+                // Request fresh stream resolution from backend
+                resolveStreamSource(selectedSource, { forceRefresh: true })
+                  .then((refreshed) => {
+                    if (refreshed && refreshed.type !== 'error' && refreshed.url) {
+                      setStream(refreshed);
+                    } else {
+                      hls.destroy();
+                      setStream({
+                        source_id: selectedSource.id,
+                        provider: selectedSource.provider,
+                        server_name: selectedSource.server_name || selectedSource.provider,
+                        type: 'error',
+                        url: '',
+                        error_message: `El servidor ${selectedSource.server_name || selectedSource.provider} no responde o su enlace ha caducado. Prueba seleccionando otro servidor o calidad en Ajustes.`,
+                      });
+                    }
+                  })
+                  .catch(() => {
+                    hls.destroy();
+                    setStream({
+                      source_id: selectedSource.id,
+                      provider: selectedSource.provider,
+                      server_name: selectedSource.server_name || selectedSource.provider,
+                      type: 'error',
+                      url: '',
+                      error_message: `No se pudo conectar con el servidor ${selectedSource.server_name || selectedSource.provider}.`,
+                    });
+                  });
+              } else {
+                hls.destroy();
+                setStream({
+                  source_id: selectedSource?.id,
+                  provider: selectedSource?.provider || 'server',
+                  server_name: selectedSource?.server_name || selectedSource?.provider || 'Servidor',
+                  type: 'error',
+                  url: '',
+                  error_message: `El enlace del servidor ha caducado o no responde. Por favor prueba seleccionando otro servidor o calidad en Ajustes.`,
+                });
+              }
               break;
+
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls.recoverMediaError();
               break;
+
             default:
               hls.destroy();
               // Fallback to iframe
