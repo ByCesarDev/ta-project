@@ -1398,26 +1398,41 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       {selectedSubtitle && activeCueText && (
         <div
           className={`absolute left-0 right-0 text-center pointer-events-none z-10 px-6 transition-all duration-150 ${
-            showControls ? 'bottom-20 sm:bottom-24' : 'bottom-6 sm:bottom-8'
+            showControls
+              ? isFullscreen
+                ? 'bottom-24 sm:bottom-28'
+                : 'bottom-20 sm:bottom-24'
+              : isFullscreen
+              ? 'bottom-10 sm:bottom-12'
+              : 'bottom-6 sm:bottom-8'
           }`}
         >
           <span
             className={`inline-block font-bold tracking-wide transition-all ${
               subtitleStyle.background === 'box'
-                ? 'bg-black/85 px-4 py-2 rounded-2xl border border-white/10 backdrop-blur-xs shadow-2xl'
+                ? isFullscreen
+                  ? 'bg-black/85 px-6 py-2.5 rounded-2xl border border-white/10 backdrop-blur-xs shadow-2xl'
+                  : 'bg-black/85 px-4 py-1.5 rounded-2xl border border-white/10 backdrop-blur-xs shadow-2xl'
                 : ''
             }`}
             style={{
               color: subtitleStyle.color,
-              fontSize:
-                subtitleStyle.fontSize === 'small'
-                  ? 'clamp(13px, 1.8vw, 16px)'
+              fontSize: isFullscreen
+                ? subtitleStyle.fontSize === 'small'
+                  ? 'clamp(20px, 2.2vw, 28px)'
                   : subtitleStyle.fontSize === 'large'
-                  ? 'clamp(20px, 3.2vw, 28px)'
-                  : 'clamp(16px, 2.5vw, 22px)',
+                  ? 'clamp(36px, 4.2vw, 54px)'
+                  : 'clamp(28px, 3.2vw, 42px)'
+                : subtitleStyle.fontSize === 'small'
+                ? 'clamp(13px, 1.8vw, 16px)'
+                : subtitleStyle.fontSize === 'large'
+                ? 'clamp(20px, 2.8vw, 26px)'
+                : 'clamp(16px, 2.2vw, 20px)',
               textShadow:
                 subtitleStyle.background === 'box'
                   ? 'none'
+                  : isFullscreen
+                  ? '0 0 6px #000, 0 0 12px #000, -2.5px -2.5px 0 #000, 2.5px -2.5px 0 #000, -2.5px 2.5px 0 #000, 2.5px 2.5px 0 #000, 0 4px 8px rgba(0,0,0,0.95)'
                   : '0 0 4px #000, 0 0 8px #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000, 0 3px 6px rgba(0,0,0,0.95)',
               fontFamily: 'Outfit, Inter, system-ui, sans-serif',
               lineHeight: 1.35,
