@@ -13,6 +13,7 @@ interface EpisodeInfoProps {
   episodeId: number;
   episodeNumber: number;
   episodeTitle?: string | null;
+  thumbnail?: string | null;
   duration?: number | string | null;
   synopsis?: string | null;
 }
@@ -76,6 +77,7 @@ export const EpisodeInfo: React.FC<EpisodeInfoProps> = ({
   episodeId,
   episodeNumber,
   episodeTitle,
+  thumbnail,
   duration,
   synopsis,
 }) => {
@@ -138,6 +140,7 @@ export const EpisodeInfo: React.FC<EpisodeInfoProps> = ({
           animeTitle={seriesName}
           seriesId={seriesId}
           duration={formattedDuration}
+          thumbnail={thumbnail}
           variant="inline"
         />
       </div>

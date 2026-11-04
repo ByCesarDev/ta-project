@@ -8,9 +8,9 @@ describe('ReactionService & SavedEpisodeService (Turso)', () => {
     await initTursoDatabase();
     const client = getTursoClient();
     await client.batch([
-      `DELETE FROM episode_reactions`,
-      `DELETE FROM episode_reaction_stats`,
-      `DELETE FROM user_saved_episodes`,
+      `DELETE FROM episode_reactions WHERE episode_id IN (501, 777) OR user_id LIKE 'user-%'`,
+      `DELETE FROM episode_reaction_stats WHERE episode_id IN (501, 777)`,
+      `DELETE FROM user_saved_episodes WHERE episode_id IN (501, 777) OR user_id LIKE 'user-%'`,
     ], 'write');
   });
 
@@ -86,3 +86,4 @@ describe('ReactionService & SavedEpisodeService (Turso)', () => {
     expect(emptyList.length).toBe(0);
   });
 });
+

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageContainer } from '../components/layout/PageContainer.js';
 import { useWatchlist, useToggleWatchlist } from '../hooks/useWatchlist.js';
-import { useSavedEpisodes, useRemoveSavedEpisode } from '../hooks/useSavedEpisodes.js';
+import { useSavedEpisodes, useRemoveSavedEpisode, SavedEpisodeItem } from '../hooks/useSavedEpisodes.js';
 import { useAuth } from '../context/AuthContext.js';
 import { Bookmark, Trash2, LogIn, Compass, Tv, Play, Film } from 'lucide-react';
 import { Button } from '../components/common/Button.js';
@@ -151,75 +151,109 @@ export const WatchlistPage: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {savedEpisodes.map((ep) => (
-                <div
+                <SavedEpisodeCard
                   key={ep.id}
-                  className="group relative flex flex-col rounded-2xl overflow-hidden bg-[#0c101c] border border-slate-800 hover:border-indigo-500/50 transition-all duration-300 hover:-translate-y-1 shadow-md"
-                >
-                  <Link
-                    to={`/watch/${ep.anime_slug}/${ep.episode_id}`}
-                    className="block relative aspect-video w-full overflow-hidden bg-slate-900"
-                  >
-                    <img
-                      src={ep.thumbnail || 'https://totalanime.com/placeholder-cover.webp'}
-                      alt={ep.episode_title || `Episodio ${ep.episode_number}`}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors" />
-
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg">
-                        <Play className="w-4 h-4 fill-white ml-0.5" />
-                      </div>
-                    </div>
-
-                    {/* Episode Badge */}
-                    <div className="absolute bottom-2 left-2 bg-indigo-600/90 text-white font-extrabold text-[10px] px-2 py-0.5 rounded backdrop-blur-md">
-                      EP {ep.episode_number}
-                    </div>
-
-                    {/* Duration Badge */}
-                    {ep.duration && (
-                      <div className="absolute bottom-2 right-2 bg-black/80 text-slate-300 font-semibold text-[10px] px-1.5 py-0.5 rounded backdrop-blur-md">
-                        {ep.duration}
-                      </div>
-                    )}
-                  </Link>
-
-                  {/* Card Info */}
-                  <div className="p-3 flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <Link
-                        to={`/anime/${ep.anime_slug}`}
-                        className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 line-clamp-1 block"
-                      >
-                        {ep.anime_title}
-                      </Link>
-                      <Link
-                        to={`/watch/${ep.anime_slug}/${ep.episode_id}`}
-                        className="text-xs font-bold text-white group-hover:text-indigo-300 line-clamp-1 mt-0.5 block"
-                        title={ep.episode_title || `Episodio ${ep.episode_number}`}
-                      >
-                        {ep.episode_title || `Episodio ${ep.episode_number}`}
-                      </Link>
-                    </div>
-
-                    {/* Remove button */}
-                    <button
-                      onClick={() => removeSavedEpisodeMutation.mutate(ep.episode_id)}
-                      disabled={removeSavedEpisodeMutation.isPending}
-                      title="Quitar de guardados"
-                      className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors shrink-0 cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                  ep={ep}
+                  onRemove={(episodeId) => removeSavedEpisodeMutation.mutate(episodeId)}
+                  isRemoving={removeSavedEpisodeMutation.isPending}
+                />
               ))}
             </div>
           )}
         </>
       )}
     </PageContainer>
+  );
+};
+
+const SavedEpisodeCard: React.FC<{
+  ep: SavedEpisodeItem;
+  onRemove: (episodeId: number) => void;
+  isRemoving: boolean;
+}> = ({ ep, onRemove, isRemoving }) => {
+  const [imgError, setImgError] = useState(false);
+  const title = ep.episode_title || `Episodio ${ep.episode_number}`;
+  const hasThumbnail = Boolean(ep.thumbnail && ep.thumbnail.trim() !== '' && !imgError);
+
+  return (
+    <div className="group relative flex flex-col rounded-2xl overflow-hidden bg-[#0c101c] border border-slate-800 hover:border-indigo-500/50 transition-all duration-300 hover:-translate-y-1 shadow-md">
+      <Link
+        to={`/watch/${ep.anime_slug}/${ep.episode_id}`}
+        className="block relative aspect-video w-full overflow-hidden bg-slate-900 border-b border-slate-800/60"
+      >
+        {hasThumbnail ? (
+          <img
+            src={ep.thumbnail!}
+            alt={title}
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 via-[#111728] to-indigo-950/40 p-3 text-center">
+            <div className="w-10 h-10 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-1.5">
+              <Film className="w-5 h-5" />
+            </div>
+            <span className="text-xs font-bold text-slate-300 font-['Outfit'] line-clamp-1">
+              {ep.anime_title}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-400">
+              Episodio {ep.episode_number}
+            </span>
+          </div>
+        )}
+
+        <div className="absolute inset-0 bg-black/25 group-hover:bg-black/10 transition-colors" />
+
+        {/* Play Icon on hover */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg">
+            <Play className="w-4 h-4 fill-white ml-0.5" />
+          </div>
+        </div>
+
+        {/* Episode Badge */}
+        <div className="absolute bottom-2 left-2 bg-indigo-600/90 text-white font-extrabold text-[10px] px-2 py-0.5 rounded backdrop-blur-md shadow">
+          EP {ep.episode_number}
+        </div>
+
+        {/* Duration Badge */}
+        {ep.duration && (
+          <div className="absolute bottom-2 right-2 bg-black/80 text-slate-300 font-semibold text-[10px] px-1.5 py-0.5 rounded backdrop-blur-md">
+            {ep.duration}
+          </div>
+        )}
+      </Link>
+
+      {/* Card Info */}
+      <div className="p-3 flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <Link
+            to={`/anime/${ep.anime_slug}`}
+            className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 line-clamp-1 block"
+          >
+            {ep.anime_title}
+          </Link>
+          <Link
+            to={`/watch/${ep.anime_slug}/${ep.episode_id}`}
+            className="text-xs font-bold text-white group-hover:text-indigo-300 line-clamp-1 mt-0.5 block"
+            title={title}
+          >
+            {title}
+          </Link>
+        </div>
+
+        {/* Remove button */}
+        <button
+          onClick={() => onRemove(ep.episode_id)}
+          disabled={isRemoving}
+          title="Quitar de guardados"
+          className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors shrink-0 cursor-pointer"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
   );
 };
 

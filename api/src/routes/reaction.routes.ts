@@ -8,3 +8,4 @@ router.get('/episode/:episodeId', optionalAuthenticateUser, (req, res) => reacti
 router.post('/episode/:episodeId', authenticateUser, (req, res) => reactionController.setReaction(req, res));
 
 export default router;
+

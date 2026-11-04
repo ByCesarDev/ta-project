@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { getTursoClient, initTursoDatabase } from '../config/turso.js';
+import { supabaseAdmin } from '../config/supabaseAdmin.js';
 
 export interface SavedEpisodeItem {
   id: string;
@@ -33,7 +34,7 @@ export class SavedEpisodeService {
       args: [userId],
     });
 
-    return res.rows.map((r: any) => ({
+    const items: SavedEpisodeItem[] = res.rows.map((r: any) => ({
       id: String(r.id),
       user_id: String(r.user_id),
       episode_id: Number(r.episode_id),
@@ -47,6 +48,45 @@ export class SavedEpisodeService {
       duration: r.duration ? String(r.duration) : null,
       created_at: String(r.created_at),
     }));
+
+    // Backfill any saved episodes that are missing a thumbnail from Supabase
+    const missingThumbItems = items.filter((it) => !it.thumbnail || it.thumbnail.trim() === '');
+    if (missingThumbItems.length > 0) {
+      try {
+        const epIds = missingThumbItems.map((it) => it.episode_id);
+        const { data: eps } = await supabaseAdmin
+          .from('episodes')
+          .select('id, thumbnail, anime:animes(cover_image, banner_image)')
+          .in('id', epIds);
+
+        if (eps && eps.length > 0) {
+          for (const ep of eps) {
+            const resolvedThumb =
+              ep.thumbnail ||
+              (ep.anime as any)?.banner_image ||
+              (ep.anime as any)?.cover_image ||
+              null;
+
+            if (resolvedThumb) {
+              const target = items.find((it) => it.episode_id === ep.id);
+              if (target) {
+                target.thumbnail = resolvedThumb;
+              }
+
+              // Fire-and-forget update to Turso DB so subsequent requests are instant
+              client.execute({
+                sql: `UPDATE user_saved_episodes SET thumbnail = ? WHERE episode_id = ? AND (thumbnail IS NULL OR thumbnail = '')`,
+                args: [resolvedThumb, ep.id],
+              }).catch(() => {});
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[SavedEpisodeService] Failed to backfill missing thumbnails:', err);
+      }
+    }
+
+    return items;
   }
 
   /**
@@ -93,6 +133,32 @@ export class SavedEpisodeService {
       });
       return { is_saved: false };
     } else {
+      let resolvedThumbnail = metadata.thumbnail?.trim() || null;
+      let resolvedDuration = metadata.duration?.trim() || null;
+
+      if (!resolvedThumbnail) {
+        try {
+          const { data: epData } = await supabaseAdmin
+            .from('episodes')
+            .select('thumbnail, duration, anime:animes(cover_image, banner_image)')
+            .eq('id', episodeId)
+            .maybeSingle();
+
+          if (epData) {
+            resolvedThumbnail =
+              epData.thumbnail ||
+              (epData.anime as any)?.banner_image ||
+              (epData.anime as any)?.cover_image ||
+              null;
+            if (!resolvedDuration && epData.duration) {
+              resolvedDuration = `${epData.duration} min`;
+            }
+          }
+        } catch (err) {
+          console.error('[SavedEpisodeService] Failed to fetch episode metadata fallback:', err);
+        }
+      }
+
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       await client.execute({
@@ -109,8 +175,8 @@ export class SavedEpisodeService {
           metadata.animeTitle,
           metadata.episodeNumber,
           metadata.episodeTitle || null,
-          metadata.thumbnail || null,
-          metadata.duration || null,
+          resolvedThumbnail,
+          resolvedDuration,
           now,
         ],
       });
@@ -133,3 +199,4 @@ export class SavedEpisodeService {
 }
 
 export const savedEpisodeService = new SavedEpisodeService();
+

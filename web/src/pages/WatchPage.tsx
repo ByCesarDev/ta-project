@@ -268,6 +268,7 @@ export const WatchPage: React.FC = () => {
               episodeId={episode.id}
               episodeNumber={episode.episode_number}
               episodeTitle={episode.title}
+              thumbnail={episode.thumbnail || watchData.anime?.banner_image || series.banner_image || series.cover_image}
               duration={episode.duration}
               synopsis={episode.description || null}
             />
