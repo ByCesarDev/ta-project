@@ -28,9 +28,15 @@ export const WatchPage: React.FC = () => {
     }
   }, [watchData, slug, navigate]);
 
-  const [selectedAudioVariant, setSelectedAudioVariant] = useState<string>('');
-  const [selectedLanguage, setSelectedLanguage] = useState<StreamLanguage>('sub');
-  const [selectedQuality, setSelectedQuality] = useState<string>('Auto');
+  const [selectedAudioVariant, setSelectedAudioVariant] = useState<string>(() => {
+    return localStorage.getItem('ta_player_audio_variant') || '';
+  });
+  const [selectedLanguage, setSelectedLanguage] = useState<StreamLanguage>(() => {
+    return (localStorage.getItem('ta_player_language') as StreamLanguage) || 'sub';
+  });
+  const [selectedQuality, setSelectedQuality] = useState<string>(() => {
+    return localStorage.getItem('ta_player_quality') || 'Auto';
+  });
   const [selectedSource, setSelectedSource] = useState<EpisodeSourceRow | null>(null);
 
   // Available languages detected from sources
@@ -40,21 +46,45 @@ export const WatchPage: React.FC = () => {
     return langs.length > 0 ? langs : ['sub', 'dub'];
   }, [watchData]);
 
-  // When sources load, select best matching source
+  // When sources load, select best matching source according to user preference
   useEffect(() => {
     if (watchData?.sources && watchData.sources.length > 0) {
-      let matchedSources = watchData.sources.filter(
-        (s) => (s.audio_variant || s.language) === selectedAudioVariant
-      );
+      const savedVariant = selectedAudioVariant || localStorage.getItem('ta_player_audio_variant') || '';
+      const savedCode = localStorage.getItem('ta_player_audio_code') || '';
+      const savedLang = selectedLanguage || (localStorage.getItem('ta_player_language') as StreamLanguage) || 'sub';
 
+      // 1. Try matching by active or saved audio variant
+      let matchedSources = savedVariant
+        ? watchData.sources.filter((s) => (s.audio_variant || s.language) === savedVariant)
+        : [];
+
+      // 2. If no exact variant match, match by audio language code (e.g. 'es', 'es-419', 'ja')
+      if (matchedSources.length === 0 && savedCode) {
+        matchedSources = watchData.sources.filter(
+          (s) =>
+            s.audio_language &&
+            (s.audio_language.toLowerCase() === savedCode.toLowerCase() ||
+              s.audio_language.toLowerCase().startsWith(savedCode.slice(0, 2).toLowerCase()))
+        );
+      }
+
+      // 3. If still no match, match by stream language ('dub' vs 'sub')
+      if (matchedSources.length === 0 && savedLang) {
+        matchedSources = watchData.sources.filter((s) => s.language === savedLang);
+      }
+
+      // 4. Fallback to first source if nothing matched
       if (matchedSources.length === 0) {
         const first = watchData.sources[0];
         const defaultKey = first.audio_variant || first.language || 'sub';
         setSelectedAudioVariant(defaultKey);
         setSelectedLanguage(first.language || 'sub');
-        matchedSources = watchData.sources.filter(
-          (s) => (s.audio_variant || s.language) === defaultKey
-        );
+        matchedSources = [first];
+      } else {
+        const chosen = matchedSources[0];
+        const key = chosen.audio_variant || chosen.language || 'sub';
+        setSelectedAudioVariant(key);
+        setSelectedLanguage(chosen.language || 'sub');
       }
 
       if (matchedSources.length > 0) {
@@ -72,16 +102,24 @@ export const WatchPage: React.FC = () => {
     } else {
       setSelectedSource(null);
     }
-  }, [watchData, selectedAudioVariant, selectedQuality]);
+  }, [watchData, selectedQuality]);
 
   const handleAudioVariantChange = (variantKey: string) => {
     setSelectedAudioVariant(variantKey);
+    localStorage.setItem('ta_player_audio_variant', variantKey);
+
     if (watchData?.sources) {
       const matching = watchData.sources.filter(
         (s) => (s.audio_variant || s.language) === variantKey
       );
       if (matching.length > 0) {
-        setSelectedLanguage(matching[0].language || 'sub');
+        const lang = matching[0].language || 'sub';
+        setSelectedLanguage(lang);
+        localStorage.setItem('ta_player_language', lang);
+        if (matching[0].audio_language) {
+          localStorage.setItem('ta_player_audio_code', matching[0].audio_language);
+        }
+
         if (selectedQuality !== 'Auto') {
           const qualityMatch = matching.find(
             (s) => s.quality === selectedQuality || s.quality?.toLowerCase().includes(selectedQuality.toLowerCase())
@@ -96,10 +134,18 @@ export const WatchPage: React.FC = () => {
 
   const handleLanguageChange = (lang: StreamLanguage) => {
     setSelectedLanguage(lang);
+    localStorage.setItem('ta_player_language', lang);
+
     if (watchData?.sources) {
       const matching = watchData.sources.filter((s) => s.language === lang);
       if (matching.length > 0) {
-        setSelectedAudioVariant(matching[0].audio_variant || matching[0].language);
+        const key = matching[0].audio_variant || matching[0].language;
+        setSelectedAudioVariant(key);
+        localStorage.setItem('ta_player_audio_variant', key);
+        if (matching[0].audio_language) {
+          localStorage.setItem('ta_player_audio_code', matching[0].audio_language);
+        }
+
         if (selectedQuality !== 'Auto') {
           const qualityMatch = matching.find(
             (s) => s.quality === selectedQuality || s.quality?.toLowerCase().includes(selectedQuality.toLowerCase())
@@ -114,6 +160,8 @@ export const WatchPage: React.FC = () => {
 
   const handleQualityChange = (qual: string) => {
     setSelectedQuality(qual);
+    localStorage.setItem('ta_player_quality', qual);
+
     if (watchData?.sources) {
       const currentSources = watchData.sources.filter((s) => {
         if (selectedAudioVariant) {
