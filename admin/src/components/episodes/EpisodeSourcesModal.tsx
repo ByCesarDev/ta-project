@@ -142,6 +142,26 @@ export const EpisodeSourcesModal: React.FC<EpisodeSourcesModalProps> = ({
     setSources(sources.filter((_, i) => i !== index));
   };
 
+  const handleDeleteAllSources = () => {
+    if (!isAdmin) {
+      alert('Solo los administradores pueden eliminar servidores de forma permanente.');
+      return;
+    }
+    if (sources.length === 0) return;
+
+    const count = sources.length;
+    const confirmDelete = window.confirm(
+      `¿Estás seguro de que deseas eliminar TODOS los ${count} servidores de este episodio?\n\nLos servidores se removerán de la lista y el cambio se aplicará definitivamente al pulsar "Guardar Servidores".`
+    );
+    if (!confirmDelete) return;
+
+    const existingIds = sources.filter((s) => s.id).map((s) => s.id!);
+    if (existingIds.length > 0) {
+      setDeletedIds((prev) => Array.from(new Set([...prev, ...existingIds])));
+    }
+    setSources([]);
+  };
+
   const handleSave = async () => {
     if (!episode) return;
     setIsSaving(true);
@@ -229,8 +249,44 @@ export const EpisodeSourcesModal: React.FC<EpisodeSourcesModalProps> = ({
       }
       subtitle={`${animeName} • Gestión N-aria de fuentes y reproductores`}
       maxWidth="4xl"
+      fixedHeight={true}
+      footer={
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 w-full">
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+            <span className="text-xs text-slate-400">
+              {sources.length} servidor(es) en lista
+            </span>
+            {sources.length > 0 && isAdmin && (
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                icon={<Trash2 className="w-3.5 h-3.5" />}
+                onClick={handleDeleteAllSources}
+                title="Eliminar todos los servidores de este episodio"
+              >
+                Eliminar Todos
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cerrar
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              isLoading={isSaving}
+              icon={<Save className="w-4 h-4" />}
+              onClick={handleSave}
+            >
+              Guardar Servidores
+            </Button>
+          </div>
+        </div>
+      }
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
         {errorMsg && (
           <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
             <XCircle className="w-4 h-4 shrink-0 text-rose-400" />
@@ -479,26 +535,6 @@ export const EpisodeSourcesModal: React.FC<EpisodeSourcesModalProps> = ({
             </Button>
           </div>
         )}
-
-        <div className="flex justify-between items-center pt-4 border-t border-slate-800">
-          <span className="text-xs text-slate-400">
-            {sources.length} servidor(es) en lista
-          </span>
-          <div className="flex gap-3">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cerrar
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              isLoading={isSaving}
-              icon={<Save className="w-4 h-4" />}
-              onClick={handleSave}
-            >
-              Guardar Servidores
-            </Button>
-          </div>
-        </div>
       </div>
     </Modal>
   );

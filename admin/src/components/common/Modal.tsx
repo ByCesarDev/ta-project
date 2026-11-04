@@ -10,6 +10,8 @@ interface ModalProps {
   subtitle?: string;
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl';
+  footer?: React.ReactNode;
+  fixedHeight?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -19,6 +21,8 @@ export const Modal: React.FC<ModalProps> = ({
   subtitle,
   children,
   maxWidth = 'lg',
+  footer,
+  fixedHeight = false,
 }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -65,26 +69,41 @@ export const Modal: React.FC<ModalProps> = ({
       {/* Modal Dialog */}
       <div
         className={cn(
-          'relative w-full bg-[#0d121f] border border-slate-700/80 rounded-2xl shadow-2xl z-10 overflow-hidden my-auto',
+          'relative w-full bg-[#0d121f] border border-slate-700/80 rounded-2xl shadow-2xl z-10 overflow-hidden my-auto flex flex-col',
+          fixedHeight ? 'h-[85vh] max-h-[85vh]' : 'max-h-[90vh]',
           maxWidthStyles[maxWidth]
         )}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-800 bg-[#090d16]/90">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-[#090d16]/95 shrink-0">
           <div>
             <h3 className="text-lg font-bold text-white tracking-tight">{title}</h3>
             {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800/80 transition-colors"
+            className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800/80 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div
+          className={cn(
+            'p-6 overflow-y-auto',
+            fixedHeight ? 'flex-1 min-h-0' : 'max-h-[80vh]'
+          )}
+        >
+          {children}
+        </div>
+
+        {/* Fixed Footer */}
+        {footer && (
+          <div className="px-6 py-4 border-t border-slate-800 bg-[#090d16]/95 shrink-0">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
