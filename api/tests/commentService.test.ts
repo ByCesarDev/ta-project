@@ -6,10 +6,10 @@ describe('CommentService (Turso / SQLite)', () => {
   beforeEach(async () => {
     await initTursoDatabase();
     const client = getTursoClient();
-    // Clean test tables
+    // Clean test tables only for test episode IDs
     await client.batch([
-      `DELETE FROM episode_comment_likes`,
-      `DELETE FROM episode_comments`
+      `DELETE FROM episode_comment_likes WHERE comment_id IN (SELECT id FROM episode_comments WHERE episode_id IN (101, 102, 103, 104, 105))`,
+      `DELETE FROM episode_comments WHERE episode_id IN (101, 102, 103, 104, 105)`
     ], 'write');
   });
 
