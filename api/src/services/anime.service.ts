@@ -293,6 +293,13 @@ export class AnimeService {
    * Deletes anime row
    */
   public async deleteAnime(id: number): Promise<void> {
+    // 1. Remove series_entries link first if linked to a season (satisfies ON DELETE RESTRICT)
+    await supabaseAdmin
+      .from('series_entries')
+      .delete()
+      .eq('anime_id', id);
+
+    // 2. Delete anime row (episodes, anime_genres, anime_source_bindings cascade automatically)
     const { error } = await supabaseAdmin
       .from('animes')
       .delete()
@@ -305,3 +312,4 @@ export class AnimeService {
 }
 
 export const animeService = new AnimeService();
+

@@ -26,3 +26,4 @@ router.put('/:id', requireModeratorOrAdmin, animeController.updateAnime);
 router.delete('/:id', requireAdmin, animeController.deleteAnime);
 
 export default router;
+

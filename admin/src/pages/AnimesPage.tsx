@@ -100,6 +100,18 @@ export const AnimesPage: React.FC = () => {
     }
   };
 
+  const handleDeleteAnime = async (id: number, name: string) => {
+    if (!isAdmin) return;
+    if (!confirm(`¿Estás seguro de eliminar permanentemente la entrega "${name}" (ID ${id})? Esta acción eliminará también sus episodios vinculados.`)) return;
+    try {
+      await apiClient.delete(`/animes/${id}`);
+      refetchAnimes();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al eliminar entrega';
+      alert(msg);
+    }
+  };
+
   // Series Columns Definition
   const seriesColumns: Column<any>[] = [
     {
@@ -324,6 +336,18 @@ export const AnimesPage: React.FC = () => {
           >
             <Edit2 className="w-4 h-4 text-slate-400 hover:text-white" />
           </Button>
+
+          {/* Delete Anime (Admin only) */}
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleDeleteAnime(anime.id, anime.name)}
+              title="Eliminar Entrega (Admin)"
+            >
+              <Trash2 className="w-4 h-4 text-rose-400 hover:text-rose-300" />
+            </Button>
+          )}
         </div>
       ),
     },
