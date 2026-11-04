@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useViewerProfile } from '../../context/ViewerProfileContext.js';
 import { getAvatarUrl } from '../../lib/utils.js';
 import { useAvatars } from '../../hooks/useAvatars.js';
@@ -48,14 +49,19 @@ export const ProfileSelectorModal: React.FC = () => {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-2xl rounded-3xl bg-[#0c101c] border border-slate-800 shadow-2xl p-6 sm:p-8 text-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+      {/* Click outside backdrop to close */}
+      <div
+        className="fixed inset-0 -z-10"
+        onClick={activeProfile ? closeSelectorModal : undefined}
+      />
+      <div className="relative w-full max-w-2xl rounded-3xl bg-[#0c101c] border border-slate-800 shadow-2xl p-6 sm:p-8 text-center my-auto">
         {/* Close button (only visible if an active profile is already selected) */}
         {activeProfile && (
           <button
             onClick={closeSelectorModal}
-            className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800/60 transition-colors"
+            className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800/60 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -230,6 +236,7 @@ export const ProfileSelectorModal: React.FC = () => {
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

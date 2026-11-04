@@ -10,3 +10,4 @@ router.patch('/:id', authenticateUser, (req, res) => viewerProfileController.upd
 router.delete('/:id', authenticateUser, (req, res) => viewerProfileController.deleteProfile(req, res));
 
 export default router;
+

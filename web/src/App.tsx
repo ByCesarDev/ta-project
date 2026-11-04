@@ -15,6 +15,8 @@ import { LoginPage } from './pages/LoginPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { ProfilesPage } from './pages/ProfilesPage.js';
+import { ProfileSelectorModal } from './components/profiles/ProfileSelectorModal.js';
+import { ManageProfilesModal } from './components/profiles/ManageProfilesModal.js';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,6 +47,8 @@ export const App: React.FC = () => {
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            <ProfileSelectorModal />
+            <ManageProfilesModal />
           </BrowserRouter>
         </ViewerProfileProvider>
       </AuthProvider>

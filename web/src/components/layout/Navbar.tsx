@@ -16,8 +16,6 @@ import {
 import { Button } from '../common/Button.js';
 import { getAvatarUrl } from '../../lib/utils.js';
 import { useViewerProfile } from '../../context/ViewerProfileContext.js';
-import { ProfileSelectorModal } from '../profiles/ProfileSelectorModal.js';
-import { ManageProfilesModal } from '../profiles/ManageProfilesModal.js';
 
 export const Navbar: React.FC = () => {
   const { user, profile, signOut } = useAuth();
@@ -315,13 +313,6 @@ export const Navbar: React.FC = () => {
             )}
           </nav>
         </div>
-      )}
-      {/* Global Modals for Viewer Profiles */}
-      {user && (
-        <>
-          <ProfileSelectorModal />
-          <ManageProfilesModal />
-        </>
       )}
     </header>
   );

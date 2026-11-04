@@ -144,3 +144,4 @@ WHERE viewer_profile_id IS NULL;
 ALTER TABLE public.user_episode_status DROP CONSTRAINT IF EXISTS user_episode_status_user_id_episode_id_key;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_episode_status_profile_episode 
 ON public.user_episode_status(viewer_profile_id, episode_id);
+

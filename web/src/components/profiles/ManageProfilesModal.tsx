@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useViewerProfile, ViewerProfile } from '../../context/ViewerProfileContext.js';
 import { getAvatarUrl } from '../../lib/utils.js';
 import { useAvatars } from '../../hooks/useAvatars.js';
@@ -86,16 +87,24 @@ export const ManageProfilesModal: React.FC = () => {
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-2xl rounded-3xl bg-[#0c101c] border border-slate-800 shadow-2xl p-6 sm:p-8">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+      {/* Click outside backdrop */}
+      <div
+        className="fixed inset-0 -z-10"
+        onClick={() => {
+          closeManageModal();
+          openSelectorModal();
+        }}
+      />
+      <div className="relative w-full max-w-2xl rounded-3xl bg-[#0c101c] border border-slate-800 shadow-2xl p-6 sm:p-8 my-auto">
         {/* Close Button */}
         <button
           onClick={() => {
             closeManageModal();
             openSelectorModal();
           }}
-          className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800/60 transition-colors"
+          className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 rounded-xl hover:bg-slate-800/60 transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
@@ -277,6 +286,8 @@ export const ManageProfilesModal: React.FC = () => {
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
+
