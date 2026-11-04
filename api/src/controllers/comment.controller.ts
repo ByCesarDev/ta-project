@@ -19,8 +19,10 @@ export class CommentController {
     }
 
     try {
+      const rawProfileHeader = req.headers['x-viewer-profile-id'];
+      const viewerProfileId = Array.isArray(rawProfileHeader) ? rawProfileHeader[0] : rawProfileHeader;
       const currentUserId = req.user?.id;
-      const data = await commentService.getCommentsByEpisode(episodeId, currentUserId);
+      const data = await commentService.getCommentsByEpisode(episodeId, viewerProfileId, currentUserId);
       res.status(200).json({
         success: true,
         ...data,
@@ -86,9 +88,11 @@ export class CommentController {
         comment,
       });
     } catch (err: any) {
-      const statusCode = err.message?.includes('no existe') || err.message?.includes('vacío') ? 400 : 500;
+      const isForbidden = err.message?.includes('no pertenece');
+      const isBadReq = err.message?.includes('no existe') || err.message?.includes('vacío') || err.message?.includes('caracteres');
+      const statusCode = isForbidden ? 403 : isBadReq ? 400 : 500;
       res.status(statusCode).json({
-        error: statusCode === 400 ? 'BadRequest' : 'InternalServerError',
+        error: isForbidden ? 'Forbidden' : isBadReq ? 'BadRequest' : 'InternalServerError',
         message: err.message || 'Error al crear comentario.',
       });
     }
@@ -119,14 +123,18 @@ export class CommentController {
     }
 
     try {
-      const result = await commentService.toggleLike(String(commentId), userId);
+      const rawProfileHeader = req.headers['x-viewer-profile-id'];
+      const viewerProfileId = Array.isArray(rawProfileHeader) ? rawProfileHeader[0] : rawProfileHeader;
+      const result = await commentService.toggleLike(String(commentId), userId, viewerProfileId);
       res.status(200).json({
         success: true,
         ...result,
       });
     } catch (err: any) {
-      res.status(500).json({
-        error: 'InternalServerError',
+      const isForbidden = err.message?.includes('no pertenece');
+      const statusCode = isForbidden ? 403 : 500;
+      res.status(statusCode).json({
+        error: isForbidden ? 'Forbidden' : 'InternalServerError',
         message: err.message || 'Error al procesar like.',
       });
     }

@@ -32,14 +32,17 @@ export class ViewerProfileController {
         return;
       }
 
-      const { name, avatar_url } = req.body;
-      if (!name || typeof name !== 'string') {
+      const { name, display_name, username, avatar_url } = req.body;
+      const effectiveName = display_name || name;
+      if (!effectiveName || typeof effectiveName !== 'string') {
         res.status(400).json({ error: 'El nombre es obligatorio' });
         return;
       }
 
       const profile = await viewerProfileService.createProfile(user.id, {
-        name,
+        name: effectiveName,
+        display_name: effectiveName,
+        username,
         avatar_url,
       });
 
@@ -63,10 +66,12 @@ export class ViewerProfileController {
 
       const rawId = req.params.id;
       const id = Array.isArray(rawId) ? rawId[0] : rawId;
-      const { name, avatar_url } = req.body;
+      const { name, display_name, username, avatar_url } = req.body;
 
       const updated = await viewerProfileService.updateProfile(id, user.id, {
-        name,
+        name: display_name || name,
+        display_name: display_name || name,
+        username,
         avatar_url,
       });
 

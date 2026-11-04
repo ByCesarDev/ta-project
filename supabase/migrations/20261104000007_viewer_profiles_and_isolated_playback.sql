@@ -8,13 +8,23 @@ CREATE TABLE IF NOT EXISTS public.viewer_profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     account_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     name VARCHAR(40) NOT NULL,
+    display_name VARCHAR(40) NOT NULL DEFAULT '',
+    username VARCHAR(30) NOT NULL DEFAULT '',
     avatar_url TEXT,
     is_default BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
+-- Si la tabla ya existe, agregar columnas si faltan
+ALTER TABLE public.viewer_profiles ADD COLUMN IF NOT EXISTS display_name VARCHAR(40);
+ALTER TABLE public.viewer_profiles ADD COLUMN IF NOT EXISTS username VARCHAR(30);
+
+UPDATE public.viewer_profiles SET display_name = name WHERE display_name IS NULL OR display_name = '';
+UPDATE public.viewer_profiles SET username = LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9_]', '', 'g')) WHERE username IS NULL OR username = '';
+
 CREATE INDEX IF NOT EXISTS idx_viewer_profiles_account_id ON public.viewer_profiles(account_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_viewer_profiles_username_unique ON public.viewer_profiles(LOWER(username));
 
 -- Restricción: solo un perfil default por cuenta
 CREATE UNIQUE INDEX IF NOT EXISTS idx_viewer_profiles_single_default 
@@ -82,17 +92,21 @@ WITH CHECK (true);
 
 -- 3. MIGRACIÓN INICIAL: CREAR PERFIL POR DEFECTO PARA CADA USUARIO EXISTENTE
 -- Usa el ID del usuario como ID de su perfil predeterminado para mapeo 1:1 automático
-INSERT INTO public.viewer_profiles (id, account_id, name, avatar_url, is_default, created_at, updated_at)
+INSERT INTO public.viewer_profiles (id, account_id, name, display_name, username, avatar_url, is_default, created_at, updated_at)
 SELECT 
     p.id, 
     p.id, 
     COALESCE(NULLIF(TRIM(p.username), ''), 'Principal'), 
+    COALESCE(NULLIF(TRIM(p.username), ''), 'Principal'), 
+    LOWER(COALESCE(NULLIF(REGEXP_REPLACE(TRIM(p.username), '[^a-zA-Z0-9_]', '', 'g'), ''), 'user_' || SUBSTRING(p.id::text FROM 1 FOR 6))),
     p.avatar_url, 
     TRUE, 
     COALESCE(p.created_at, NOW()), 
     NOW()
 FROM public.profiles p
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+    display_name = COALESCE(NULLIF(viewer_profiles.display_name, ''), excluded.display_name),
+    username = COALESCE(NULLIF(viewer_profiles.username, ''), excluded.username);
 
 -- 4. ADAPTACIÓN DE HISTORIAL DE REPRODUCCIÓN (public.user_history)
 ALTER TABLE public.user_history

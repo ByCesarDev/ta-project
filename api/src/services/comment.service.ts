@@ -8,7 +8,8 @@ export interface CommentItem {
   episode_id: number;
   user_id: string;
   viewer_profile_id?: string | null;
-  username: string;
+  username: string; // Unique public handle, e.g. "nelis"
+  display_name?: string | null; // Visible friendly name, e.g. "Nelis"
   avatar_url: string | null;
   user_role: string;
   content: string;
@@ -28,22 +29,34 @@ export class CommentService {
    */
   public async getCommentsByEpisode(
     episodeId: number,
+    currentViewerProfileId?: string,
     currentUserId?: string
   ): Promise<{ comments: CommentItem[]; total_count: number }> {
     await initTursoDatabase();
     const client = getTursoClient();
 
     const result = await client.execute({
-      sql: `SELECT id, episode_id, user_id, viewer_profile_id, username, avatar_url, user_role, content, 
-                   is_spoiler, is_deleted, parent_id, likes_count, created_at, updated_at 
-            FROM episode_comments 
-            WHERE episode_id = ? 
-            ORDER BY created_at ASC`,
+      sql: `SELECT ec.id, ec.episode_id, ec.user_id, ec.viewer_profile_id, 
+                   ec.username, ec.display_name, ec.avatar_url, ec.user_role, ec.content, 
+                   ec.is_spoiler, ec.is_deleted, ec.parent_id, ec.likes_count, ec.created_at, ec.updated_at,
+                   vp.username AS profile_username,
+                   vp.display_name AS profile_display_name,
+                   vp.avatar_url AS profile_avatar_url
+            FROM episode_comments ec
+            LEFT JOIN viewer_profiles vp ON ec.viewer_profile_id = vp.id
+            WHERE ec.episode_id = ? 
+            ORDER BY ec.created_at ASC`,
       args: [episodeId],
     });
 
     let likedSet = new Set<string>();
-    if (currentUserId) {
+    if (currentViewerProfileId) {
+      const likesResult = await client.execute({
+        sql: `SELECT comment_id FROM episode_comment_likes WHERE viewer_profile_id = ?`,
+        args: [currentViewerProfileId],
+      });
+      likedSet = new Set(likesResult.rows.map((r) => String(r.comment_id)));
+    } else if (currentUserId) {
       const likesResult = await client.execute({
         sql: `SELECT comment_id FROM episode_comment_likes WHERE user_id = ?`,
         args: [currentUserId],
@@ -51,24 +64,34 @@ export class CommentService {
       likedSet = new Set(likesResult.rows.map((r) => String(r.comment_id)));
     }
 
-    const allComments: CommentItem[] = result.rows.map((row: any) => ({
-      id: String(row.id),
-      episode_id: Number(row.episode_id),
-      user_id: String(row.user_id),
-      viewer_profile_id: row.viewer_profile_id ? String(row.viewer_profile_id) : null,
-      username: String(row.username),
-      avatar_url: row.avatar_url ? String(row.avatar_url) : null,
-      user_role: String(row.user_role || 'user'),
-      content: Boolean(row.is_deleted) ? '[Comentario eliminado]' : String(row.content),
-      is_spoiler: Boolean(row.is_spoiler),
-      is_deleted: Boolean(row.is_deleted),
-      parent_id: row.parent_id ? String(row.parent_id) : null,
-      likes_count: Number(row.likes_count || 0),
-      is_liked_by_me: likedSet.has(String(row.id)),
-      created_at: String(row.created_at),
-      updated_at: String(row.updated_at),
-      replies: [],
-    }));
+    const allComments: CommentItem[] = result.rows.map((row: any) => {
+      // Prioritize live viewer profile data, fallback to comment snapshot
+      const username = String(row.profile_username || row.username || 'usuario');
+      const displayName = String(row.profile_display_name || row.display_name || row.username || username);
+      const avatarUrl = row.profile_avatar_url !== undefined && row.profile_avatar_url !== null
+        ? String(row.profile_avatar_url)
+        : (row.avatar_url ? String(row.avatar_url) : null);
+
+      return {
+        id: String(row.id),
+        episode_id: Number(row.episode_id),
+        user_id: String(row.user_id),
+        viewer_profile_id: row.viewer_profile_id ? String(row.viewer_profile_id) : null,
+        username,
+        display_name: displayName,
+        avatar_url: avatarUrl,
+        user_role: String(row.user_role || 'user'),
+        content: Boolean(row.is_deleted) ? '[Comentario eliminado]' : String(row.content),
+        is_spoiler: Boolean(row.is_spoiler),
+        is_deleted: Boolean(row.is_deleted),
+        parent_id: row.parent_id ? String(row.parent_id) : null,
+        likes_count: Number(row.likes_count || 0),
+        is_liked_by_me: likedSet.has(String(row.id)),
+        created_at: String(row.created_at),
+        updated_at: String(row.updated_at),
+        replies: [],
+      };
+    });
 
     // Build hierarchy: root comments with nested replies
     const commentsById = new Map<string, CommentItem>();
@@ -94,7 +117,7 @@ export class CommentService {
   }
 
   /**
-   * Creates a new comment or reply
+   * Creates a new comment or reply authored by a specific viewer profile
    */
   public async createComment(params: {
     episodeId: number;
@@ -118,32 +141,29 @@ export class CommentService {
     await initTursoDatabase();
     const client = getTursoClient();
 
-    // Fetch user profile and role from Supabase to ensure authentic identity
-    const [profileRes, roleRes] = await Promise.all([
-      supabaseAdmin.from('profiles').select('username, avatar_url').eq('id', userId).maybeSingle(),
-      supabaseAdmin.from('user_roles').select('role, status').eq('user_id', userId).maybeSingle(),
-    ]);
-
+    // Check account status and role in Supabase
+    const roleRes = await supabaseAdmin.from('user_roles').select('role, status').eq('user_id', userId).maybeSingle();
     if (roleRes.data?.status === 'banned') {
       throw new Error('Tu cuenta se encuentra suspendida. No puedes comentar.');
     }
 
-    let username = profileRes.data?.username || fallbackUsername || 'Usuario';
-    let avatarUrl = profileRes.data?.avatar_url || null;
-    const userRole = roleRes.data?.role || 'user';
-
-    // If viewerProfileId is provided, resolve and use the active viewer profile's name and avatar
+    // Resolve viewer profile strictly
+    let targetProfile: any;
     if (viewerProfileId) {
-      try {
-        const vProfile = await viewerProfileService.getProfileById(userId, viewerProfileId);
-        if (vProfile) {
-          username = vProfile.name;
-          avatarUrl = vProfile.avatar_url;
-        }
-      } catch {
-        // Fallback to account profile if viewer profile not found
+      // NOTE: getProfileById expects (profileId, accountId)
+      const found = await viewerProfileService.getProfileById(viewerProfileId, userId);
+      if (!found) {
+        throw new Error('El perfil de espectador no pertenece a la cuenta autenticada.');
       }
+      targetProfile = found;
+    } else {
+      targetProfile = await viewerProfileService.ensureDefaultProfile(userId, fallbackUsername);
     }
+
+    const username = targetProfile.username || fallbackUsername || 'usuario';
+    const displayName = targetProfile.display_name || fallbackUsername || targetProfile.name || username;
+    const avatarUrl = targetProfile.avatar_url;
+    const userRole = roleRes.data?.role || 'user';
 
     // Verify parent comment exists if replying
     if (parentId) {
@@ -161,14 +181,15 @@ export class CommentService {
 
     await client.execute({
       sql: `INSERT INTO episode_comments 
-            (id, episode_id, user_id, viewer_profile_id, username, avatar_url, user_role, content, is_spoiler, is_deleted, parent_id, likes_count, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?)`,
+            (id, episode_id, user_id, viewer_profile_id, username, display_name, avatar_url, user_role, content, is_spoiler, is_deleted, parent_id, likes_count, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?)`,
       args: [
         commentId,
         episodeId,
         userId,
-        viewerProfileId || null,
+        targetProfile.id,
         username,
+        displayName,
         avatarUrl,
         userRole,
         trimmed,
@@ -183,8 +204,9 @@ export class CommentService {
       id: commentId,
       episode_id: episodeId,
       user_id: userId,
-      viewer_profile_id: viewerProfileId || null,
+      viewer_profile_id: targetProfile.id,
       username,
+      display_name: displayName,
       avatar_url: avatarUrl,
       user_role: userRole,
       content: trimmed,
@@ -195,23 +217,35 @@ export class CommentService {
       is_liked_by_me: false,
       created_at: now,
       updated_at: now,
-      replies: [],
     };
   }
 
   /**
-   * Toggles like state on a comment
+   * Toggles like state on a comment, isolated per viewer profile
    */
   public async toggleLike(
     commentId: string,
-    userId: string
+    accountId: string,
+    viewerProfileId?: string | null
   ): Promise<{ liked: boolean; likes_count: number }> {
     await initTursoDatabase();
     const client = getTursoClient();
 
+    let profileId: string;
+    if (viewerProfileId) {
+      const found = await viewerProfileService.getProfileById(viewerProfileId, accountId);
+      if (!found) {
+        throw new Error('El perfil de espectador no pertenece a la cuenta autenticada.');
+      }
+      profileId = found.id;
+    } else {
+      const def = await viewerProfileService.ensureDefaultProfile(accountId);
+      profileId = def.id;
+    }
+
     const existing = await client.execute({
-      sql: `SELECT 1 FROM episode_comment_likes WHERE comment_id = ? AND user_id = ?`,
-      args: [commentId, userId],
+      sql: `SELECT 1 FROM episode_comment_likes WHERE comment_id = ? AND viewer_profile_id = ?`,
+      args: [commentId, profileId],
     });
 
     let liked = false;
@@ -219,8 +253,8 @@ export class CommentService {
       await client.batch(
         [
           {
-            sql: `DELETE FROM episode_comment_likes WHERE comment_id = ? AND user_id = ?`,
-            args: [commentId, userId],
+            sql: `DELETE FROM episode_comment_likes WHERE comment_id = ? AND viewer_profile_id = ?`,
+            args: [commentId, profileId],
           },
           {
             sql: `UPDATE episode_comments SET likes_count = MAX(0, likes_count - 1) WHERE id = ?`,
@@ -235,8 +269,8 @@ export class CommentService {
       await client.batch(
         [
           {
-            sql: `INSERT OR IGNORE INTO episode_comment_likes (comment_id, user_id, created_at) VALUES (?, ?, ?)`,
-            args: [commentId, userId, now],
+            sql: `INSERT OR IGNORE INTO episode_comment_likes (comment_id, viewer_profile_id, user_id, created_at) VALUES (?, ?, ?, ?)`,
+            args: [commentId, profileId, accountId, now],
           },
           {
             sql: `UPDATE episode_comments SET likes_count = likes_count + 1 WHERE id = ?`,
@@ -280,23 +314,32 @@ export class CommentService {
       throw new Error('No tienes permisos para eliminar este comentario.');
     }
 
-    const repliesRes = await client.execute({
+    // Check if it has replies
+    const repliesCheck = await client.execute({
       sql: `SELECT COUNT(*) as count FROM episode_comments WHERE parent_id = ?`,
       args: [commentId],
     });
 
-    const hasReplies = Number(repliesRes.rows[0]?.count || 0) > 0;
+    const replyCount = Number(repliesCheck.rows[0]?.count || 0);
 
-    if (hasReplies) {
+    if (replyCount > 0) {
+      // Soft delete to preserve conversation branch
       await client.execute({
-        sql: `UPDATE episode_comments SET is_deleted = 1, content = '[Comentario eliminado]' WHERE id = ?`,
-        args: [commentId],
+        sql: `UPDATE episode_comments SET is_deleted = 1, updated_at = ? WHERE id = ?`,
+        args: [new Date().toISOString(), commentId],
       });
     } else {
+      // Hard delete if it has no children
       await client.batch(
         [
-          { sql: `DELETE FROM episode_comment_likes WHERE comment_id = ?`, args: [commentId] },
-          { sql: `DELETE FROM episode_comments WHERE id = ?`, args: [commentId] },
+          {
+            sql: `DELETE FROM episode_comment_likes WHERE comment_id = ?`,
+            args: [commentId],
+          },
+          {
+            sql: `DELETE FROM episode_comments WHERE id = ?`,
+            args: [commentId],
+          },
         ],
         'write'
       );
@@ -305,4 +348,3 @@ export class CommentService {
 }
 
 export const commentService = new CommentService();
-

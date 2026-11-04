@@ -24,6 +24,8 @@ export const ProfilesPage: React.FC = () => {
 
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [newName, setNewName] = useState<string>('');
+  const [newUsername, setNewUsername] = useState<string>('');
+  const [isUsernameTouched, setIsUsernameTouched] = useState<boolean>(false);
   const [selectedAvatar, setSelectedAvatar] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -58,9 +60,15 @@ export const ProfilesPage: React.FC = () => {
     setErrorMsg(null);
     setIsSubmitting(true);
     try {
-      const created = await createProfile(newName.trim(), selectedAvatar || null);
+      const created = await createProfile({
+        displayName: newName.trim(),
+        username: newUsername.trim() || undefined,
+        avatarUrl: selectedAvatar || null,
+      });
       setIsCreating(false);
       setNewName('');
+      setNewUsername('');
+      setIsUsernameTouched(false);
       setSelectedAvatar('');
       handleSelect(created.id);
     } catch (err: any) {
@@ -116,8 +124,13 @@ export const ProfilesPage: React.FC = () => {
                       )}
                     </div>
                     <span className="text-base font-bold text-slate-300 group-hover:text-white mt-3 line-clamp-1 transition-colors">
-                      {p.name}
+                      {p.display_name || p.name}
                     </span>
+                    {p.username && (
+                      <span className="text-xs font-mono text-slate-500 group-hover:text-slate-400 line-clamp-1">
+                        @{p.username}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -168,17 +181,46 @@ export const ProfilesPage: React.FC = () => {
             <form onSubmit={handleCreate} className="space-y-5">
               <div>
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-                  Nombre
+                  Nombre visible
                 </label>
                 <input
                   type="text"
                   maxLength={40}
                   required
                   value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewName(val);
+                    if (!isUsernameTouched) {
+                      setNewUsername(val.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 25));
+                    }
+                  }}
                   placeholder="Ej. Nelis"
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                  Usuario único (@handle)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-500 font-mono text-sm">@</span>
+                  <input
+                    type="text"
+                    maxLength={25}
+                    value={newUsername}
+                    onChange={(e) => {
+                      setIsUsernameTouched(true);
+                      setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+                    }}
+                    placeholder="usuario"
+                    className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Identificador público para comentarios y menciones (3 a 25 caracteres).
+                </p>
               </div>
 
               <div>

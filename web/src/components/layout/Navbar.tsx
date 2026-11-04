@@ -118,7 +118,7 @@ export const Navbar: React.FC = () => {
                 </div>
                 <div className="hidden lg:flex flex-col text-left">
                   <span className="text-xs font-bold text-slate-200 line-clamp-1">
-                    {activeProfile?.name || profile?.username || 'Mi Perfil'}
+                    {activeProfile?.display_name || activeProfile?.name || profile?.username || 'Mi Perfil'}
                   </span>
                   {profiles.length > 1 && (
                     <span className="text-[10px] text-indigo-400 font-semibold -mt-0.5">
@@ -136,11 +136,18 @@ export const Navbar: React.FC = () => {
                 >
                   <div className="px-4 py-2 border-b border-slate-800/80 mb-1">
                     <div className="flex items-center justify-between">
-                      <p className="font-bold text-slate-200 truncate">{activeProfile?.name || profile?.username}</p>
+                      <p className="font-bold text-slate-200 truncate">
+                        {activeProfile?.display_name || activeProfile?.name || profile?.username}
+                      </p>
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
                         Perfil
                       </span>
                     </div>
+                    {activeProfile?.username && (
+                      <p className="text-[10px] font-mono text-indigo-400 truncate mt-0.5">
+                        @{activeProfile.username}
+                      </p>
+                    )}
                     <p className="text-[11px] text-slate-500 truncate mt-0.5">{user.email}</p>
                   </div>
 

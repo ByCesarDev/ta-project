@@ -7,10 +7,26 @@ export interface ViewerProfile {
   id: string;
   account_id: string;
   name: string;
+  display_name: string;
+  username: string; // Unique public handle, e.g. "nelis"
   avatar_url: string | null;
   is_default: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface CreateProfileData {
+  displayName?: string;
+  name?: string;
+  username?: string;
+  avatarUrl?: string | null;
+}
+
+export interface UpdateProfileData {
+  displayName?: string;
+  name?: string;
+  username?: string;
+  avatar_url?: string | null;
 }
 
 export interface ViewerProfileContextType {
@@ -18,8 +34,8 @@ export interface ViewerProfileContextType {
   activeProfile: ViewerProfile | null;
   isLoading: boolean;
   selectProfile: (profileId: string) => void;
-  createProfile: (name: string, avatarUrl?: string | null) => Promise<ViewerProfile>;
-  updateProfile: (profileId: string, data: { name?: string; avatar_url?: string | null }) => Promise<void>;
+  createProfile: (input: string | CreateProfileData, maybeAvatar?: string | null) => Promise<ViewerProfile>;
+  updateProfile: (profileId: string, data: UpdateProfileData) => Promise<void>;
   deleteProfile: (profileId: string) => Promise<void>;
   isSelectorModalOpen: boolean;
   openSelectorModal: () => void;
@@ -81,30 +97,38 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       const data = await res.json();
-      const list: ViewerProfile[] = data.profiles || [];
+      const list: ViewerProfile[] = (data.profiles || []).map((p: any) => ({
+        ...p,
+        display_name: p.display_name || p.name || 'Perfil',
+        username: p.username || '',
+      }));
+
       setProfiles(list);
 
-      // Restore active profile from localStorage or select default
+      // Determine active profile
       const storedProfileId = localStorage.getItem(`ta_active_viewer_profile_${accountId}`);
-      const found = list.find((p) => p.id === storedProfileId);
+      let currentActive: ViewerProfile | null = null;
 
-      if (found) {
-        setActiveProfile(found);
-      } else if (list.length > 0) {
-        const defaultProfile = list.find((p) => p.is_default) || list[0];
-        setActiveProfile(defaultProfile);
-        localStorage.setItem(`ta_active_viewer_profile_${accountId}`, defaultProfile.id);
-      } else {
-        setActiveProfile(null);
+      if (storedProfileId) {
+        currentActive = list.find((p) => p.id === storedProfileId) || null;
+      }
+
+      if (!currentActive) {
+        currentActive = list.find((p) => p.is_default) || list[0] || null;
+      }
+
+      setActiveProfile(currentActive);
+      if (currentActive) {
+        localStorage.setItem(`ta_active_viewer_profile_${accountId}`, currentActive.id);
       }
     } catch (err) {
-      console.error('[ViewerProfileContext] Error fetching profiles:', err);
+      console.error('[ViewerProfileProvider] Failed to fetch viewer profiles:', err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  // When authenticated user changes
+  // Reload profiles whenever authenticated user changes
   useEffect(() => {
     if (user?.id) {
       fetchProfiles(user.id);
@@ -116,34 +140,57 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [user?.id, fetchProfiles]);
 
   /**
-   * Selects an active profile and invalidates queries for seamless data isolation
+   * Selects and switches active viewer profile
    */
   const selectProfile = useCallback(
     (profileId: string) => {
-      if (!user) return;
-      const target = profiles.find((p) => p.id === profileId);
-      if (!target) return;
+      const found = profiles.find((p) => p.id === profileId);
+      if (!found) return;
 
-      setActiveProfile(target);
-      localStorage.setItem(`ta_active_viewer_profile_${user.id}`, target.id);
-      setIsSelectorModalOpen(false);
+      setActiveProfile(found);
+      if (user?.id) {
+        localStorage.setItem(`ta_active_viewer_profile_${user.id}`, found.id);
+      }
 
-      // Invalidate queries so playback, favorites & saved episodes re-fetch for the new profile
+      // Invalidate relevant queries so the UI immediately refreshes with new profile data
       queryClient.invalidateQueries({ queryKey: ['history'] });
       queryClient.invalidateQueries({ queryKey: ['watchlist'] });
       queryClient.invalidateQueries({ queryKey: ['saved-episodes'] });
-      queryClient.invalidateQueries({ queryKey: ['episode-reactions'] });
+      queryClient.invalidateQueries({ queryKey: ['episode-comments'] });
+
+      closeSelectorModal();
+      closeManageModal();
     },
-    [user, profiles, queryClient]
+    [profiles, user?.id, queryClient, closeSelectorModal, closeManageModal]
   );
 
   /**
    * Creates a new profile
    */
   const createProfile = useCallback(
-    async (name: string, avatarUrl?: string | null): Promise<ViewerProfile> => {
+    async (
+      input: string | CreateProfileData,
+      maybeAvatar?: string | null
+    ): Promise<ViewerProfile> => {
       const token = await getAuthToken();
       if (!token) throw new Error('No autorizado');
+
+      let payload: { name: string; display_name: string; username?: string; avatar_url: string | null };
+      if (typeof input === 'string') {
+        payload = {
+          name: input,
+          display_name: input,
+          avatar_url: maybeAvatar || null,
+        };
+      } else {
+        const nameVal = input.displayName || input.name || '';
+        payload = {
+          name: nameVal,
+          display_name: nameVal,
+          username: input.username,
+          avatar_url: input.avatarUrl || null,
+        };
+      }
 
       const res = await fetch(`${API_BASE}/viewer-profiles`, {
         method: 'POST',
@@ -151,7 +198,7 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name, avatar_url: avatarUrl }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -160,7 +207,11 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       const data = await res.json();
-      const newProfile: ViewerProfile = data.profile;
+      const newProfile: ViewerProfile = {
+        ...data.profile,
+        display_name: data.profile.display_name || data.profile.name || 'Perfil',
+        username: data.profile.username || '',
+      };
 
       setProfiles((prev) => [...prev, newProfile]);
       return newProfile;
@@ -172,9 +223,16 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
    * Updates an existing profile
    */
   const updateProfile = useCallback(
-    async (profileId: string, data: { name?: string; avatar_url?: string | null }) => {
+    async (profileId: string, data: UpdateProfileData) => {
       const token = await getAuthToken();
       if (!token) throw new Error('No autorizado');
+
+      const payload = {
+        name: data.displayName || data.name,
+        display_name: data.displayName || data.name,
+        username: data.username,
+        avatar_url: data.avatar_url,
+      };
 
       const res = await fetch(`${API_BASE}/viewer-profiles/${encodeURIComponent(profileId)}`, {
         method: 'PATCH',
@@ -182,7 +240,7 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -191,14 +249,21 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
       }
 
       const resJson = await res.json();
-      const updatedProfile: ViewerProfile = resJson.profile;
+      const updatedProfile: ViewerProfile = {
+        ...resJson.profile,
+        display_name: resJson.profile.display_name || resJson.profile.name || 'Perfil',
+        username: resJson.profile.username || '',
+      };
 
       setProfiles((prev) => prev.map((p) => (p.id === profileId ? updatedProfile : p)));
       if (activeProfile?.id === profileId) {
         setActiveProfile(updatedProfile);
       }
+
+      // Invalidate queries if profile details updated
+      queryClient.invalidateQueries({ queryKey: ['episode-comments'] });
     },
-    [activeProfile?.id]
+    [activeProfile?.id, queryClient]
   );
 
   /**
@@ -233,8 +298,13 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
           localStorage.setItem(`ta_active_viewer_profile_${user.id}`, fallback.id);
         }
       }
+
+      queryClient.invalidateQueries({ queryKey: ['history'] });
+      queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+      queryClient.invalidateQueries({ queryKey: ['saved-episodes'] });
+      queryClient.invalidateQueries({ queryKey: ['episode-comments'] });
     },
-    [activeProfile?.id, profiles, user]
+    [activeProfile?.id, profiles, user, queryClient]
   );
 
   const value = useMemo(
@@ -280,4 +350,3 @@ export const useViewerProfile = (): ViewerProfileContextType => {
   }
   return context;
 };
-

@@ -83,6 +83,8 @@ export const initTursoDatabase = async (): Promise<void> => {
           id TEXT PRIMARY KEY,
           account_id TEXT NOT NULL,
           name TEXT NOT NULL,
+          display_name TEXT NOT NULL DEFAULT '',
+          username TEXT NOT NULL DEFAULT '',
           avatar_url TEXT,
           is_default INTEGER DEFAULT 0,
           created_at TEXT NOT NULL,
@@ -151,7 +153,49 @@ export const initTursoDatabase = async (): Promise<void> => {
       } catch (err) {
         console.warn('[Turso] user_saved_episodes migration check:', err);
       }
-      // Check if episode_comments needs viewer_profile_id column
+      // Check if viewer_profiles needs display_name and username columns
+      try {
+        try {
+          await client.execute(`ALTER TABLE viewer_profiles ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`);
+        } catch {
+          // column already exists
+        }
+        await client.execute(`UPDATE viewer_profiles SET display_name = name WHERE display_name = '' OR display_name IS NULL`);
+
+        try {
+          await client.execute(`ALTER TABLE viewer_profiles ADD COLUMN username TEXT NOT NULL DEFAULT ''`);
+        } catch {
+          // column already exists
+        }
+
+        // Backfill missing/empty usernames with unique lowercase handles
+        const emptyUsernames = await client.execute(`SELECT id, name, account_id FROM viewer_profiles WHERE username = '' OR username IS NULL`);
+        for (const row of emptyUsernames.rows as any[]) {
+          let base = String(row.name || 'user').toLowerCase().replace(/[^a-z0-9_]/g, '');
+          if (base.length < 3) base = `user_${base}`.slice(0, 20);
+          let candidate = base;
+          let counter = 1;
+          while (true) {
+            const check = await client.execute({
+              sql: `SELECT id FROM viewer_profiles WHERE LOWER(username) = ? AND id != ?`,
+              args: [candidate, String(row.id)],
+            });
+            if (check.rows.length === 0) break;
+            candidate = `${base}_${counter++}`;
+          }
+          await client.execute({
+            sql: `UPDATE viewer_profiles SET username = ?, display_name = COALESCE(NULLIF(display_name, ''), name) WHERE id = ?`,
+            args: [candidate, String(row.id)],
+          });
+        }
+
+        // Ensure unique index on username
+        await client.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_viewer_profiles_username ON viewer_profiles(LOWER(username))`);
+      } catch (err) {
+        console.warn('[Turso] viewer_profiles username/display_name migration check:', err);
+      }
+
+      // Check if episode_comments needs viewer_profile_id and display_name columns
       try {
         const commentInfo = await client.execute(`PRAGMA table_info(episode_comments)`);
         const profileCol = commentInfo.rows.find((c: any) => c.name === 'viewer_profile_id' || c[1] === 'viewer_profile_id');
@@ -165,8 +209,44 @@ export const initTursoDatabase = async (): Promise<void> => {
             }
           }
         }
+
+        const displayCol = commentInfo.rows.find((c: any) => c.name === 'display_name' || c[1] === 'display_name');
+        if (!displayCol) {
+          try {
+            await client.execute(`ALTER TABLE episode_comments ADD COLUMN display_name TEXT`);
+            await client.execute(`UPDATE episode_comments SET display_name = username WHERE display_name IS NULL OR display_name = ''`);
+          } catch (colErr: any) {
+            if (!colErr.message?.includes('duplicate column')) {
+              throw colErr;
+            }
+          }
+        }
       } catch (err) {
         console.warn('[Turso] episode_comments viewer_profile_id migration check:', err);
+      }
+
+      // Check if episode_comment_likes needs migration to (comment_id, viewer_profile_id) PK
+      try {
+        const likesInfo = await client.execute(`PRAGMA table_info(episode_comment_likes)`);
+        const profileCol = likesInfo.rows.find((c: any) => c.name === 'viewer_profile_id' || c[1] === 'viewer_profile_id');
+        if (!profileCol) {
+          await client.batch([
+            `CREATE TABLE IF NOT EXISTS episode_comment_likes_v2 (
+              comment_id TEXT NOT NULL,
+              viewer_profile_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              PRIMARY KEY (comment_id, viewer_profile_id)
+            )`,
+            `INSERT OR IGNORE INTO episode_comment_likes_v2 (comment_id, viewer_profile_id, user_id, created_at)
+             SELECT comment_id, user_id, user_id, created_at FROM episode_comment_likes`,
+            `DROP TABLE episode_comment_likes`,
+            `ALTER TABLE episode_comment_likes_v2 RENAME TO episode_comment_likes`,
+            `CREATE INDEX IF NOT EXISTS idx_comment_likes_profile ON episode_comment_likes(viewer_profile_id)`
+          ], 'write');
+        }
+      } catch (err) {
+        console.warn('[Turso] episode_comment_likes viewer_profile_id migration check:', err);
       }
     })();
   }

@@ -46,7 +46,7 @@ export const HistoryPage: React.FC = () => {
           Historial de Reproducción
         </h1>
         <p className="text-xs text-slate-400 mt-1">
-          {history?.length || 0} episodios vistos en el perfil de {activeProfile?.name || 'tu cuenta'}
+          {history?.length || 0} episodios vistos en el perfil de {activeProfile?.display_name || activeProfile?.name || 'tu cuenta'}
         </p>
       </div>
 

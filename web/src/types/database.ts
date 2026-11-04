@@ -860,6 +860,8 @@ export interface Database {
           id: string;
           account_id: string;
           name: string;
+          display_name: string;
+          username: string;
           avatar_url: string | null;
           is_default: boolean;
           created_at: string;
@@ -869,6 +871,8 @@ export interface Database {
           id?: string;
           account_id: string;
           name: string;
+          display_name?: string;
+          username?: string;
           avatar_url?: string | null;
           is_default?: boolean;
           created_at?: string;
@@ -878,6 +882,8 @@ export interface Database {
           id?: string;
           account_id?: string;
           name?: string;
+          display_name?: string;
+          username?: string;
           avatar_url?: string | null;
           is_default?: boolean;
           created_at?: string;

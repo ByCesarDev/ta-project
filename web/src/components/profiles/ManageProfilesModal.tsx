@@ -20,6 +20,7 @@ export const ManageProfilesModal: React.FC = () => {
 
   const [editingProfile, setEditingProfile] = useState<ViewerProfile | null>(null);
   const [editName, setEditName] = useState<string>('');
+  const [editUsername, setEditUsername] = useState<string>('');
   const [editAvatar, setEditAvatar] = useState<string>('');
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -30,7 +31,8 @@ export const ManageProfilesModal: React.FC = () => {
 
   const startEdit = (p: ViewerProfile) => {
     setEditingProfile(p);
-    setEditName(p.name);
+    setEditName(p.display_name || p.name);
+    setEditUsername(p.username || '');
     setEditAvatar(p.avatar_url || '');
     setErrorMsg(null);
     setIsAvatarPickerOpen(false);
@@ -53,7 +55,9 @@ export const ManageProfilesModal: React.FC = () => {
     setIsSubmitting(true);
     try {
       await updateProfile(editingProfile.id, {
+        displayName: editName.trim(),
         name: editName.trim(),
+        username: editUsername.trim() || undefined,
         avatar_url: editAvatar || null,
       });
       cancelEdit();
@@ -139,8 +143,13 @@ export const ManageProfilesModal: React.FC = () => {
                     </div>
                   </div>
                   <span className="text-sm font-bold text-slate-300 group-hover:text-white mt-2.5 line-clamp-1 transition-colors">
-                    {p.name}
+                    {p.display_name || p.name}
                   </span>
+                  {p.username && (
+                    <span className="text-[11px] font-mono text-slate-500 group-hover:text-slate-400 line-clamp-1">
+                      @{p.username}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -203,11 +212,11 @@ export const ManageProfilesModal: React.FC = () => {
                 </button>
               </div>
 
-              {/* Name Input */}
+              {/* Name & Username Inputs */}
               <div className="flex-1 w-full space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
-                    Nombre
+                    Nombre visible
                   </label>
                   <input
                     type="text"
@@ -217,6 +226,27 @@ export const ManageProfilesModal: React.FC = () => {
                     onChange={(e) => setEditName(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                    Usuario único (@handle)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-500 font-mono text-sm">@</span>
+                    <input
+                      type="text"
+                      maxLength={25}
+                      required
+                      value={editUsername}
+                      onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                      className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 transition-colors"
+                      placeholder="usuario"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Solo minúsculas, números y guiones bajos (3-25 caracteres). Se usa en comentarios y menciones.
+                  </p>
                 </div>
               </div>
             </div>

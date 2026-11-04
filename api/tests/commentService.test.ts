@@ -9,7 +9,8 @@ describe('CommentService (Turso / SQLite)', () => {
     // Clean test tables only for test episode IDs
     await client.batch([
       `DELETE FROM episode_comment_likes WHERE comment_id IN (SELECT id FROM episode_comments WHERE episode_id IN (101, 102, 103, 104, 105))`,
-      `DELETE FROM episode_comments WHERE episode_id IN (101, 102, 103, 104, 105)`
+      `DELETE FROM episode_comments WHERE episode_id IN (101, 102, 103, 104, 105)`,
+      `DELETE FROM viewer_profiles WHERE account_id IN ('user-uuid-1', 'user-uuid-2')`
     ], 'write');
   });
 
@@ -24,7 +25,8 @@ describe('CommentService (Turso / SQLite)', () => {
 
     expect(created.id).toBeDefined();
     expect(created.episode_id).toBe(101);
-    expect(created.username).toBe('GokuSan');
+    expect(created.username.toLowerCase()).toBe('gokusan');
+    expect(created.display_name).toBe('GokuSan');
     expect(created.content).toBe('¡Qué épico este episodio!');
     expect(created.is_spoiler).toBe(false);
 

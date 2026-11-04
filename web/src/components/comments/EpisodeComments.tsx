@@ -65,7 +65,8 @@ export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) =
   const { activeProfile } = useViewerProfile();
 
   const activeAvatar = activeProfile?.avatar_url || profile?.avatar_url;
-  const activeName = activeProfile?.name || profile?.username || 'Usuario';
+  const activeName = activeProfile?.display_name || activeProfile?.name || profile?.username || 'Usuario';
+  const activeUsername = activeProfile?.username || profile?.username || 'usuario';
 
   const { data, isLoading, error } = useEpisodeComments(episodeId);
 
@@ -156,7 +157,11 @@ export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) =
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder={`Comentar como ${activeName}...`}
+                placeholder={
+                  activeProfile
+                    ? `Comentar como ${activeName} (@${activeUsername})...`
+                    : `Comentar como ${activeName}...`
+                }
                 rows={2}
                 maxLength={2000}
                 className="w-full rounded-xl bg-[#090d16] border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 p-3 text-sm text-slate-200 placeholder-slate-500 resize-none outline-none transition-all"
@@ -261,6 +266,7 @@ export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) =
               revealedSpoilers={revealedSpoilers}
               toggleRevealSpoiler={toggleRevealSpoiler}
               activeName={activeName}
+              activeUsername={activeUsername}
             />
           ))
         )}
@@ -293,6 +299,7 @@ interface CommentCardProps {
   revealedSpoilers: Set<string>;
   toggleRevealSpoiler: (id: string) => void;
   activeName?: string;
+  activeUsername?: string;
 }
 
 const CommentCard: React.FC<CommentCardProps> = ({
@@ -315,6 +322,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
   revealedSpoilers,
   toggleRevealSpoiler,
   activeName,
+  activeUsername,
 }) => {
   const isOwner = currentUser?.id === comment.user_id;
   const canDelete = isOwner || userRole === 'admin';
@@ -333,8 +341,9 @@ const CommentCard: React.FC<CommentCardProps> = ({
             />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-200">{comment.username}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-bold text-white">{comment.display_name || comment.username}</span>
+              <span className="text-[11px] font-mono text-slate-400">@{comment.username}</span>
               {comment.user_role === 'admin' && (
                 <span className="flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[9px] font-bold">
                   <Shield className="w-2.5 h-2.5" /> Admin
@@ -410,7 +419,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
                 if (isReplying) {
                   onCancelReply();
                 } else {
-                  onStartReply();
+                  onStartReply(`@${comment.username} `);
                 }
               }}
               className="flex items-center gap-1 text-slate-400 hover:text-indigo-400 py-1 px-2 rounded-lg hover:bg-slate-800/40 transition-colors cursor-pointer"
@@ -428,7 +437,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
           <textarea
             value={replyContent}
             onChange={(e) => setReplyContent(e.target.value)}
-            placeholder={`Responder a ${comment.username} como ${activeName || 'ti'}...`}
+            placeholder={`Responder a @${comment.username} como ${activeName || 'ti'}${activeUsername ? ` (@${activeUsername})` : ''}...`}
             rows={2}
             className="w-full rounded-xl bg-[#090d16] border border-slate-800 focus:border-indigo-500 p-2.5 text-xs text-slate-200 placeholder-slate-500 resize-none outline-none"
             autoFocus
@@ -486,8 +495,9 @@ const CommentCard: React.FC<CommentCardProps> = ({
                       />
                     </div>
                     <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-semibold text-slate-200">{reply.username}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-bold text-white">{reply.display_name || reply.username}</span>
+                        <span className="text-[10px] font-mono text-slate-400">@{reply.username}</span>
                         {reply.user_role === 'admin' && (
                           <span className="flex items-center gap-0.5 px-1 py-0.1 rounded bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[8px] font-bold">
                             Admin

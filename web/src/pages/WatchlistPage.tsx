@@ -56,8 +56,8 @@ export const WatchlistPage: React.FC = () => {
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             {activeTab === 'series'
-              ? `${seriesCount} ${seriesCount === 1 ? 'serie guardada' : 'series guardadas'} en el perfil de ${activeProfile?.name || 'tu cuenta'}`
-              : `${episodesCount} ${episodesCount === 1 ? 'episodio guardado' : 'episodios guardados'} en el perfil de ${activeProfile?.name || 'tu cuenta'}`}
+              ? `${seriesCount} ${seriesCount === 1 ? 'serie guardada' : 'series guardadas'} en el perfil de ${activeProfile?.display_name || activeProfile?.name || 'tu cuenta'}`
+              : `${episodesCount} ${episodesCount === 1 ? 'episodio guardado' : 'episodios guardados'} en el perfil de ${activeProfile?.display_name || activeProfile?.name || 'tu cuenta'}`}
           </p>
         </div>
 

@@ -5,7 +5,9 @@ import { supabaseAdmin } from '../config/supabaseAdmin.js';
 export interface ViewerProfileItem {
   id: string;
   account_id: string;
-  name: string;
+  name: string; // Compatible with legacy code, identical to display_name
+  display_name: string;
+  username: string; // Unique public handle, e.g. "nelis"
   avatar_url: string | null;
   is_default: boolean;
   created_at: string;
@@ -14,10 +16,68 @@ export interface ViewerProfileItem {
 
 export class ViewerProfileService {
   /**
+   * Normalizes a raw string into a clean lowercase username handle.
+   */
+  public normalizeUsername(raw: string): string {
+    const clean = raw
+      .toLowerCase()
+      .trim()
+      .replace(/^@+/, '')
+      .replace(/[\s\-]+/g, '_')
+      .replace(/[^a-z0-9_]/g, '');
+
+    return clean;
+  }
+
+  /**
+   * Validates format of username: lowercase, letters, numbers, underscores, 3-25 chars.
+   */
+  public validateUsernameFormat(username: string): void {
+    if (!username || username.length < 3) {
+      throw new Error('El nombre de usuario (@username) debe tener al menos 3 caracteres.');
+    }
+    if (username.length > 25) {
+      throw new Error('El nombre de usuario (@username) no puede superar los 25 caracteres.');
+    }
+    if (!/^[a-z0-9_]{3,25}$/.test(username)) {
+      throw new Error('El nombre de usuario solo puede contener letras minúsculas, números y guiones bajos (_).');
+    }
+  }
+
+  /**
+   * Generates a unique username handle from a base string by appending digits if collision occurs.
+   */
+  public async generateUniqueUsername(client: any, baseRaw: string, excludeProfileId?: string): Promise<string> {
+    let base = this.normalizeUsername(baseRaw);
+    if (base.length < 3) {
+      base = `user_${base}`.slice(0, 20);
+    }
+    if (base.length > 20) {
+      base = base.slice(0, 20);
+    }
+
+    let candidate = base;
+    let counter = 1;
+
+    while (true) {
+      const sql = excludeProfileId
+        ? `SELECT id FROM viewer_profiles WHERE LOWER(username) = ? AND id != ?`
+        : `SELECT id FROM viewer_profiles WHERE LOWER(username) = ?`;
+      const args = excludeProfileId ? [candidate, excludeProfileId] : [candidate];
+
+      const res = await client.execute({ sql, args });
+      if (res.rows.length === 0) {
+        return candidate;
+      }
+      candidate = `${base.slice(0, 18)}_${counter++}`;
+    }
+  }
+
+  /**
    * Ensures that the account has at least one default viewer profile.
    * If not, it provisions a default profile based on their Supabase profile.
    */
-  public async ensureDefaultProfile(accountId: string): Promise<ViewerProfileItem> {
+  public async ensureDefaultProfile(accountId: string, fallbackUsername?: string): Promise<ViewerProfileItem> {
     await initTursoDatabase();
     const client = getTursoClient();
 
@@ -29,10 +89,22 @@ export class ViewerProfileService {
 
     if (existing.rows.length > 0) {
       const r: any = existing.rows[0];
+      const displayName = String(r.display_name || r.name || fallbackUsername || 'Principal');
+      let username = String(r.username || '');
+      if (!username) {
+        username = await this.generateUniqueUsername(client, displayName, String(r.id));
+        await client.execute({
+          sql: `UPDATE viewer_profiles SET username = ?, display_name = ? WHERE id = ?`,
+          args: [username, displayName, String(r.id)],
+        });
+      }
+
       return {
         id: String(r.id),
         account_id: String(r.account_id),
-        name: String(r.name),
+        name: displayName,
+        display_name: displayName,
+        username,
         avatar_url: r.avatar_url ? String(r.avatar_url) : null,
         is_default: Boolean(r.is_default),
         created_at: String(r.created_at),
@@ -41,7 +113,7 @@ export class ViewerProfileService {
     }
 
     // Lookup user in Supabase profiles
-    let username = 'Principal';
+    let accountUsername = fallbackUsername || 'Principal';
     let avatarUrl: string | null = null;
     try {
       const { data: userProfile } = await supabaseAdmin
@@ -51,7 +123,7 @@ export class ViewerProfileService {
         .maybeSingle();
 
       if (userProfile?.username?.trim()) {
-        username = userProfile.username.trim();
+        accountUsername = userProfile.username.trim();
       }
       if (userProfile?.avatar_url?.trim()) {
         avatarUrl = userProfile.avatar_url.trim();
@@ -60,19 +132,22 @@ export class ViewerProfileService {
       // ignore
     }
 
-    // Default profile uses accountId as ID for 1:1 legacy backward-compatibility
+    const displayName = accountUsername;
+    const cleanHandle = await this.generateUniqueUsername(client, accountUsername);
     const profileId = accountId;
     const now = new Date().toISOString();
 
     await client.execute({
-      sql: `INSERT INTO viewer_profiles (id, account_id, name, avatar_url, is_default, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 1, ?, ?)
+      sql: `INSERT INTO viewer_profiles (id, account_id, name, display_name, username, avatar_url, is_default, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
             ON CONFLICT (id) DO UPDATE SET 
               name = excluded.name, 
+              display_name = excluded.display_name,
+              username = excluded.username,
               avatar_url = excluded.avatar_url, 
               is_default = 1,
               updated_at = excluded.updated_at`,
-      args: [profileId, accountId, username, avatarUrl, now, now],
+      args: [profileId, accountId, displayName, displayName, cleanHandle, avatarUrl, now, now],
     });
 
     // Also try syncing to Supabase viewer_profiles table if it exists
@@ -80,7 +155,9 @@ export class ViewerProfileService {
       await supabaseAdmin.from('viewer_profiles').upsert({
         id: profileId,
         account_id: accountId,
-        name: username,
+        name: displayName,
+        display_name: displayName,
+        username: cleanHandle,
         avatar_url: avatarUrl,
         is_default: true,
         created_at: now,
@@ -93,7 +170,9 @@ export class ViewerProfileService {
     return {
       id: profileId,
       account_id: accountId,
-      name: username,
+      name: displayName,
+      display_name: displayName,
+      username: cleanHandle,
       avatar_url: avatarUrl,
       is_default: true,
       created_at: now,
@@ -112,22 +191,28 @@ export class ViewerProfileService {
     await this.ensureDefaultProfile(accountId);
 
     const res = await client.execute({
-      sql: `SELECT id, account_id, name, avatar_url, is_default, created_at, updated_at 
+      sql: `SELECT id, account_id, name, display_name, username, avatar_url, is_default, created_at, updated_at 
             FROM viewer_profiles 
             WHERE account_id = ? 
             ORDER BY is_default DESC, created_at ASC`,
       args: [accountId],
     });
 
-    return res.rows.map((r: any) => ({
-      id: String(r.id),
-      account_id: String(r.account_id),
-      name: String(r.name),
-      avatar_url: r.avatar_url ? String(r.avatar_url) : null,
-      is_default: Boolean(r.is_default),
-      created_at: String(r.created_at),
-      updated_at: String(r.updated_at),
-    }));
+    return res.rows.map((r: any) => {
+      const displayName = String(r.display_name || r.name || 'Perfil');
+      const username = String(r.username || '');
+      return {
+        id: String(r.id),
+        account_id: String(r.account_id),
+        name: displayName,
+        display_name: displayName,
+        username,
+        avatar_url: r.avatar_url ? String(r.avatar_url) : null,
+        is_default: Boolean(r.is_default),
+        created_at: String(r.created_at),
+        updated_at: String(r.updated_at),
+      };
+    });
   }
 
   /**
@@ -138,7 +223,7 @@ export class ViewerProfileService {
     const client = getTursoClient();
 
     const res = await client.execute({
-      sql: `SELECT id, account_id, name, avatar_url, is_default, created_at, updated_at 
+      sql: `SELECT id, account_id, name, display_name, username, avatar_url, is_default, created_at, updated_at 
             FROM viewer_profiles 
             WHERE id = ? AND account_id = ?`,
       args: [profileId, accountId],
@@ -149,10 +234,13 @@ export class ViewerProfileService {
     }
 
     const r: any = res.rows[0];
+    const displayName = String(r.display_name || r.name || 'Perfil');
     return {
       id: String(r.id),
       account_id: String(r.account_id),
-      name: String(r.name),
+      name: displayName,
+      display_name: displayName,
+      username: String(r.username || ''),
       avatar_url: r.avatar_url ? String(r.avatar_url) : null,
       is_default: Boolean(r.is_default),
       created_at: String(r.created_at),
@@ -180,16 +268,16 @@ export class ViewerProfileService {
    */
   public async createProfile(
     accountId: string,
-    data: { name: string; avatar_url?: string | null }
+    data: { name?: string; display_name?: string; username?: string; avatar_url?: string | null }
   ): Promise<ViewerProfileItem> {
     await initTursoDatabase();
     const client = getTursoClient();
 
-    const cleanName = data.name?.trim();
-    if (!cleanName || cleanName.length === 0) {
+    const cleanDisplayName = (data.display_name || data.name || '').trim();
+    if (!cleanDisplayName || cleanDisplayName.length === 0) {
       throw new Error('El nombre del perfil no puede estar vacío.');
     }
-    if (cleanName.length > 40) {
+    if (cleanDisplayName.length > 40) {
       throw new Error('El nombre del perfil no puede superar los 40 caracteres.');
     }
 
@@ -203,14 +291,32 @@ export class ViewerProfileService {
       throw new Error('Límite alcanzado: cada cuenta puede tener como máximo 5 perfiles.');
     }
 
+    // Handle username
+    let cleanHandle: string;
+    if (data.username && data.username.trim()) {
+      cleanHandle = this.normalizeUsername(data.username);
+      this.validateUsernameFormat(cleanHandle);
+
+      // Check global uniqueness
+      const existing = await client.execute({
+        sql: `SELECT id FROM viewer_profiles WHERE LOWER(username) = ?`,
+        args: [cleanHandle],
+      });
+      if (existing.rows.length > 0) {
+        throw new Error(`El nombre de usuario @${cleanHandle} ya está en uso. Por favor elige otro.`);
+      }
+    } else {
+      cleanHandle = await this.generateUniqueUsername(client, cleanDisplayName);
+    }
+
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const avatarUrl = data.avatar_url?.trim() || null;
 
     await client.execute({
-      sql: `INSERT INTO viewer_profiles (id, account_id, name, avatar_url, is_default, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 0, ?, ?)`,
-      args: [id, accountId, cleanName, avatarUrl, now, now],
+      sql: `INSERT INTO viewer_profiles (id, account_id, name, display_name, username, avatar_url, is_default, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      args: [id, accountId, cleanDisplayName, cleanDisplayName, cleanHandle, avatarUrl, now, now],
     });
 
     // Sync to Supabase
@@ -218,7 +324,9 @@ export class ViewerProfileService {
       await supabaseAdmin.from('viewer_profiles').insert({
         id,
         account_id: accountId,
-        name: cleanName,
+        name: cleanDisplayName,
+        display_name: cleanDisplayName,
+        username: cleanHandle,
         avatar_url: avatarUrl,
         is_default: false,
         created_at: now,
@@ -231,7 +339,9 @@ export class ViewerProfileService {
     return {
       id,
       account_id: accountId,
-      name: cleanName,
+      name: cleanDisplayName,
+      display_name: cleanDisplayName,
+      username: cleanHandle,
       avatar_url: avatarUrl,
       is_default: false,
       created_at: now,
@@ -245,7 +355,7 @@ export class ViewerProfileService {
   public async updateProfile(
     profileId: string,
     accountId: string,
-    data: { name?: string; avatar_url?: string | null }
+    data: { name?: string; display_name?: string; username?: string; avatar_url?: string | null }
   ): Promise<ViewerProfileItem> {
     await initTursoDatabase();
     const client = getTursoClient();
@@ -255,12 +365,30 @@ export class ViewerProfileService {
       throw new Error('Perfil no encontrado o no tienes permiso para editarlo.');
     }
 
-    let newName = existing.name;
-    if (data.name !== undefined) {
-      const clean = data.name.trim();
+    let newDisplayName = existing.display_name;
+    const rawDisplayName = data.display_name !== undefined ? data.display_name : data.name;
+    if (rawDisplayName !== undefined) {
+      const clean = rawDisplayName.trim();
       if (!clean) throw new Error('El nombre no puede estar vacío.');
       if (clean.length > 40) throw new Error('El nombre no puede superar los 40 caracteres.');
-      newName = clean;
+      newDisplayName = clean;
+    }
+
+    let newUsername = existing.username;
+    if (data.username !== undefined && data.username.trim()) {
+      const cleanHandle = this.normalizeUsername(data.username);
+      this.validateUsernameFormat(cleanHandle);
+
+      if (cleanHandle !== existing.username.toLowerCase()) {
+        const check = await client.execute({
+          sql: `SELECT id FROM viewer_profiles WHERE LOWER(username) = ? AND id != ?`,
+          args: [cleanHandle, profileId],
+        });
+        if (check.rows.length > 0) {
+          throw new Error(`El nombre de usuario @${cleanHandle} ya está en uso. Elige otro.`);
+        }
+        newUsername = cleanHandle;
+      }
     }
 
     let newAvatar = existing.avatar_url;
@@ -270,8 +398,10 @@ export class ViewerProfileService {
 
     const now = new Date().toISOString();
     await client.execute({
-      sql: `UPDATE viewer_profiles SET name = ?, avatar_url = ?, updated_at = ? WHERE id = ? AND account_id = ?`,
-      args: [newName, newAvatar, now, profileId, accountId],
+      sql: `UPDATE viewer_profiles 
+            SET name = ?, display_name = ?, username = ?, avatar_url = ?, updated_at = ? 
+            WHERE id = ? AND account_id = ?`,
+      args: [newDisplayName, newDisplayName, newUsername, newAvatar, now, profileId, accountId],
     });
 
     // Sync to Supabase
@@ -279,7 +409,9 @@ export class ViewerProfileService {
       await supabaseAdmin
         .from('viewer_profiles')
         .update({
-          name: newName,
+          name: newDisplayName,
+          display_name: newDisplayName,
+          username: newUsername,
           avatar_url: newAvatar,
           updated_at: now,
         })
@@ -291,7 +423,9 @@ export class ViewerProfileService {
 
     return {
       ...existing,
-      name: newName,
+      name: newDisplayName,
+      display_name: newDisplayName,
+      username: newUsername,
       avatar_url: newAvatar,
       updated_at: now,
     };
@@ -324,6 +458,10 @@ export class ViewerProfileService {
         args: [profileId],
       },
       {
+        sql: `DELETE FROM episode_comment_likes WHERE viewer_profile_id = ?`,
+        args: [profileId],
+      },
+      {
         sql: `DELETE FROM viewer_profiles WHERE id = ? AND account_id = ?`,
         args: [profileId, accountId],
       },
@@ -345,4 +483,3 @@ export class ViewerProfileService {
 }
 
 export const viewerProfileService = new ViewerProfileService();
-

@@ -8,6 +8,7 @@ export interface CommentItem {
   user_id: string;
   viewer_profile_id?: string | null;
   username: string;
+  display_name?: string | null;
   avatar_url: string | null;
   user_role: string;
   content: string;
@@ -39,15 +40,22 @@ const getAuthToken = async (): Promise<string | null> => {
  * Fetch all comments and replies for an episode
  */
 export function useEpisodeComments(episodeId: number) {
+  const { activeProfile } = useViewerProfile();
+
   return useQuery<CommentsResponse>({
-    queryKey: ['episode-comments', episodeId],
+    queryKey: ['episode-comments', episodeId, activeProfile?.id || null],
     queryFn: async () => {
       const token = await getAuthToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      if (activeProfile?.id) {
+        headers['x-viewer-profile-id'] = activeProfile.id;
+      }
+
       const res = await fetch(`${API_BASE}/comments/episode/${episodeId}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers,
       });
 
       if (!res.ok) {
@@ -118,18 +126,24 @@ export function useCreateComment(episodeId: number) {
  */
 export function useToggleCommentLike(episodeId: number) {
   const queryClient = useQueryClient();
+  const { activeProfile } = useViewerProfile();
 
   return useMutation({
     mutationFn: async (commentId: string) => {
       const token = await getAuthToken();
       if (!token) throw new Error('Debes iniciar sesión para dar me gusta.');
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
+      if (activeProfile?.id) {
+        headers['x-viewer-profile-id'] = activeProfile.id;
+      }
+
       const res = await fetch(`${API_BASE}/comments/${commentId}/like`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
       });
 
       if (!res.ok) {
