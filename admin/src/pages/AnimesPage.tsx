@@ -29,8 +29,7 @@ import { Series, Anime } from '../types/index.js';
 import { useAuth } from '../context/AuthContext.js';
 
 export const AnimesPage: React.FC = () => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const { isAdmin } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'series' | 'animes'>('series');
   const [searchQuery, setSearchQuery] = useState('');
