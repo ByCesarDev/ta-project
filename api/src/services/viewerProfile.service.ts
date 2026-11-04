@@ -154,19 +154,23 @@ export class ViewerProfileService {
 
     // Also try syncing to Supabase viewer_profiles table if it exists
     try {
-      await supabaseAdmin.from('viewer_profiles').upsert({
+      const { error } = await supabaseAdmin.from('viewer_profiles').upsert({
         id: profileId,
         account_id: accountId,
         name: displayName,
         display_name: displayName,
         username: cleanHandle,
         avatar_url: avatarUrl,
+        bio: null,
         is_default: true,
         created_at: now,
         updated_at: now,
       });
-    } catch {
-      // Table may still be in migration
+      if (error) {
+        console.warn(`[ViewerProfileService] Supabase sync upsert error for profile ${profileId}:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[ViewerProfileService] Supabase sync unexpected error for profile ${profileId}:`, err?.message);
     }
 
     return {
@@ -193,7 +197,7 @@ export class ViewerProfileService {
     await this.ensureDefaultProfile(accountId);
 
     const res = await client.execute({
-      sql: `SELECT id, account_id, name, display_name, username, avatar_url, is_default, created_at, updated_at 
+      sql: `SELECT id, account_id, name, display_name, username, avatar_url, bio, is_default, created_at, updated_at 
             FROM viewer_profiles 
             WHERE account_id = ? 
             ORDER BY is_default DESC, created_at ASC`,
@@ -330,7 +334,7 @@ export class ViewerProfileService {
 
     // Sync to Supabase
     try {
-      await supabaseAdmin.from('viewer_profiles').insert({
+      const { error } = await supabaseAdmin.from('viewer_profiles').insert({
         id,
         account_id: accountId,
         name: cleanDisplayName,
@@ -342,8 +346,11 @@ export class ViewerProfileService {
         created_at: now,
         updated_at: now,
       });
-    } catch {
-      // ignore
+      if (error) {
+        console.warn(`[ViewerProfileService] Supabase sync insert error for profile ${id}:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[ViewerProfileService] Supabase sync unexpected error for profile ${id}:`, err?.message);
     }
 
     return {
@@ -426,7 +433,7 @@ export class ViewerProfileService {
 
     // Sync to Supabase
     try {
-      await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from('viewer_profiles')
         .update({
           name: newDisplayName,
@@ -438,8 +445,11 @@ export class ViewerProfileService {
         })
         .eq('id', profileId)
         .eq('account_id', accountId);
-    } catch {
-      // ignore
+      if (error) {
+        console.warn(`[ViewerProfileService] Supabase sync update error for profile ${profileId}:`, error.message);
+      }
+    } catch (err: any) {
+      console.warn(`[ViewerProfileService] Supabase sync unexpected error for profile ${profileId}:`, err?.message);
     }
 
     return {

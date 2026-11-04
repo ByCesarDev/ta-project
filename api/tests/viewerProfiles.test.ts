@@ -141,4 +141,47 @@ describe('ViewerProfileService & Multi-profile Isolation', () => {
     expect(statsForA.dislikes).toBe(1);
     expect(statsForA.user_reaction).toBe('like');
   });
+
+  it('correctly persists and retrieves bio across createProfile, updateProfile and getProfilesByAccount', async () => {
+    // 1. Create secondary profile with bio
+    const initialBio = 'Amante del anime shonen y del rock japonés.';
+    const created = await viewerProfileService.createProfile(testAccount, {
+      name: 'Nelis',
+      username: 'nelis_bio',
+      bio: initialBio,
+    });
+    expect(created.bio).toBe(initialBio);
+
+    // 2. Fetch via getProfileById -> bio must be present
+    const byId = await viewerProfileService.getProfileById(created.id, testAccount);
+    expect(byId?.bio).toBe(initialBio);
+
+    // 3. Fetch via getProfilesByAccount -> bio must be present in the list
+    const list1 = await viewerProfileService.getProfilesByAccount(testAccount);
+    const nelis1 = list1.find((p) => p.id === created.id);
+    expect(nelis1).toBeDefined();
+    expect(nelis1?.bio).toBe(initialBio);
+
+    // 4. Update bio to new content
+    const updatedBio = 'Actualización: ahora viendo romances y slice of life.';
+    const updated = await viewerProfileService.updateProfile(created.id, testAccount, {
+      bio: updatedBio,
+    });
+    expect(updated.bio).toBe(updatedBio);
+
+    // 5. Re-fetch via getProfilesByAccount -> updated bio must persist
+    const list2 = await viewerProfileService.getProfilesByAccount(testAccount);
+    const nelis2 = list2.find((p) => p.id === created.id);
+    expect(nelis2?.bio).toBe(updatedBio);
+
+    // 6. Clear bio (empty string) -> should be persisted as null
+    const cleared = await viewerProfileService.updateProfile(created.id, testAccount, {
+      bio: '',
+    });
+    expect(cleared.bio).toBe(null);
+
+    const list3 = await viewerProfileService.getProfilesByAccount(testAccount);
+    const nelis3 = list3.find((p) => p.id === created.id);
+    expect(nelis3?.bio).toBe(null);
+  });
 });
