@@ -50,16 +50,28 @@ export class CommentService {
     });
 
     let likedSet = new Set<string>();
-    if (currentViewerProfileId) {
+    let validatedProfileId: string | null = null;
+
+    const effectiveUserId = currentUserId || (currentViewerProfileId ? currentViewerProfileId : undefined);
+    const effectiveProfileId = currentUserId ? currentViewerProfileId : undefined;
+
+    if (effectiveUserId) {
+      if (effectiveProfileId) {
+        // Strict ownership check: ensure the profile belongs to the authenticated user
+        const found = await viewerProfileService.getProfileById(effectiveProfileId, effectiveUserId);
+        if (found) {
+          validatedProfileId = found.id;
+        }
+      } else {
+        const def = await viewerProfileService.ensureDefaultProfile(effectiveUserId);
+        validatedProfileId = def?.id || effectiveUserId;
+      }
+    }
+
+    if (validatedProfileId) {
       const likesResult = await client.execute({
         sql: `SELECT comment_id FROM episode_comment_likes WHERE viewer_profile_id = ?`,
-        args: [currentViewerProfileId],
-      });
-      likedSet = new Set(likesResult.rows.map((r) => String(r.comment_id)));
-    } else if (currentUserId) {
-      const likesResult = await client.execute({
-        sql: `SELECT comment_id FROM episode_comment_likes WHERE user_id = ?`,
-        args: [currentUserId],
+        args: [validatedProfileId],
       });
       likedSet = new Set(likesResult.rows.map((r) => String(r.comment_id)));
     }

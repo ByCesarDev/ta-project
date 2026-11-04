@@ -86,6 +86,7 @@ export const initTursoDatabase = async (): Promise<void> => {
           display_name TEXT NOT NULL DEFAULT '',
           username TEXT NOT NULL DEFAULT '',
           avatar_url TEXT,
+          bio TEXT DEFAULT '',
           is_default INTEGER DEFAULT 0,
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
@@ -164,6 +165,12 @@ export const initTursoDatabase = async (): Promise<void> => {
 
         try {
           await client.execute(`ALTER TABLE viewer_profiles ADD COLUMN username TEXT NOT NULL DEFAULT ''`);
+        } catch {
+          // column already exists
+        }
+
+        try {
+          await client.execute(`ALTER TABLE viewer_profiles ADD COLUMN bio TEXT DEFAULT ''`);
         } catch {
           // column already exists
         }

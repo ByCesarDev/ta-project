@@ -9,6 +9,7 @@ export interface ViewerProfileItem {
   display_name: string;
   username: string; // Unique public handle, e.g. "nelis"
   avatar_url: string | null;
+  bio?: string | null;
   is_default: boolean;
   created_at: string;
   updated_at: string;
@@ -106,6 +107,7 @@ export class ViewerProfileService {
         display_name: displayName,
         username,
         avatar_url: r.avatar_url ? String(r.avatar_url) : null,
+        bio: r.bio ? String(r.bio) : null,
         is_default: Boolean(r.is_default),
         created_at: String(r.created_at),
         updated_at: String(r.updated_at),
@@ -208,6 +210,7 @@ export class ViewerProfileService {
         display_name: displayName,
         username,
         avatar_url: r.avatar_url ? String(r.avatar_url) : null,
+        bio: r.bio ? String(r.bio) : null,
         is_default: Boolean(r.is_default),
         created_at: String(r.created_at),
         updated_at: String(r.updated_at),
@@ -223,7 +226,7 @@ export class ViewerProfileService {
     const client = getTursoClient();
 
     const res = await client.execute({
-      sql: `SELECT id, account_id, name, display_name, username, avatar_url, is_default, created_at, updated_at 
+      sql: `SELECT id, account_id, name, display_name, username, avatar_url, bio, is_default, created_at, updated_at 
             FROM viewer_profiles 
             WHERE id = ? AND account_id = ?`,
       args: [profileId, accountId],
@@ -242,6 +245,7 @@ export class ViewerProfileService {
       display_name: displayName,
       username: String(r.username || ''),
       avatar_url: r.avatar_url ? String(r.avatar_url) : null,
+      bio: r.bio ? String(r.bio) : null,
       is_default: Boolean(r.is_default),
       created_at: String(r.created_at),
       updated_at: String(r.updated_at),
@@ -268,7 +272,7 @@ export class ViewerProfileService {
    */
   public async createProfile(
     accountId: string,
-    data: { name?: string; display_name?: string; username?: string; avatar_url?: string | null }
+    data: { name?: string; display_name?: string; username?: string; avatar_url?: string | null; bio?: string | null }
   ): Promise<ViewerProfileItem> {
     await initTursoDatabase();
     const client = getTursoClient();
@@ -279,6 +283,11 @@ export class ViewerProfileService {
     }
     if (cleanDisplayName.length > 40) {
       throw new Error('El nombre del perfil no puede superar los 40 caracteres.');
+    }
+
+    const cleanBio = data.bio ? data.bio.trim() : null;
+    if (cleanBio && cleanBio.length > 250) {
+      throw new Error('La biografía no puede superar los 250 caracteres.');
     }
 
     // Check count constraint (max 5)
@@ -314,9 +323,9 @@ export class ViewerProfileService {
     const avatarUrl = data.avatar_url?.trim() || null;
 
     await client.execute({
-      sql: `INSERT INTO viewer_profiles (id, account_id, name, display_name, username, avatar_url, is_default, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      args: [id, accountId, cleanDisplayName, cleanDisplayName, cleanHandle, avatarUrl, now, now],
+      sql: `INSERT INTO viewer_profiles (id, account_id, name, display_name, username, avatar_url, bio, is_default, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      args: [id, accountId, cleanDisplayName, cleanDisplayName, cleanHandle, avatarUrl, cleanBio ?? null, now, now],
     });
 
     // Sync to Supabase
@@ -328,6 +337,7 @@ export class ViewerProfileService {
         display_name: cleanDisplayName,
         username: cleanHandle,
         avatar_url: avatarUrl,
+        bio: cleanBio,
         is_default: false,
         created_at: now,
         updated_at: now,
@@ -343,6 +353,7 @@ export class ViewerProfileService {
       display_name: cleanDisplayName,
       username: cleanHandle,
       avatar_url: avatarUrl,
+      bio: cleanBio,
       is_default: false,
       created_at: now,
       updated_at: now,
@@ -355,7 +366,7 @@ export class ViewerProfileService {
   public async updateProfile(
     profileId: string,
     accountId: string,
-    data: { name?: string; display_name?: string; username?: string; avatar_url?: string | null }
+    data: { name?: string; display_name?: string; username?: string; avatar_url?: string | null; bio?: string | null }
   ): Promise<ViewerProfileItem> {
     await initTursoDatabase();
     const client = getTursoClient();
@@ -396,12 +407,21 @@ export class ViewerProfileService {
       newAvatar = data.avatar_url?.trim() || null;
     }
 
+    let newBio = existing.bio;
+    if (data.bio !== undefined) {
+      const clean = (data.bio || '').trim();
+      if (clean.length > 250) {
+        throw new Error('La biografía no puede superar los 250 caracteres.');
+      }
+      newBio = clean || null;
+    }
+
     const now = new Date().toISOString();
     await client.execute({
       sql: `UPDATE viewer_profiles 
-            SET name = ?, display_name = ?, username = ?, avatar_url = ?, updated_at = ? 
+            SET name = ?, display_name = ?, username = ?, avatar_url = ?, bio = ?, updated_at = ? 
             WHERE id = ? AND account_id = ?`,
-      args: [newDisplayName, newDisplayName, newUsername, newAvatar, now, profileId, accountId],
+      args: [newDisplayName, newDisplayName, newUsername, newAvatar ?? null, newBio ?? null, now, profileId, accountId],
     });
 
     // Sync to Supabase
@@ -413,6 +433,7 @@ export class ViewerProfileService {
           display_name: newDisplayName,
           username: newUsername,
           avatar_url: newAvatar,
+          bio: newBio,
           updated_at: now,
         })
         .eq('id', profileId)
@@ -427,6 +448,7 @@ export class ViewerProfileService {
       display_name: newDisplayName,
       username: newUsername,
       avatar_url: newAvatar,
+      bio: newBio,
       updated_at: now,
     };
   }

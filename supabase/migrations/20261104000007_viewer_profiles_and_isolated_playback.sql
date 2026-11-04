@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public.viewer_profiles (
     display_name VARCHAR(40) NOT NULL DEFAULT '',
     username VARCHAR(30) NOT NULL DEFAULT '',
     avatar_url TEXT,
+    bio TEXT DEFAULT '',
     is_default BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.viewer_profiles (
 -- Si la tabla ya existe, agregar columnas si faltan
 ALTER TABLE public.viewer_profiles ADD COLUMN IF NOT EXISTS display_name VARCHAR(40);
 ALTER TABLE public.viewer_profiles ADD COLUMN IF NOT EXISTS username VARCHAR(30);
+ALTER TABLE public.viewer_profiles ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT '';
 
 UPDATE public.viewer_profiles SET display_name = name WHERE display_name IS NULL OR display_name = '';
 UPDATE public.viewer_profiles SET username = LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9_]', '', 'g')) WHERE username IS NULL OR username = '';

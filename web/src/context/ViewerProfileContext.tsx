@@ -10,6 +10,7 @@ export interface ViewerProfile {
   display_name: string;
   username: string; // Unique public handle, e.g. "nelis"
   avatar_url: string | null;
+  bio?: string | null;
   is_default: boolean;
   created_at?: string;
   updated_at?: string;
@@ -20,6 +21,7 @@ export interface CreateProfileData {
   name?: string;
   username?: string;
   avatarUrl?: string | null;
+  bio?: string | null;
 }
 
 export interface UpdateProfileData {
@@ -27,6 +29,7 @@ export interface UpdateProfileData {
   name?: string;
   username?: string;
   avatar_url?: string | null;
+  bio?: string | null;
 }
 
 export interface ViewerProfileContextType {
@@ -101,6 +104,7 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
         ...p,
         display_name: p.display_name || p.name || 'Perfil',
         username: p.username || '',
+        bio: p.bio || null,
       }));
 
       setProfiles(list);
@@ -175,7 +179,7 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
       const token = await getAuthToken();
       if (!token) throw new Error('No autorizado');
 
-      let payload: { name: string; display_name: string; username?: string; avatar_url: string | null };
+      let payload: { name: string; display_name: string; username?: string; avatar_url: string | null; bio?: string | null };
       if (typeof input === 'string') {
         payload = {
           name: input,
@@ -189,6 +193,7 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
           display_name: nameVal,
           username: input.username,
           avatar_url: input.avatarUrl || null,
+          bio: input.bio || null,
         };
       }
 
@@ -211,6 +216,7 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
         ...data.profile,
         display_name: data.profile.display_name || data.profile.name || 'Perfil',
         username: data.profile.username || '',
+        bio: data.profile.bio || null,
       };
 
       setProfiles((prev) => [...prev, newProfile]);
@@ -232,6 +238,7 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
         display_name: data.displayName || data.name,
         username: data.username,
         avatar_url: data.avatar_url,
+        bio: data.bio,
       };
 
       const res = await fetch(`${API_BASE}/viewer-profiles/${encodeURIComponent(profileId)}`, {
@@ -253,6 +260,7 @@ export const ViewerProfileProvider: React.FC<{ children: React.ReactNode }> = ({
         ...resJson.profile,
         display_name: resJson.profile.display_name || resJson.profile.name || 'Perfil',
         username: resJson.profile.username || '',
+        bio: resJson.profile.bio || null,
       };
 
       setProfiles((prev) => prev.map((p) => (p.id === profileId ? updatedProfile : p)));

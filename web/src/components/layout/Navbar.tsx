@@ -12,6 +12,9 @@ import {
   X,
   Users,
   Settings,
+  ChevronRight,
+  SlidersHorizontal,
+  Mail,
 } from 'lucide-react';
 import { Button } from '../common/Button.js';
 import { getAvatarUrl } from '../../lib/utils.js';
@@ -131,120 +134,191 @@ export const Navbar: React.FC = () => {
               {/* User Dropdown */}
               {isUserMenuOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#0b0f19] border border-slate-800 shadow-2xl py-2 z-50 text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+                  className="absolute right-0 mt-2 w-72 rounded-3xl bg-[#0a0d16] border border-slate-800 shadow-2xl p-2.5 z-50 text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 space-y-1.5"
                   onMouseLeave={() => setIsUserMenuOpen(false)}
                 >
-                  <div className="px-4 py-2 border-b border-slate-800/80 mb-1">
-                    <div className="flex items-center justify-between">
-                      <p className="font-bold text-slate-200 truncate">
-                        {activeProfile?.display_name || activeProfile?.name || profile?.username}
-                      </p>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
-                        Perfil
+                  {/* Top Header Card: Perfil Activo */}
+                  <div className="p-3 bg-slate-900/70 rounded-2xl border border-slate-800/90">
+                    <div className="flex items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-900 border border-slate-700 shrink-0">
+                          <img
+                            src={getAvatarUrl(activeProfile?.avatar_url || profile?.avatar_url)}
+                            alt={activeProfile?.display_name || activeProfile?.name || 'Perfil'}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-white text-xs truncate">
+                            {activeProfile?.display_name || activeProfile?.name || 'Perfil'}
+                          </p>
+                          <p className="text-[11px] font-mono text-indigo-400 truncate -mt-0.5">
+                            @{activeProfile?.username || 'usuario'}
+                          </p>
+                          <p className="text-[9px] text-slate-500 font-medium">Perfil activo</p>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold shrink-0">
+                        Activo
                       </span>
                     </div>
-                    {activeProfile?.username && (
-                      <p className="text-[10px] font-mono text-indigo-400 truncate mt-0.5">
-                        @{activeProfile.username}
-                      </p>
-                    )}
-                    <p className="text-[11px] text-slate-500 truncate mt-0.5">{user.email}</p>
                   </div>
 
-                  {/* Quick Profile Switcher (if > 1 profile) */}
-                  {profiles.length > 1 && (
-                    <div className="px-3 py-1.5 border-b border-slate-800/80 mb-1">
-                      <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 px-1">
-                        Cambiar de perfil:
-                      </p>
-                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                        {profiles
-                          .filter((p) => p.id !== activeProfile?.id)
-                          .map((p) => (
-                            <button
-                              key={p.id}
-                              title={`Cambiar a ${p.name}`}
-                              onClick={() => {
-                                selectProfile(p.id);
-                                setIsUserMenuOpen(false);
-                              }}
-                              className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-800/80 transition-colors group cursor-pointer text-left shrink-0"
-                            >
-                              <div className="w-6 h-6 rounded-md overflow-hidden bg-slate-900 border border-slate-700 group-hover:border-indigo-400">
-                                <img src={getAvatarUrl(p.avatar_url)} alt={p.name} className="w-full h-full object-cover" />
-                              </div>
-                              <span className="text-[11px] font-semibold text-slate-300 group-hover:text-white max-w-[70px] truncate">
-                                {p.name}
-                              </span>
-                            </button>
-                          ))}
+                  {/* Section 1: CAMBIAR DE PERFIL */}
+                  <div className="py-1 border-t border-slate-800/70">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 px-2 py-1">
+                      Cambiar de perfil
+                    </p>
+
+                    {/* Other profiles list */}
+                    {profiles
+                      .filter((p) => p.id !== activeProfile?.id)
+                      .map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            selectProfile(p.id);
+                            setIsUserMenuOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl transition-colors group cursor-pointer text-left"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-7 h-7 rounded-lg overflow-hidden bg-slate-900 border border-slate-700 group-hover:border-indigo-400 shrink-0">
+                              <img src={getAvatarUrl(p.avatar_url)} alt={p.name} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-slate-200 group-hover:text-white truncate">
+                                {p.display_name || p.name}
+                              </p>
+                              {p.username && (
+                                <p className="text-[10px] font-mono text-slate-500 group-hover:text-indigo-400 truncate -mt-0.5">
+                                  @{p.username}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                        </button>
+                      ))}
+
+                    {/* Ver todos los perfiles */}
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        openSelectorModal();
+                      }}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl transition-colors group cursor-pointer text-left mt-0.5"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Users className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-xs">Ver todos los perfiles</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                    </button>
+
+                    {/* Administrar perfiles */}
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        openManageModal();
+                      }}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl transition-colors group cursor-pointer text-left"
+                    >
+                      <span className="flex items-center gap-2">
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-xs">Administrar perfiles</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                    </button>
+                  </div>
+
+                  {/* Section 2: MI PERFIL */}
+                  <div className="py-1 border-t border-slate-800/70">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 px-2 py-1">
+                      Mi Perfil
+                    </p>
+
+                    <Link
+                      to="/profile"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl transition-colors group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <UserIcon className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-xs">Ver mi perfil</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                    </Link>
+
+                    <Link
+                      to="/watchlist"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl transition-colors group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Bookmark className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-xs">Mi lista</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                    </Link>
+
+                    <Link
+                      to="/history"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl transition-colors group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <History className="w-3.5 h-3.5 text-violet-400" />
+                        <span className="text-xs">Historial</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                    </Link>
+                  </div>
+
+                  {/* Section 3: CUENTA */}
+                  <div className="py-1 border-t border-slate-800/70">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 px-2 py-1">
+                      Cuenta
+                    </p>
+
+                    {/* Account Identity Card */}
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 text-left">
+                      <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-400 shrink-0">
+                        <Mail className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-slate-200 truncate">
+                          {profile?.username || 'Cuenta'}
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate -mt-0.5">
+                          {user.email}
+                        </p>
                       </div>
                     </div>
-                  )}
 
-                  <button
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      openSelectorModal();
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors text-left cursor-pointer"
-                  >
-                    <Users className="w-4 h-4 text-indigo-400" />
-                    Todos los Perfiles
-                  </button>
+                    <Link
+                      to="/settings/account"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 text-slate-300 hover:text-white hover:bg-slate-800/60 rounded-xl transition-colors group"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Settings className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-xs">Ajustes de cuenta</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0" />
+                    </Link>
 
-                  <button
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      openManageModal();
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors text-left cursor-pointer"
-                  >
-                    <Settings className="w-4 h-4 text-slate-400" />
-                    Administrar Perfiles
-                  </button>
-
-                  <div className="border-t border-slate-800/80 my-1" />
-
-                  <Link
-                    to="/watchlist"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
-                  >
-                    <Bookmark className="w-4 h-4 text-indigo-400" />
-                    Mi Lista de Favoritos
-                  </Link>
-
-                  <Link
-                    to="/history"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
-                  >
-                    <History className="w-4 h-4 text-violet-400" />
-                    Historial de Vistos
-                  </Link>
-
-                  <Link
-                    to="/profile"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
-                  >
-                    <UserIcon className="w-4 h-4 text-cyan-400" />
-                    Cuenta y Ajustes
-                  </Link>
-
-                  <div className="border-t border-slate-800/80 my-1" />
-
-                  <button
-                    onClick={() => {
-                      setIsUserMenuOpen(false);
-                      signOut();
-                    }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors text-left cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Cerrar Sesión
-                  </button>
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        signOut();
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl transition-colors text-left cursor-pointer mt-0.5"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium">Cerrar sesión</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

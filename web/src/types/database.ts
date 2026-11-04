@@ -863,6 +863,7 @@ export interface Database {
           display_name: string;
           username: string;
           avatar_url: string | null;
+          bio: string | null;
           is_default: boolean;
           created_at: string;
           updated_at: string;
@@ -874,6 +875,7 @@ export interface Database {
           display_name?: string;
           username?: string;
           avatar_url?: string | null;
+          bio?: string | null;
           is_default?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -885,6 +887,7 @@ export interface Database {
           display_name?: string;
           username?: string;
           avatar_url?: string | null;
+          bio?: string | null;
           is_default?: boolean;
           created_at?: string;
           updated_at?: string;

@@ -15,6 +15,7 @@ import { LoginPage } from './pages/LoginPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { ProfilesPage } from './pages/ProfilesPage.js';
+import { AccountSettingsPage } from './pages/AccountSettingsPage.js';
 import { ProfileSelectorModal } from './components/profiles/ProfileSelectorModal.js';
 import { ManageProfilesModal } from './components/profiles/ManageProfilesModal.js';
 
@@ -45,6 +46,7 @@ export const App: React.FC = () => {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/settings/account" element={<AccountSettingsPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             <ProfileSelectorModal />
