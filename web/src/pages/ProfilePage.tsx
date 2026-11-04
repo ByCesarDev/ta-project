@@ -66,7 +66,7 @@ export const ProfilePage: React.FC = () => {
   const episodesCount = history.length;
   const animesCount = new Set(
     history
-      .map((h: any) => h.episodes?.animes?.id || h.anime_id)
+      .map((h: any) => h.episode?.anime?.id || h.episode?.anime?.slug || h.episodes?.animes?.id)
       .filter(Boolean)
   ).size;
   const favoritesCount = watchlist.length + savedEpisodes.length;
