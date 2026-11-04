@@ -10,3 +10,4 @@ router.post('/:commentId/like', authenticateUser, (req, res) => commentControlle
 router.delete('/:commentId', authenticateUser, (req, res) => commentController.deleteComment(req, res));
 
 export default router;
+

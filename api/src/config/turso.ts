@@ -53,3 +53,4 @@ export const initTursoDatabase = async (): Promise<void> => {
   }
   return initPromise;
 };
+
