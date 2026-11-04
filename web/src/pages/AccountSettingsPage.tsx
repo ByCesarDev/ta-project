@@ -119,7 +119,7 @@ export const AccountSettingsPage: React.FC = () => {
 
   return (
     <PageContainer>
-      <div className="max-w-4xl mx-auto py-8 space-y-8 animate-fade-in">
+      <div className="mx-auto py-8 space-y-8 animate-fade-in">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div>
