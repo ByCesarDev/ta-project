@@ -4,6 +4,11 @@ import { useAuth } from '../context/AuthContext.js';
 import { useViewerProfile } from '../context/ViewerProfileContext.js';
 import { HistoryItem } from '../types/index.js';
 
+let hasHistoryViewerProfileColumn = true;
+
+const isColumnMissingError = (err: any) =>
+  Boolean(err && (err.code === '42703' || err.message?.includes('viewer_profile_id')));
+
 export function useWatchHistory() {
   const { user } = useAuth();
   const { activeProfile } = useViewerProfile();
@@ -53,20 +58,24 @@ export function useWatchHistory() {
 
       let data: any[] | null = null;
 
-      // 1. If active profile is present, try querying by viewer_profile_id first
-      if (profileId) {
+      // 1. If active profile is present and column is supported, query viewer_profile_id first
+      if (profileId && hasHistoryViewerProfileColumn) {
         const { data: profileData, error: profileErr } = await supabase
           .from('user_history')
           .select(selectClause)
           .eq('viewer_profile_id', profileId)
           .order('updated_at', { ascending: false });
 
-        if (!profileErr && profileData) {
+        if (profileErr) {
+          if (isColumnMissingError(profileErr)) {
+            hasHistoryViewerProfileColumn = false;
+          }
+        } else if (profileData) {
           data = profileData;
         }
       }
 
-      // 2. Fallback to user_id if viewer_profile_id query failed (e.g. migration not run yet) or no profile
+      // 2. Fallback to user_id
       if (!data) {
         const { data: userData, error: userErr } = await supabase
           .from('user_history')
@@ -122,7 +131,7 @@ export function useEpisodeProgress(episodeId?: number) {
 
       // 1. Try fetching from Supabase if authenticated
       if (user) {
-        if (profileId) {
+        if (profileId && hasHistoryViewerProfileColumn) {
           const { data, error } = await supabase
             .from('user_history')
             .select('progress_seconds, total_seconds, is_completed')
@@ -130,7 +139,13 @@ export function useEpisodeProgress(episodeId?: number) {
             .eq('episode_id', episodeId)
             .maybeSingle();
 
-          if (!error && data) return data;
+          if (error) {
+            if (isColumnMissingError(error)) {
+              hasHistoryViewerProfileColumn = false;
+            }
+          } else if (data) {
+            return data;
+          }
         }
 
         const { data, error } = await supabase
@@ -216,7 +231,7 @@ export function useSaveProgress() {
         updated_at: new Date().toISOString(),
       };
 
-      if (profileId) {
+      if (profileId && hasHistoryViewerProfileColumn) {
         row.viewer_profile_id = profileId;
         const { data, error } = await supabase
           .from('user_history')
@@ -224,7 +239,13 @@ export function useSaveProgress() {
           .select()
           .maybeSingle();
 
-        if (!error && data) return data;
+        if (error) {
+          if (isColumnMissingError(error)) {
+            hasHistoryViewerProfileColumn = false;
+          }
+        } else if (data) {
+          return data;
+        }
       }
 
       // Fallback without viewer_profile_id
@@ -295,12 +316,15 @@ export function useToggleEpisodeWatched() {
           updated_at: new Date().toISOString(),
         };
 
-        if (profileId) {
+        if (profileId && hasHistoryViewerProfileColumn) {
           row.viewer_profile_id = profileId;
           const { error } = await supabase
             .from('user_history')
             .upsert(row, { onConflict: 'viewer_profile_id,episode_id' });
           if (!error) return { is_completed: willBeCompleted };
+          if (isColumnMissingError(error)) {
+            hasHistoryViewerProfileColumn = false;
+          }
         }
 
         delete row.viewer_profile_id;
@@ -309,13 +333,16 @@ export function useToggleEpisodeWatched() {
           .upsert(row, { onConflict: 'user_id,episode_id' });
         if (error) throw error;
       } else {
-        if (profileId) {
+        if (profileId && hasHistoryViewerProfileColumn) {
           const { error } = await supabase
             .from('user_history')
             .delete()
             .eq('viewer_profile_id', profileId)
             .eq('episode_id', episodeId);
           if (!error) return { is_completed: willBeCompleted };
+          if (isColumnMissingError(error)) {
+            hasHistoryViewerProfileColumn = false;
+          }
         }
 
         const { error } = await supabase
@@ -383,7 +410,7 @@ export function useToggleSeasonWatched() {
       if (!user) return;
 
       if (markAsWatched) {
-        if (profileId) {
+        if (profileId && hasHistoryViewerProfileColumn) {
           const profileRows = episodeIds.map((id) => ({
             user_id: user.id,
             viewer_profile_id: profileId,
@@ -397,6 +424,9 @@ export function useToggleSeasonWatched() {
             .from('user_history')
             .upsert(profileRows, { onConflict: 'viewer_profile_id,episode_id' });
           if (!error) return;
+          if (isColumnMissingError(error)) {
+            hasHistoryViewerProfileColumn = false;
+          }
         }
 
         const legacyRows = episodeIds.map((id) => ({
@@ -413,13 +443,16 @@ export function useToggleSeasonWatched() {
           .upsert(legacyRows, { onConflict: 'user_id,episode_id' });
         if (error) throw error;
       } else {
-        if (profileId) {
+        if (profileId && hasHistoryViewerProfileColumn) {
           const { error } = await supabase
             .from('user_history')
             .delete()
             .eq('viewer_profile_id', profileId)
             .in('episode_id', episodeIds);
           if (!error) return;
+          if (isColumnMissingError(error)) {
+            hasHistoryViewerProfileColumn = false;
+          }
         }
 
         const { error } = await supabase

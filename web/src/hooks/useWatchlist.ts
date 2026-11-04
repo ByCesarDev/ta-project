@@ -3,6 +3,12 @@ import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useViewerProfile } from '../context/ViewerProfileContext.js';
 
+// Auto-detect if remote Supabase schema has viewer_profile_id column
+let hasViewerProfileColumn = true;
+
+const isColumnMissingError = (err: any) =>
+  Boolean(err && (err.code === '42703' || err.message?.includes('viewer_profile_id')));
+
 export function useWatchlist() {
   const { user } = useAuth();
   const { activeProfile } = useViewerProfile();
@@ -40,14 +46,18 @@ export function useWatchlist() {
 
       // 1. Query user_favorites for series-level saves
       let seriesFavs: any[] | null = null;
-      if (profileId) {
+      if (profileId && hasViewerProfileColumn) {
         const { data, error } = await supabase
           .from('user_favorites')
           .select(seriesSelect)
           .eq('viewer_profile_id', profileId)
           .order('created_at', { ascending: false });
 
-        if (!error && data) {
+        if (error) {
+          if (isColumnMissingError(error)) {
+            hasViewerProfileColumn = false;
+          }
+        } else if (data) {
           seriesFavs = data;
         }
       }
@@ -94,14 +104,18 @@ export function useWatchlist() {
 
       // 2. Query legacy watch_later for any anime saves
       let animeFavs: any[] | null = null;
-      if (profileId) {
+      if (profileId && hasViewerProfileColumn) {
         const { data, error } = await supabase
           .from('watch_later')
           .select(animeSelect)
           .eq('viewer_profile_id', profileId)
           .order('created_at', { ascending: false });
 
-        if (!error && data) {
+        if (error) {
+          if (isColumnMissingError(error)) {
+            hasViewerProfileColumn = false;
+          }
+        } else if (data) {
           animeFavs = data;
         }
       }
@@ -205,8 +219,8 @@ export function useIsInWatchlist(id?: number) {
     queryFn: async () => {
       if (!user || !id) return false;
 
-      // 1. Check with profileId if available
-      if (profileId) {
+      // 1. Check with profileId if column is supported
+      if (profileId && hasViewerProfileColumn) {
         const { data: fav, error: favErr } = await supabase
           .from('user_favorites')
           .select('id')
@@ -214,17 +228,32 @@ export function useIsInWatchlist(id?: number) {
           .eq('series_id', id)
           .maybeSingle();
 
-        if (!favErr && fav) return true;
+        if (favErr) {
+          if (isColumnMissingError(favErr)) {
+            hasViewerProfileColumn = false;
+          }
+        } else if (fav) {
+          return true;
+        }
 
-        const { data: wl, error: wlErr } = await supabase
-          .from('watch_later')
-          .select('id')
-          .eq('viewer_profile_id', profileId)
-          .eq('anime_id', id)
-          .maybeSingle();
+        if (hasViewerProfileColumn) {
+          const { data: wl, error: wlErr } = await supabase
+            .from('watch_later')
+            .select('id')
+            .eq('viewer_profile_id', profileId)
+            .eq('anime_id', id)
+            .maybeSingle();
 
-        if (!wlErr && wl) return true;
-        if (!favErr && !wlErr) return false;
+          if (wlErr) {
+            if (isColumnMissingError(wlErr)) {
+              hasViewerProfileColumn = false;
+            }
+          } else if (wl) {
+            return true;
+          }
+
+          if (!favErr && !wlErr) return false;
+        }
       }
 
       // 2. Check user_favorites by series_id fallback
@@ -262,7 +291,7 @@ export function useToggleWatchlist(id?: number) {
       if (!user) throw new Error('Debes iniciar sesión para guardar favoritos');
       if (!id) throw new Error('Elemento no especificado');
 
-      if (profileId) {
+      if (profileId && hasViewerProfileColumn) {
         // 1. Check user_favorites with profileId
         const { data: existingFav } = await supabase
           .from('user_favorites')
@@ -297,11 +326,18 @@ export function useToggleWatchlist(id?: number) {
 
         if (!favErr) return { isSaved: true };
 
-        const { error: wlErr } = await supabase
-          .from('watch_later')
-          .insert({ user_id: user.id, viewer_profile_id: profileId, anime_id: id });
+        if (isColumnMissingError(favErr)) {
+          hasViewerProfileColumn = false;
+        } else {
+          const { error: wlErr } = await supabase
+            .from('watch_later')
+            .insert({ user_id: user.id, viewer_profile_id: profileId, anime_id: id });
 
-        if (!wlErr) return { isSaved: true };
+          if (!wlErr) return { isSaved: true };
+          if (isColumnMissingError(wlErr)) {
+            hasViewerProfileColumn = false;
+          }
+        }
       }
 
       // Legacy fallback
