@@ -20,6 +20,8 @@ declare global {
   }
 }
 
+const DISQUS_SCRIPT_ID = 'dsq-embed-scr';
+
 export const DisqusComments: React.FC<DisqusCommentsProps> = ({
   animeSlug,
   episodeNumber,
@@ -39,21 +41,53 @@ export const DisqusComments: React.FC<DisqusCommentsProps> = ({
       this.page.title = pageTitle;
     };
 
+    const container = document.getElementById('disqus_thread');
+    if (!container) return;
+
     if (window.DISQUS) {
       // If Disqus is already loaded, reset for the new episode
-      window.DISQUS.reset({
-        reload: true,
-        config: configCallback,
-      });
-    } else {
-      // Inject Disqus script
-      window.disqus_config = configCallback;
-      const script = document.createElement('script');
-      script.src = `https://${shortname}.disqus.com/embed.js`;
-      script.setAttribute('data-timestamp', String(+new Date()));
-      script.async = true;
-      (document.head || document.body).appendChild(script);
+      try {
+        window.DISQUS.reset({
+          reload: true,
+          config: configCallback,
+        });
+      } catch (err) {
+        console.warn('[Disqus] Error invoking reset:', err);
+      }
+      return;
     }
+
+    // Set initial global config before script executes
+    window.disqus_config = configCallback;
+
+    const existingScript = document.getElementById(DISQUS_SCRIPT_ID) as HTMLScriptElement | null;
+    if (existingScript) {
+      // Script is already injected and in-flight; reset once loaded
+      const onScriptLoad = () => {
+        if (window.DISQUS && document.getElementById('disqus_thread')) {
+          try {
+            window.DISQUS.reset({
+              reload: true,
+              config: configCallback,
+            });
+          } catch (err) {
+            console.warn('[Disqus] Error resetting after script load:', err);
+          }
+        }
+      };
+      existingScript.addEventListener('load', onScriptLoad, { once: true });
+      return () => {
+        existingScript.removeEventListener('load', onScriptLoad);
+      };
+    }
+
+    // Inject Disqus script for the first time
+    const script = document.createElement('script');
+    script.id = DISQUS_SCRIPT_ID;
+    script.src = `https://${shortname}.disqus.com/embed.js`;
+    script.setAttribute('data-timestamp', String(Date.now()));
+    script.async = true;
+    (document.head || document.body).appendChild(script);
   }, [animeSlug, episodeNumber, animeTitle, pageIdentifier, pageUrl, shortname]);
 
   if (variant === 'bare') {
