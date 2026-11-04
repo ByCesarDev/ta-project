@@ -428,7 +428,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
             label: t.name || t.lang || `Pista ${idx + 1}`,
             lang: t.lang || 'und',
           }));
-          setHlsAudioTracks(audioList);
+          setHlsAudioTracks((prev) => {
+            const prevStr = prev.map((p) => `${p.id}:${p.lang}:${p.label}`).join('|');
+            const nextStr = audioList.map((p) => `${p.id}:${p.lang}:${p.label}`).join('|');
+            return prevStr === nextStr ? prev : audioList;
+          });
           setActiveHlsAudioTrack(hls.audioTrack);
         }
 
@@ -439,7 +443,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
             label: t.name || t.lang || `Subtítulo ${idx + 1}`,
             lang: t.lang || 'und',
           }));
-          setHlsSubtitleTracks(subList);
+          setHlsSubtitleTracks((prev) => {
+            const prevStr = prev.map((p) => `${p.index}:${p.lang}:${p.label}`).join('|');
+            const nextStr = subList.map((p) => `${p.index}:${p.lang}:${p.label}`).join('|');
+            return prevStr === nextStr ? prev : subList;
+          });
         }
 
         video.play().then(() => setIsPlaying(true)).catch(() => {
@@ -455,7 +463,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
             label: t.name || t.lang || `Pista ${idx + 1}`,
             lang: t.lang || 'und',
           }));
-          setHlsAudioTracks(audioList);
+          setHlsAudioTracks((prev) => {
+            const prevStr = prev.map((p) => `${p.id}:${p.lang}:${p.label}`).join('|');
+            const nextStr = audioList.map((p) => `${p.id}:${p.lang}:${p.label}`).join('|');
+            return prevStr === nextStr ? prev : audioList;
+          });
         }
       });
 
@@ -466,7 +478,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
             label: t.name || t.lang || `Subtítulo ${idx + 1}`,
             lang: t.lang || 'und',
           }));
-          setHlsSubtitleTracks(subList);
+          setHlsSubtitleTracks((prev) => {
+            const prevStr = prev.map((p) => `${p.index}:${p.lang}:${p.label}`).join('|');
+            const nextStr = subList.map((p) => `${p.index}:${p.lang}:${p.label}`).join('|');
+            return prevStr === nextStr ? prev : subList;
+          });
         }
       });
 
@@ -488,8 +504,16 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         }
       });
 
+      let fatalErrorCount = 0;
       hls.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
+          fatalErrorCount++;
+          if (fatalErrorCount > 3) {
+            hls.destroy();
+            setStream((prev) => (prev ? { ...prev, type: 'iframe', is_fallback: true } : null));
+            return;
+          }
+
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               hls.startLoad();
@@ -529,7 +553,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   // 3. Subtitles Loader & WebVTT/SRT Parser
   useEffect(() => {
     if (!selectedSubtitle) {
-      setParsedCues([]);
+      setParsedCues((prev) => (prev.length === 0 ? prev : []));
       setActiveCueText(null);
       if (hlsRef.current) {
         hlsRef.current.subtitleTrack = -1;
@@ -544,7 +568,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
     if (matchedHls && hlsRef.current) {
       hlsRef.current.subtitleTrack = matchedHls.index;
-      setParsedCues([]);
+      setParsedCues((prev) => (prev.length === 0 ? prev : []));
       return;
     }
 
@@ -622,11 +646,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         })
         .catch(() => {
           parsedCuesRef.current = [];
-          setParsedCues([]);
+          setParsedCues((prev) => (prev.length === 0 ? prev : []));
         });
     } else {
       parsedCuesRef.current = [];
-      setParsedCues([]);
+      setParsedCues((prev) => (prev.length === 0 ? prev : []));
     }
   }, [selectedSubtitle, allSubtitleTracks, hlsSubtitleTracks]);
 

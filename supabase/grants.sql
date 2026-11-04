@@ -27,7 +27,12 @@ GRANT SELECT ON TABLE
     public.avatars, 
     public.app_settings, 
     public.anime_views, 
-    public.profiles 
+    public.profiles,
+    public.series,
+    public.series_seasons,
+    public.series_entries,
+    public.series_slug_redirects,
+    public.user_favorites
 TO anon;
 
 -- Nota de Seguridad: record_anime_view NO se concede a anon ni a authenticated
@@ -47,7 +52,8 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT INSERT, UPDATE, DELETE ON TABLE 
     public.user_history, 
     public.user_episode_status, 
-    public.watch_later
+    public.watch_later,
+    public.user_favorites
 TO authenticated;
 
 -- 3.3 Privilegios por Columna en 'profiles' (Evita modificación de ID)
