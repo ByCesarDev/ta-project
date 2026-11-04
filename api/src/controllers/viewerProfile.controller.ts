@@ -105,6 +105,44 @@ export class ViewerProfileController {
       res.status(400).json({ error: err.message || 'Error al eliminar perfil' });
     }
   }
+
+  /**
+   * GET /api/v1/viewer-profiles/public/:identifier
+   */
+  public async getPublicProfile(req: Request, res: Response): Promise<void> {
+    try {
+      const rawIdentifier = req.params.identifier;
+      const identifier = Array.isArray(rawIdentifier) ? rawIdentifier[0] : rawIdentifier;
+
+      if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+        res.status(400).json({
+          error: 'BadRequest',
+          message: 'Identificador o nombre de usuario inválido.',
+        });
+        return;
+      }
+
+      const profile = await viewerProfileService.getPublicProfile(identifier.trim());
+      if (!profile) {
+        res.status(404).json({
+          error: 'NotFound',
+          message: 'Perfil de usuario no encontrado.',
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        profile,
+      });
+    } catch (err: any) {
+      console.error('[ViewerProfileController] Error getting public profile:', err);
+      res.status(500).json({
+        error: 'InternalServerError',
+        message: err.message || 'Error al obtener perfil público.',
+      });
+    }
+  }
 }
 
 export const viewerProfileController = new ViewerProfileController();

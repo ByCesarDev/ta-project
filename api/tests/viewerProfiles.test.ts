@@ -184,4 +184,39 @@ describe('ViewerProfileService & Multi-profile Isolation', () => {
     const nelis3 = list3.find((p) => p.id === created.id);
     expect(nelis3?.bio).toBe(null);
   });
+
+  it('fetches public profile by id and by @username handle safely', async () => {
+    const pubUser = await viewerProfileService.createProfile(testAccount, {
+      name: 'Public Star',
+      username: 'star_public',
+      bio: 'Fan de Shingeki y Frieren.',
+    });
+
+    // 1. Fetch by UUID
+    const byId = await viewerProfileService.getPublicProfile(pubUser.id);
+    expect(byId).not.toBeNull();
+    expect(byId?.id).toBe(pubUser.id);
+    expect(byId?.username).toBe('star_public');
+    expect(byId?.display_name).toBe('Public Star');
+    expect(byId?.bio).toBe('Fan de Shingeki y Frieren.');
+    expect(byId?.stats).toHaveProperty('animes_watched');
+    expect(byId?.stats).toHaveProperty('episodes_watched');
+    // Ensure no sensitive fields leak
+    expect((byId as any).account_id).toBeUndefined();
+
+    // 2. Fetch by handle with '@'
+    const byHandleWithAt = await viewerProfileService.getPublicProfile('@star_public');
+    expect(byHandleWithAt).not.toBeNull();
+    expect(byHandleWithAt?.id).toBe(pubUser.id);
+    expect(byHandleWithAt?.username).toBe('star_public');
+
+    // 3. Fetch by handle without '@'
+    const byHandleWithoutAt = await viewerProfileService.getPublicProfile('star_public');
+    expect(byHandleWithoutAt).not.toBeNull();
+    expect(byHandleWithoutAt?.id).toBe(pubUser.id);
+
+    // 4. Inexistent profile returns null
+    const nonexistent = await viewerProfileService.getPublicProfile('nonexistent_user_9999');
+    expect(nonexistent).toBeNull();
+  });
 });

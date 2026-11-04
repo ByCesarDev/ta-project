@@ -15,6 +15,20 @@ export interface ViewerProfileItem {
   updated_at: string;
 }
 
+export interface PublicViewerProfile {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  bio: string | null;
+  is_default: boolean;
+  created_at: string;
+  stats: {
+    animes_watched: number;
+    episodes_watched: number;
+  };
+}
+
 export class ViewerProfileService {
   /**
    * Normalizes a raw string into a clean lowercase username handle.
@@ -253,6 +267,126 @@ export class ViewerProfileService {
       is_default: Boolean(r.is_default),
       created_at: String(r.created_at),
       updated_at: String(r.updated_at),
+    };
+  }
+
+  /**
+   * Fetches public profile details and watch stats for any profile by ID or @username handle.
+   * Completely safe for public consumption (never exposes account_id, email, or private settings).
+   */
+  public async getPublicProfile(identifier: string): Promise<PublicViewerProfile | null> {
+    await initTursoDatabase();
+    const client = getTursoClient();
+
+    const cleanInput = identifier.trim();
+    if (!cleanInput) return null;
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanInput);
+    const cleanHandle = this.normalizeUsername(cleanInput);
+
+    let row: any = null;
+
+    // 1. Try Turso first
+    if (isUuid) {
+      const res = await client.execute({
+        sql: `SELECT id, account_id, name, display_name, username, avatar_url, bio, is_default, created_at 
+              FROM viewer_profiles 
+              WHERE id = ? OR LOWER(username) = ? 
+              LIMIT 1`,
+        args: [cleanInput, cleanHandle],
+      });
+      if (res.rows.length > 0) {
+        row = res.rows[0];
+      }
+    } else {
+      const res = await client.execute({
+        sql: `SELECT id, account_id, name, display_name, username, avatar_url, bio, is_default, created_at 
+              FROM viewer_profiles 
+              WHERE LOWER(username) = ? 
+              LIMIT 1`,
+        args: [cleanHandle],
+      });
+      if (res.rows.length > 0) {
+        row = res.rows[0];
+      }
+    }
+
+    // 2. Fallback to Supabase if not in Turso
+    if (!row) {
+      try {
+        let query = supabaseAdmin
+          .from('viewer_profiles')
+          .select('id, account_id, name, display_name, username, avatar_url, bio, is_default, created_at');
+
+        if (isUuid) {
+          query = query.or(`id.eq.${cleanInput},username.ilike.${cleanHandle}`);
+        } else {
+          query = query.ilike('username', cleanHandle);
+        }
+
+        const { data, error } = await query.limit(1).maybeSingle();
+        if (!error && data) {
+          row = data;
+        }
+      } catch (err: any) {
+        console.warn('[ViewerProfileService] Supabase fallback query error:', err?.message);
+      }
+    }
+
+    if (!row) {
+      return null;
+    }
+
+    const profileId = String(row.id);
+    const accountId = String(row.account_id);
+    const isDefault = Boolean(row.is_default);
+
+    // 3. Query watch history statistics
+    let episodesWatched = 0;
+    let animesWatched = 0;
+
+    try {
+      let historyRes = await supabaseAdmin
+        .from('user_history')
+        .select('episode_id, episodes(anime_id)')
+        .eq('viewer_profile_id', profileId);
+
+      // If no history on viewer_profile_id and it's the default profile, fallback to account_id
+      if ((!historyRes.data || historyRes.data.length === 0) && isDefault && accountId) {
+        historyRes = await supabaseAdmin
+          .from('user_history')
+          .select('episode_id, episodes(anime_id)')
+          .eq('user_id', accountId);
+      }
+
+      if (historyRes.data && historyRes.data.length > 0) {
+        episodesWatched = historyRes.data.length;
+        const animeIds = new Set(
+          historyRes.data
+            .map((item: any) => item.episodes?.anime_id)
+            .filter((val: any) => val !== null && val !== undefined)
+        );
+        animesWatched = animeIds.size;
+      }
+    } catch (err: any) {
+      console.warn('[ViewerProfileService] Stats calculation error for profile', profileId, err?.message);
+    }
+
+    const displayName = String(row.display_name || row.name || row.username || 'Usuario');
+    const username = String(row.username || cleanHandle || 'usuario');
+
+    return {
+      id: profileId,
+      username,
+      display_name: displayName,
+      avatar_url: row.avatar_url ? String(row.avatar_url) : null,
+      bio: row.bio ? String(row.bio) : null,
+      is_default: isDefault,
+      created_at: String(row.created_at || new Date().toISOString()),
+      stats: {
+        animes_watched: animesWatched,
+        episodes_watched: episodesWatched,
+      },
     };
   }
 

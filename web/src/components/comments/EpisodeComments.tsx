@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
 import { useViewerProfile } from '../../context/ViewerProfileContext.js';
+import { useUserPreview } from '../../context/UserPreviewContext.js';
 import { getAvatarUrl } from '../../lib/utils.js';
 import {
   useEpisodeComments,
@@ -28,14 +29,28 @@ interface EpisodeCommentsProps {
   episodeId: number;
 }
 
-function renderCommentContent(content: string) {
-  const parts = content.split(/(@[a-zA-Z0-9_\-\.]+)/g);
+function renderCommentContent(content: string, onMentionClick?: (username: string) => void) {
+  const parts = content.split(/((?:^|\s)@[a-zA-Z0-9_]{3,30})/g);
   return parts.map((part, idx) => {
-    if (part.startsWith('@')) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith('@')) {
+      const handle = trimmed.slice(1);
+      const leadingSpace = part.startsWith(' ') ? ' ' : '';
       return (
-        <span key={idx} className="text-indigo-400 font-semibold bg-indigo-500/10 px-1 py-0.5 rounded">
-          {part}
-        </span>
+        <React.Fragment key={idx}>
+          {leadingSpace}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMentionClick?.(handle);
+            }}
+            className="inline font-semibold text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 px-1 py-0.5 rounded transition-colors cursor-pointer text-left"
+            title={`Ver perfil de @${handle}`}
+          >
+            @{handle}
+          </button>
+        </React.Fragment>
       );
     }
     return part;
@@ -327,23 +342,40 @@ const CommentCard: React.FC<CommentCardProps> = ({
   const isOwner = currentUser?.id === comment.user_id;
   const canDelete = isOwner || userRole === 'admin';
   const isReplying = replyingToId === comment.id;
+  const { openPreview } = useUserPreview();
 
   return (
     <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800/80 space-y-3 transition-all hover:border-slate-700/60">
       {/* Header Info */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
+          <button
+            type="button"
+            onClick={() => openPreview({ profileId: comment.viewer_profile_id, username: comment.username })}
+            className="w-8 h-8 rounded-full overflow-hidden bg-slate-800 border border-slate-700 shrink-0 hover:ring-2 hover:ring-indigo-500/60 transition-all cursor-pointer"
+            title={`Ver perfil de @${comment.username}`}
+          >
             <img
               src={getAvatarUrl(comment.avatar_url)}
               alt={comment.username}
               className="w-full h-full object-cover"
             />
-          </div>
+          </button>
           <div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-bold text-white">{comment.display_name || comment.username}</span>
-              <span className="text-[11px] font-mono text-slate-400">@{comment.username}</span>
+              <button
+                type="button"
+                onClick={() => openPreview({ profileId: comment.viewer_profile_id, username: comment.username })}
+                className="inline-flex items-center gap-1.5 hover:opacity-85 transition-opacity cursor-pointer text-left"
+                title={`Ver perfil de @${comment.username}`}
+              >
+                <span className="text-xs font-bold text-white hover:text-indigo-300 transition-colors">
+                  {comment.display_name || comment.username}
+                </span>
+                <span className="text-[11px] font-mono text-slate-400">
+                  @{comment.username}
+                </span>
+              </button>
               {comment.user_role === 'admin' && (
                 <span className="flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[9px] font-bold">
                   <Shield className="w-2.5 h-2.5" /> Admin
@@ -384,7 +416,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
               comment.is_deleted ? 'italic text-slate-500' : ''
             }`}
           >
-            {renderCommentContent(comment.content)}
+            {renderCommentContent(comment.content, (handle) => openPreview({ username: handle }))}
           </p>
           {comment.is_spoiler && (
             <button
@@ -487,17 +519,33 @@ const CommentCard: React.FC<CommentCardProps> = ({
               <div key={reply.id} className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openPreview({ profileId: reply.viewer_profile_id, username: reply.username })}
+                      className="w-6 h-6 rounded-full overflow-hidden bg-slate-800 border border-slate-700 shrink-0 hover:ring-2 hover:ring-indigo-500/60 transition-all cursor-pointer"
+                      title={`Ver perfil de @${reply.username}`}
+                    >
                       <img
                         src={getAvatarUrl(reply.avatar_url)}
                         alt={reply.username}
                         className="w-full h-full object-cover"
                       />
-                    </div>
+                    </button>
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-bold text-white">{reply.display_name || reply.username}</span>
-                        <span className="text-[10px] font-mono text-slate-400">@{reply.username}</span>
+                        <button
+                          type="button"
+                          onClick={() => openPreview({ profileId: reply.viewer_profile_id, username: reply.username })}
+                          className="inline-flex items-center gap-1.5 hover:opacity-85 transition-opacity cursor-pointer text-left"
+                          title={`Ver perfil de @${reply.username}`}
+                        >
+                          <span className="text-xs font-bold text-white hover:text-indigo-300 transition-colors">
+                            {reply.display_name || reply.username}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400">
+                            @{reply.username}
+                          </span>
+                        </button>
                         {reply.user_role === 'admin' && (
                           <span className="flex items-center gap-0.5 px-1 py-0.1 rounded bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[8px] font-bold">
                             Admin
@@ -532,7 +580,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
                   </div>
                 ) : (
                   <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
-                    {renderCommentContent(reply.content)}
+                    {renderCommentContent(reply.content, (handle) => openPreview({ username: handle }))}
                   </p>
                 )}
 
