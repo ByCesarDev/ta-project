@@ -3,12 +3,12 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { PageContainer } from '../components/layout/PageContainer.js';
 import { useWatchEpisode } from '../hooks/useSeries.js';
 import { VideoPlayer } from '../components/player/VideoPlayer.js';
-import { EpisodeReactions } from '../components/player/EpisodeReactions.js';
-import { DisqusComments } from '../components/comments/DisqusComments.js';
+import { EpisodeInfo } from '../components/player/EpisodeInfo.js';
+import { EpisodeNavigationCards } from '../components/player/EpisodeNavigationCards.js';
+import { EpisodeCommentsPanel } from '../components/comments/EpisodeCommentsPanel.js';
 import { EpisodeSourceRow, StreamLanguage } from '../types/index.js';
 import { Skeleton } from '../components/common/Skeleton.js';
-import { ArrowLeft, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
-import { Badge } from '../components/common/Badge.js';
+import { ArrowLeft } from 'lucide-react';
 
 export const WatchPage: React.FC = () => {
   const { slug, episodeId, episodeNumber } = useParams<{
@@ -220,38 +220,16 @@ export const WatchPage: React.FC = () => {
 
   return (
     <PageContainer>
-      <div className="max-w-5xl mx-auto space-y-4">
-        {/* Header Breadcrumb & Season Switcher */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="max-w-5xl mx-auto space-y-5">
+        {/* Discrete Back Link to Series */}
+        <div className="pt-1">
           <Link
-            to={`/anime/${series.slug}?season=${season?.id || ''}`}
-            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+            to={`/anime/${series.slug}${season?.id ? `?season=${season.id}` : ''}`}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors group"
           >
-            <ArrowLeft className="w-4 h-4" />
-            Volver a {series.name}
+            <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:text-white transition-colors" />
+            <span>Volver a {series.name}</span>
           </Link>
-
-          <div className="flex items-center gap-2">
-            {season && (
-              <Badge variant="purple" size="sm" className="flex items-center gap-1">
-                <Layers className="w-3 h-3" />
-                {season.name}
-              </Badge>
-            )}
-            <Badge variant="primary" size="sm">
-              Episodio {episode.episode_number}
-            </Badge>
-          </div>
-        </div>
-
-        {/* Title */}
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white font-['Outfit'] tracking-tight">
-            {series.name} — {season?.name ? `${season.name}: ` : ''}Episodio {episode.episode_number}
-          </h1>
-          {episode.title && (
-            <p className="text-xs text-slate-400 mt-0.5">{episode.title}</p>
-          )}
         </div>
 
         {/* Video Player */}
@@ -276,50 +254,47 @@ export const WatchPage: React.FC = () => {
           }}
         />
 
-        {/* Episode Quick Switcher Bar */}
-        <div className="flex items-center justify-between gap-4 p-4 rounded-2xl bg-[#0c101c] border border-slate-800 shadow-xl">
-          {/* Prev Button */}
-          <button
-            disabled={!prevEpItem}
-            onClick={() => prevEpItem && navigate(`/watch/${series.slug}/${prevEpItem.episode.id}`)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-              prevEpItem
-                ? 'bg-slate-800 text-white hover:bg-slate-700 shadow-md'
-                : 'opacity-40 cursor-not-allowed text-slate-500 bg-slate-900/50'
-            }`}
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Episodio Anterior
-          </button>
+        {/* Main Content & Navigation Block */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-6 items-start pt-1">
+          {/* Left Column: Info, Reactions & Synopsis */}
+          <div className="min-w-0">
+            <EpisodeInfo
+              seriesName={series.name}
+              seriesSlug={series.slug}
+              seriesId={series.id}
+              seasonId={season?.id}
+              seasonName={season?.name}
+              partLabel={watchData.anime?.name && watchData.anime.name !== series.name ? watchData.anime.name : null}
+              episodeId={episode.id}
+              episodeNumber={episode.episode_number}
+              episodeTitle={episode.title}
+              duration={episode.duration}
+              synopsis={episode.description || null}
+            />
+          </div>
 
-          {/* Next Button */}
-          <button
-            disabled={!nextEpItem}
-            onClick={() => nextEpItem && navigate(`/watch/${series.slug}/${nextEpItem.episode.id}`)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${
-              nextEpItem
-                ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-600/30'
-                : 'opacity-40 cursor-not-allowed text-slate-500 bg-slate-900/50'
-            }`}
-          >
-            Siguiente Episodio
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          {/* Right Column: Navigation Cards */}
+          {(prevEpItem || nextEpItem) && (
+            <div className="min-w-0 w-full">
+              <EpisodeNavigationCards
+                seriesSlug={series.slug}
+                seriesCover={series.cover_image}
+                seriesBanner={series.banner_image}
+                prevEpisode={prevEpItem}
+                nextEpisode={nextEpItem}
+              />
+            </div>
+          )}
         </div>
 
-        {/* Reactions */}
-        <EpisodeReactions
-          animeSlug={series.slug}
-          episodeNumber={episode.episode_number}
-          animeTitle={series.name}
-        />
-
-        {/* Disqus Community Comments */}
-        <DisqusComments
-          animeSlug={series.slug}
-          episodeNumber={episode.episode_number}
-          animeTitle={series.name}
-        />
+        {/* Collapsible Disqus Comments */}
+        <div className="pt-2">
+          <EpisodeCommentsPanel
+            animeSlug={series.slug}
+            episodeNumber={episode.episode_number}
+            animeTitle={series.name}
+          />
+        </div>
       </div>
     </PageContainer>
   );

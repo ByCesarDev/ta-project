@@ -511,6 +511,7 @@ export function useWatchEpisode(seriesSlug: string, episodeIdOrNumber: string | 
                     anime_id,
                     episode_number,
                     title,
+                    description,
                     thumbnail,
                     duration,
                     status
@@ -576,6 +577,7 @@ export function useWatchEpisode(seriesSlug: string, episodeIdOrNumber: string | 
                         anime_id,
                         episode_number,
                         title,
+                        description,
                         thumbnail,
                         duration,
                         status

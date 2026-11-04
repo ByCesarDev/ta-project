@@ -5,6 +5,7 @@ interface DisqusCommentsProps {
   animeSlug: string;
   episodeNumber: number;
   animeTitle: string;
+  variant?: 'card' | 'bare';
 }
 
 declare global {
@@ -23,6 +24,7 @@ export const DisqusComments: React.FC<DisqusCommentsProps> = ({
   animeSlug,
   episodeNumber,
   animeTitle,
+  variant = 'card',
 }) => {
   const shortname = import.meta.env.VITE_DISQUS_SHORTNAME || 'totalanime';
   const pageIdentifier = `anime-${animeSlug}-ep-${episodeNumber}`;
@@ -53,6 +55,14 @@ export const DisqusComments: React.FC<DisqusCommentsProps> = ({
       (document.head || document.body).appendChild(script);
     }
   }, [animeSlug, episodeNumber, animeTitle, pageIdentifier, pageUrl, shortname]);
+
+  if (variant === 'bare') {
+    return (
+      <div className="w-full text-slate-300">
+        <div id="disqus_thread" className="min-h-[160px]" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full rounded-3xl bg-[#0c101c] border border-slate-800/80 p-6 md:p-8 shadow-xl mb-12">

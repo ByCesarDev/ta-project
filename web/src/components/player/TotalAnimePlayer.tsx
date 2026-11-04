@@ -1484,27 +1484,22 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         </div>
       )}
 
-      {/* Top Header Controls (Fade with controls) */}
-      <div
-        className={`absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-30 flex items-center justify-between transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          {animeTitle && (
-            <span className="text-xs font-bold text-white font-['Outfit'] drop-shadow-md">
-              {animeTitle} {episodeNumber ? `• Episodio ${episodeNumber}` : ''}
-            </span>
-          )}
+      {/* Top Header Controls (Fullscreen only, fade with controls) */}
+      {isFullscreen && (
+        <div
+          className={`absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-30 flex items-center justify-between transition-opacity duration-300 ${
+            showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {animeTitle && (
+              <span className="text-xs sm:text-sm font-bold text-white font-['Outfit'] drop-shadow-md">
+                {animeTitle} {episodeNumber ? `• Episodio ${episodeNumber}` : ''}
+              </span>
+            )}
+          </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/60 backdrop-blur-md text-[11px] font-mono text-emerald-400 border border-emerald-500/20 shadow-lg">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            {stream?.server_name || selectedSource.server_name || selectedSource.provider}
-          </span>
-        </div>
-      </div>
+      )}
 
       {/* Bottom Controls Bar */}
       <div
@@ -1618,8 +1613,11 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                   {/* MAIN SETTINGS MENU */}
                   {settingsTab === 'main' && (
                     <div className="space-y-1">
-                      <div className="text-[10px] uppercase font-bold text-slate-400 px-2 py-1 tracking-wider">
-                        Ajustes
+                      <div className="flex items-center justify-between px-2 py-1 text-[10px] text-slate-400 border-b border-slate-800/80 mb-1">
+                        <span className="uppercase font-bold tracking-wider">Ajustes</span>
+                        <span className="font-mono text-emerald-400 text-[10px] truncate max-w-[130px]" title={stream?.server_name || selectedSource?.server_name || selectedSource?.provider}>
+                          {stream?.server_name || selectedSource?.server_name || selectedSource?.provider}
+                        </span>
                       </div>
 
                       {/* 1. Audio Track Submenu Button */}
