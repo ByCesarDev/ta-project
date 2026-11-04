@@ -23,3 +23,4 @@ ON public.viewer_profiles(LOWER(username));
 
 -- 4. Recargar PostgREST para exponer las nuevas columnas en la API inmediatamente
 NOTIFY pgrst, 'reload schema';
+
