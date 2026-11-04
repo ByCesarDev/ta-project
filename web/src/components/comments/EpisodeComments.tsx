@@ -14,6 +14,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.js';
+import { useViewerProfile } from '../../context/ViewerProfileContext.js';
 import { getAvatarUrl } from '../../lib/utils.js';
 import {
   useEpisodeComments,
@@ -61,6 +62,11 @@ function formatRelativeTime(dateString: string): string {
 
 export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) => {
   const { user, profile, role } = useAuth();
+  const { activeProfile } = useViewerProfile();
+
+  const activeAvatar = activeProfile?.avatar_url || profile?.avatar_url;
+  const activeName = activeProfile?.name || profile?.username || 'Usuario';
+
   const { data, isLoading, error } = useEpisodeComments(episodeId);
 
   const createMutation = useCreateComment(episodeId);
@@ -140,8 +146,8 @@ export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) =
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-full overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
               <img
-                src={getAvatarUrl(profile?.avatar_url)}
-                alt={profile?.username || 'Usuario'}
+                src={getAvatarUrl(activeAvatar)}
+                alt={activeName}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -150,7 +156,7 @@ export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) =
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Escribe tu teoría o comentario sobre este episodio..."
+                placeholder={`Comentar como ${activeName}...`}
                 rows={2}
                 maxLength={2000}
                 className="w-full rounded-xl bg-[#090d16] border border-slate-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 p-3 text-sm text-slate-200 placeholder-slate-500 resize-none outline-none transition-all"
@@ -254,6 +260,7 @@ export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) =
               isSubmittingReply={createMutation.isPending}
               revealedSpoilers={revealedSpoilers}
               toggleRevealSpoiler={toggleRevealSpoiler}
+              activeName={activeName}
             />
           ))
         )}
@@ -285,6 +292,7 @@ interface CommentCardProps {
   isSubmittingReply: boolean;
   revealedSpoilers: Set<string>;
   toggleRevealSpoiler: (id: string) => void;
+  activeName?: string;
 }
 
 const CommentCard: React.FC<CommentCardProps> = ({
@@ -306,6 +314,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
   isSubmittingReply,
   revealedSpoilers,
   toggleRevealSpoiler,
+  activeName,
 }) => {
   const isOwner = currentUser?.id === comment.user_id;
   const canDelete = isOwner || userRole === 'admin';
@@ -419,7 +428,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
           <textarea
             value={replyContent}
             onChange={(e) => setReplyContent(e.target.value)}
-            placeholder={`Responder a ${comment.username}...`}
+            placeholder={`Responder a ${comment.username} como ${activeName || 'ti'}...`}
             rows={2}
             className="w-full rounded-xl bg-[#090d16] border border-slate-800 focus:border-indigo-500 p-2.5 text-xs text-slate-200 placeholder-slate-500 resize-none outline-none"
             autoFocus

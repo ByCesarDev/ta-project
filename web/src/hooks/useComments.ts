@@ -1,10 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.js';
+import { useViewerProfile } from '../context/ViewerProfileContext.js';
 
 export interface CommentItem {
   id: string;
   episode_id: number;
   user_id: string;
+  viewer_profile_id?: string | null;
   username: string;
   avatar_url: string | null;
   user_role: string;
@@ -64,6 +66,7 @@ export function useEpisodeComments(episodeId: number) {
  */
 export function useCreateComment(episodeId: number) {
   const queryClient = useQueryClient();
+  const { activeProfile } = useViewerProfile();
 
   return useMutation({
     mutationFn: async ({
@@ -78,16 +81,22 @@ export function useCreateComment(episodeId: number) {
       const token = await getAuthToken();
       if (!token) throw new Error('Debes iniciar sesión para comentar.');
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      };
+      if (activeProfile?.id) {
+        headers['x-viewer-profile-id'] = activeProfile.id;
+      }
+
       const res = await fetch(`${API_BASE}/comments/episode/${episodeId}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({
           content,
           isSpoiler,
           parentId,
+          viewerProfileId: activeProfile?.id || null,
         }),
       });
 

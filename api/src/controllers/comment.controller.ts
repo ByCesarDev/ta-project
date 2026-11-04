@@ -67,10 +67,14 @@ export class CommentController {
       return;
     }
 
+    const rawProfileHeader = req.headers['x-viewer-profile-id'];
+    const viewerProfileId = (Array.isArray(rawProfileHeader) ? rawProfileHeader[0] : rawProfileHeader) || req.body?.viewerProfileId || null;
+
     try {
       const comment = await commentService.createComment({
         episodeId,
         userId,
+        viewerProfileId,
         fallbackUsername: req.user?.username,
         content,
         isSpoiler: Boolean(isSpoiler),

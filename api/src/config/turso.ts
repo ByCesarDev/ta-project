@@ -151,6 +151,23 @@ export const initTursoDatabase = async (): Promise<void> => {
       } catch (err) {
         console.warn('[Turso] user_saved_episodes migration check:', err);
       }
+      // Check if episode_comments needs viewer_profile_id column
+      try {
+        const commentInfo = await client.execute(`PRAGMA table_info(episode_comments)`);
+        const profileCol = commentInfo.rows.find((c: any) => c.name === 'viewer_profile_id' || c[1] === 'viewer_profile_id');
+        if (!profileCol) {
+          try {
+            await client.execute(`ALTER TABLE episode_comments ADD COLUMN viewer_profile_id TEXT`);
+            await client.execute(`CREATE INDEX IF NOT EXISTS idx_comments_profile_id ON episode_comments(viewer_profile_id)`);
+          } catch (colErr: any) {
+            if (!colErr.message?.includes('duplicate column')) {
+              throw colErr;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Turso] episode_comments viewer_profile_id migration check:', err);
+      }
     })();
   }
   return initPromise;

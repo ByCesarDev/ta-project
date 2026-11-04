@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
 import { getTursoClient, initTursoDatabase } from '../config/turso.js';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
+import { viewerProfileService } from './viewerProfile.service.js';
 
 export interface CommentItem {
   id: string;
   episode_id: number;
   user_id: string;
+  viewer_profile_id?: string | null;
   username: string;
   avatar_url: string | null;
   user_role: string;
@@ -32,7 +34,7 @@ export class CommentService {
     const client = getTursoClient();
 
     const result = await client.execute({
-      sql: `SELECT id, episode_id, user_id, username, avatar_url, user_role, content, 
+      sql: `SELECT id, episode_id, user_id, viewer_profile_id, username, avatar_url, user_role, content, 
                    is_spoiler, is_deleted, parent_id, likes_count, created_at, updated_at 
             FROM episode_comments 
             WHERE episode_id = ? 
@@ -53,6 +55,7 @@ export class CommentService {
       id: String(row.id),
       episode_id: Number(row.episode_id),
       user_id: String(row.user_id),
+      viewer_profile_id: row.viewer_profile_id ? String(row.viewer_profile_id) : null,
       username: String(row.username),
       avatar_url: row.avatar_url ? String(row.avatar_url) : null,
       user_role: String(row.user_role || 'user'),
@@ -96,12 +99,13 @@ export class CommentService {
   public async createComment(params: {
     episodeId: number;
     userId: string;
+    viewerProfileId?: string | null;
     fallbackUsername?: string;
     content: string;
     isSpoiler?: boolean;
     parentId?: string | null;
   }): Promise<CommentItem> {
-    const { episodeId, userId, fallbackUsername, content, isSpoiler = false, parentId = null } = params;
+    const { episodeId, userId, viewerProfileId, fallbackUsername, content, isSpoiler = false, parentId = null } = params;
 
     const trimmed = content.trim();
     if (!trimmed) {
@@ -124,9 +128,22 @@ export class CommentService {
       throw new Error('Tu cuenta se encuentra suspendida. No puedes comentar.');
     }
 
-    const username = profileRes.data?.username || fallbackUsername || 'Usuario';
-    const avatarUrl = profileRes.data?.avatar_url || null;
+    let username = profileRes.data?.username || fallbackUsername || 'Usuario';
+    let avatarUrl = profileRes.data?.avatar_url || null;
     const userRole = roleRes.data?.role || 'user';
+
+    // If viewerProfileId is provided, resolve and use the active viewer profile's name and avatar
+    if (viewerProfileId) {
+      try {
+        const vProfile = await viewerProfileService.getProfileById(userId, viewerProfileId);
+        if (vProfile) {
+          username = vProfile.name;
+          avatarUrl = vProfile.avatar_url;
+        }
+      } catch {
+        // Fallback to account profile if viewer profile not found
+      }
+    }
 
     // Verify parent comment exists if replying
     if (parentId) {
@@ -144,12 +161,13 @@ export class CommentService {
 
     await client.execute({
       sql: `INSERT INTO episode_comments 
-            (id, episode_id, user_id, username, avatar_url, user_role, content, is_spoiler, is_deleted, parent_id, likes_count, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?)`,
+            (id, episode_id, user_id, viewer_profile_id, username, avatar_url, user_role, content, is_spoiler, is_deleted, parent_id, likes_count, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?)`,
       args: [
         commentId,
         episodeId,
         userId,
+        viewerProfileId || null,
         username,
         avatarUrl,
         userRole,
@@ -165,6 +183,7 @@ export class CommentService {
       id: commentId,
       episode_id: episodeId,
       user_id: userId,
+      viewer_profile_id: viewerProfileId || null,
       username,
       avatar_url: avatarUrl,
       user_role: userRole,
