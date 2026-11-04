@@ -253,6 +253,7 @@ export const ScrapeAnimeModal: React.FC<ScrapeAnimeModalProps> = ({
                 {previewData.variants.map((v) => (
                   <span
                     key={v.variant_id}
+                    title={v.name ? `${v.name} (${v.variant_id})` : v.language_label}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700/80 text-[11px] text-slate-200 font-medium"
                   >
                     <Globe className="w-3 h-3 text-indigo-400" />

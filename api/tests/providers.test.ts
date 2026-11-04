@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cuevanaProvider } from '../src/scrapers/providers/cuevana.provider.js';
-import { dramasFreeProvider } from '../src/scrapers/providers/dramasfree.provider.js';
+import { dramasFreeProvider, parseAudioMetadata } from '../src/scrapers/providers/dramasfree.provider.js';
 import { soloLatinoProvider } from '../src/scrapers/providers/soloLatino.provider.js';
 import { videoScraper } from '../src/scrapers/videoScraper.service.js';
 
@@ -82,6 +82,53 @@ describe('Multi-Provider Streaming Scrapers', () => {
       expect(sdServer).toBeDefined();
       expect(sdServer?.embed_url).toBe('https://vs7z.dramasfree.com/video-sd.m3u8');
       expect(sdServer?.direct_stream_url).toBe('https://vs7z.dramasfree.com/video-sd.m3u8');
+    });
+
+    it('should correctly parse audio metadata distinguishing original Japanese audio with Spanish subtitles from dubbed audio', () => {
+      // 1. Doblaje Español
+      const dubEs = parseAudioMetadata({
+        name: 'Los Siete Pecados Capitales Temporada 2',
+        audioLanguageCode: 'es',
+        dubMode: '1',
+        dubLang: 'es',
+      });
+      expect(dubEs.is_dub).toBe(true);
+      expect(dubEs.audio_language).toBe('es-419');
+      expect(dubEs.language_label).toBe('Español Latino');
+
+      // 2. Audio PT-BR
+      const dubPt = parseAudioMetadata({
+        name: 'Los Siete Pecados Capitales Temporada 2',
+        audioLanguageCode: 'pt',
+        dubMode: '1',
+        dubLang: 'pt',
+      });
+      expect(dubPt.is_dub).toBe(true);
+      expect(dubPt.audio_language).toBe('pt-BR');
+      expect(dubPt.language_label).toBe('Portugués');
+
+      // 3. Audio en japonés - Sub Español (dubMode: 0, audioLanguageCode: ja, dubLang: es)
+      const subJa1 = parseAudioMetadata({
+        name: 'Nanatsu no taizai',
+        audioLanguageCode: 'ja',
+        dubMode: '0',
+        dubLang: 'es',
+        subtitleLang: 'es',
+      });
+      expect(subJa1.is_dub).toBe(false);
+      expect(subJa1.audio_language).toBe('ja');
+      expect(subJa1.language_label).toBe('Japonés (Sub Español)');
+
+      // 4. Second Japanese sub variant
+      const subJa2 = parseAudioMetadata({
+        name: 'The Seven Deadly Sins Temporada 2',
+        audioLanguageCode: 'ja',
+        dubMode: '0',
+        dubLang: 'es',
+      });
+      expect(subJa2.is_dub).toBe(false);
+      expect(subJa2.audio_language).toBe('ja');
+      expect(subJa2.language_label).toBe('Japonés (Sub Español)');
     });
   });
 

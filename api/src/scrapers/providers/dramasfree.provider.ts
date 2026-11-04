@@ -47,6 +47,8 @@ export function parseAudioMetadata(entry: {
   dubLang?: string;
   dubMode?: string | number;
   category?: number;
+  audioLanguageCode?: string;
+  subtitleLang?: string;
 }): {
   variant_id: string;
   audio_language: string;
@@ -56,40 +58,109 @@ export function parseAudioMetadata(entry: {
   const variant_id = entry.websiteParam || 'default';
   const name = entry.name || '';
   const nameLower = name.toLowerCase();
-  const isDub =
-    String(entry.dubMode) === '1' ||
-    nameLower.includes('doblaje') ||
-    nameLower.includes('latino') ||
-    nameLower.includes('español') ||
-    nameLower.includes('castellano') ||
-    nameLower.includes('english') ||
-    nameLower.includes('dub');
 
+  // 1. Determine if this entry represents a dubbed version (is_dub)
+  let isDub = false;
+  if (entry.dubMode !== undefined && entry.dubMode !== null) {
+    // Explicit dubMode: '1' is dubbed, '0' is original audio (subtitled)
+    isDub = String(entry.dubMode) === '1';
+  } else {
+    // Inferred from name heuristics
+    const indicatesSub =
+      nameLower.includes('sub') ||
+      nameLower.includes('japonés') ||
+      nameLower.includes('japones') ||
+      nameLower.includes('original') ||
+      nameLower.includes('raw');
+
+    isDub =
+      !indicatesSub &&
+      (nameLower.includes('doblaje') ||
+        nameLower.includes('latino') ||
+        nameLower.includes('castellano') ||
+        nameLower.includes('english') ||
+        nameLower.includes('dub'));
+  }
+
+  // 2. Identify audio language & label
   let audio_language = 'und';
   let language_label = name;
 
-  if (entry.dubLang) {
-    const dl = entry.dubLang.toLowerCase();
-    if (dl === 'es' || dl === 'es-419' || dl === 'lat') {
+  // Check audioLanguageCode if explicitly provided by the API (e.g. 'ja', 'es', 'pt', 'en')
+  const alc = (entry.audioLanguageCode || '').toLowerCase().trim();
+  if (alc) {
+    if (alc === 'ja' || alc === 'jp' || alc === 'japanese') {
+      audio_language = 'ja';
+      const isSubEs =
+        entry.subtitleLang === 'es' ||
+        entry.dubLang === 'es' ||
+        nameLower.includes('sub español') ||
+        nameLower.includes('sub-español') ||
+        nameLower.includes('español');
+      language_label = isSubEs ? 'Japonés (Sub Español)' : 'Japonés (Original)';
+      isDub = false;
+    } else if (alc === 'es' || alc === 'es-419' || alc === 'lat') {
       audio_language = 'es-419';
       language_label = 'Español Latino';
-    } else if (dl === 'es-es' || dl === 'castellano') {
+      isDub = true;
+    } else if (alc === 'es-es' || alc === 'castellano') {
       audio_language = 'es-ES';
       language_label = 'Español (España)';
-    } else if (dl === 'en' || dl === 'en-us') {
-      audio_language = 'en-US';
-      language_label = 'Inglés';
-    } else if (dl === 'pt' || dl === 'pt-br') {
+      isDub = true;
+    } else if (alc === 'pt' || alc === 'pt-br') {
       audio_language = 'pt-BR';
       language_label = 'Portugués';
-    } else if (dl === 'ja') {
-      audio_language = 'ja';
-      language_label = 'Japonés (Original)';
+      isDub = true;
+    } else if (alc === 'en' || alc === 'en-us') {
+      audio_language = 'en-US';
+      language_label = 'Inglés';
+      isDub = true;
     } else {
-      audio_language = entry.dubLang;
+      audio_language = alc;
+      language_label = entry.name || alc;
     }
   }
 
+  // If not determined yet, check dubMode and dubLang
+  if (audio_language === 'und') {
+    if (!isDub) {
+      // Original audio: anime is in Japanese
+      audio_language = 'ja';
+      const subLang = (entry.subtitleLang || entry.dubLang || '').toLowerCase().trim();
+      const isSubEs = subLang === 'es' || subLang === 'es-419' || nameLower.includes('español');
+      const isSubEn = subLang === 'en' || subLang === 'en-us' || nameLower.includes('english') || nameLower.includes('inglés');
+      if (isSubEs) {
+        language_label = 'Japonés (Sub Español)';
+      } else if (isSubEn) {
+        language_label = 'Japonés (Sub Inglés)';
+      } else {
+        language_label = 'Japonés (Original)';
+      }
+    } else if (entry.dubLang) {
+      const dl = entry.dubLang.toLowerCase().trim();
+      if (dl === 'es' || dl === 'es-419' || dl === 'lat') {
+        audio_language = 'es-419';
+        language_label = 'Español Latino';
+      } else if (dl === 'es-es' || dl === 'castellano') {
+        audio_language = 'es-ES';
+        language_label = 'Español (España)';
+      } else if (dl === 'en' || dl === 'en-us') {
+        audio_language = 'en-US';
+        language_label = 'Inglés';
+      } else if (dl === 'pt' || dl === 'pt-br') {
+        audio_language = 'pt-BR';
+        language_label = 'Portugués';
+      } else if (dl === 'ja') {
+        audio_language = 'ja';
+        language_label = 'Japonés (Original)';
+        isDub = false;
+      } else {
+        audio_language = entry.dubLang;
+      }
+    }
+  }
+
+  // Fallback heuristics based on title/name string
   if (audio_language === 'und') {
     if (nameLower.includes('latino') || (isDub && (nameLower.includes('español') || nameLower.includes('spanish')))) {
       audio_language = 'es-419';
@@ -100,19 +171,22 @@ export function parseAudioMetadata(entry: {
     } else if (nameLower.includes('inglés') || nameLower.includes('english')) {
       audio_language = 'en-US';
       language_label = 'Inglés';
-    } else if (nameLower.includes('portugués') || nameLower.includes('portuguese')) {
+    } else if (nameLower.includes('portugués') || nameLower.includes('portuguese') || nameLower.includes('pt-br')) {
       audio_language = 'pt-BR';
       language_label = 'Portugués';
-    } else if (!isDub || nameLower.includes('japonés') || nameLower.includes('japones') || nameLower.includes('original') || nameLower.includes('sub')) {
+    } else if (nameLower.includes('japonés') || nameLower.includes('japones') || nameLower.includes('original') || nameLower.includes('sub')) {
       audio_language = 'ja';
-      language_label = 'Japonés (Original)';
+      language_label = nameLower.includes('español') ? 'Japonés (Sub Español)' : 'Japonés (Original)';
+    } else {
+      audio_language = isDub ? 'es-419' : 'ja';
+      language_label = isDub ? 'Doblaje Español' : 'Japonés (Original)';
     }
   }
 
   return {
     variant_id,
     audio_language,
-    language_label: language_label || (isDub ? 'Doblaje' : 'Japonés (Original)'),
+    language_label: language_label || (isDub ? 'Doblaje Español' : 'Japonés (Original)'),
     is_dub: isDub,
   };
 }
@@ -396,6 +470,8 @@ export class DramasFreeProvider implements IStreamProvider {
       dubLang: pageProps.dubLang,
       dubMode: pageProps.dubMode,
       category: pageProps.category,
+      audioLanguageCode: pageProps.audioLanguageCode,
+      subtitleLang: pageProps.subtitleLang,
     });
     seenVariants.add(rootMeta.variant_id);
     variants.push({
@@ -421,6 +497,8 @@ export class DramasFreeProvider implements IStreamProvider {
             dubLang: d.dubLang,
             dubMode: d.dubMode,
             category: d.category,
+            audioLanguageCode: d.audioLanguageCode,
+            subtitleLang: d.subtitleLang,
           });
           variants.push({
             variant_id: meta.variant_id,
@@ -621,6 +699,8 @@ export class DramasFreeProvider implements IStreamProvider {
         dubLang: pageProps.dubLang,
         dubMode: pageProps.dubMode,
         category: pageProps.category,
+        audioLanguageCode: pageProps.audioLanguageCode,
+        subtitleLang: pageProps.subtitleLang,
       });
 
       const currentPageLang: StreamLanguage = rootMeta.is_dub ? 'dub' : 'sub';
@@ -664,6 +744,9 @@ export class DramasFreeProvider implements IStreamProvider {
                   name: targetProps.name,
                   dubLang: targetProps.dubLang,
                   dubMode: targetProps.dubMode,
+                  category: targetProps.category,
+                  audioLanguageCode: targetProps.audioLanguageCode || targetEntry.audioLanguageCode,
+                  subtitleLang: targetProps.subtitleLang || targetEntry.subtitleLang,
                 });
                 return this.parseMediaInfoList(
                   targetProps.mediaInfoList,
@@ -795,6 +878,9 @@ export class DramasFreeProvider implements IStreamProvider {
             name: pageProps.name,
             dubLang: pageProps.dubLang,
             dubMode: pageProps.dubMode,
+            category: pageProps.category,
+            audioLanguageCode: pageProps.audioLanguageCode,
+            subtitleLang: pageProps.subtitleLang,
           });
           const lang: StreamLanguage = rootMeta.is_dub ? 'dub' : 'sub';
           const subs = this.extractSubtitlesStrict(pageProps, 1);
