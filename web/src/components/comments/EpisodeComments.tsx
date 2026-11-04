@@ -27,6 +27,20 @@ interface EpisodeCommentsProps {
   episodeId: number;
 }
 
+function renderCommentContent(content: string) {
+  const parts = content.split(/(@[a-zA-Z0-9_\-\.]+)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('@')) {
+      return (
+        <span key={idx} className="text-indigo-400 font-semibold bg-indigo-500/10 px-1 py-0.5 rounded">
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 function formatRelativeTime(dateString: string): string {
   try {
     const diff = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
@@ -117,19 +131,9 @@ export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) =
   };
 
   const comments = data?.comments || [];
-  const totalCount = data?.total_count || 0;
 
   return (
     <div className="w-full space-y-6">
-      <div className="flex items-center justify-between pb-1 border-b border-slate-800/60">
-        <h4 className="text-sm font-bold text-slate-200 font-['Outfit'] flex items-center gap-2">
-          <span>Discusión de la comunidad</span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-normal">
-            {totalCount}
-          </span>
-        </h4>
-      </div>
-
       {/* 1. Comment Creation Form (or Login CTA) */}
       {user ? (
         <form onSubmit={handlePostRootComment} className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
@@ -232,13 +236,13 @@ export const EpisodeComments: React.FC<EpisodeCommentsProps> = ({ episodeId }) =
               userRole={role}
               isSpoilerRevealed={revealedSpoilers.has(comment.id)}
               onToggleReveal={() => toggleRevealSpoiler(comment.id)}
-              onLike={() => likeMutation.mutate(comment.id)}
-              onDelete={() => handleDelete(comment.id)}
+              onLike={(targetId) => likeMutation.mutate(targetId)}
+              onDelete={(targetId) => handleDelete(targetId)}
               isLiking={likeMutation.isPending}
               replyingToId={replyingToId}
-              onStartReply={() => {
+              onStartReply={(mention) => {
                 setReplyingToId(comment.id);
-                setReplyContent('');
+                setReplyContent(mention || '');
                 setReplyIsSpoiler(false);
               }}
               onCancelReply={() => setReplyingToId(null)}
@@ -267,11 +271,11 @@ interface CommentCardProps {
   userRole: string;
   isSpoilerRevealed: boolean;
   onToggleReveal: () => void;
-  onLike: () => void;
-  onDelete: () => void;
+  onLike: (targetId: string) => void;
+  onDelete: (targetId: string) => void;
   isLiking: boolean;
   replyingToId: string | null;
-  onStartReply: () => void;
+  onStartReply: (initialMention?: string) => void;
   onCancelReply: () => void;
   replyContent: string;
   setReplyContent: (val: string) => void;
@@ -334,9 +338,9 @@ const CommentCard: React.FC<CommentCardProps> = ({
 
         {canDelete && !comment.is_deleted && (
           <button
-            onClick={onDelete}
+            onClick={() => onDelete(comment.id)}
             title="Eliminar comentario"
-            className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors"
+            className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -362,12 +366,12 @@ const CommentCard: React.FC<CommentCardProps> = ({
               comment.is_deleted ? 'italic text-slate-500' : ''
             }`}
           >
-            {comment.content}
+            {renderCommentContent(comment.content)}
           </p>
           {comment.is_spoiler && (
             <button
               onClick={onToggleReveal}
-              className="text-[10px] text-amber-400/80 hover:text-amber-300 mt-1 flex items-center gap-1"
+              className="text-[10px] text-amber-400/80 hover:text-amber-300 mt-1 flex items-center gap-1 cursor-pointer"
             >
               <EyeOff className="w-3 h-3" /> Ocultar spoiler
             </button>
@@ -379,7 +383,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
       {!comment.is_deleted && (
         <div className="flex items-center gap-4 pt-1 border-t border-slate-800/40 text-xs">
           <button
-            onClick={onLike}
+            onClick={() => onLike(comment.id)}
             disabled={!currentUser}
             className={`flex items-center gap-1.5 py-1 px-2 rounded-lg transition-colors cursor-pointer ${
               comment.is_liked_by_me
@@ -393,7 +397,13 @@ const CommentCard: React.FC<CommentCardProps> = ({
 
           {currentUser && (
             <button
-              onClick={isReplying ? onCancelReply : onStartReply}
+              onClick={() => {
+                if (isReplying) {
+                  onCancelReply();
+                } else {
+                  onStartReply();
+                }
+              }}
               className="flex items-center gap-1 text-slate-400 hover:text-indigo-400 py-1 px-2 rounded-lg hover:bg-slate-800/40 transition-colors cursor-pointer"
             >
               <Reply className="w-3.5 h-3.5" />
@@ -412,12 +422,13 @@ const CommentCard: React.FC<CommentCardProps> = ({
             placeholder={`Responder a ${comment.username}...`}
             rows={2}
             className="w-full rounded-xl bg-[#090d16] border border-slate-800 focus:border-indigo-500 p-2.5 text-xs text-slate-200 placeholder-slate-500 resize-none outline-none"
+            autoFocus
           />
           <div className="flex items-center justify-between flex-wrap gap-2">
             <button
               type="button"
               onClick={() => setReplyIsSpoiler((prev) => !prev)}
-              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded ${
+              className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded cursor-pointer ${
                 replyIsSpoiler ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400 hover:text-slate-300'
               }`}
             >
@@ -429,7 +440,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
               <button
                 type="button"
                 onClick={onCancelReply}
-                className="px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-300 text-xs"
+                className="px-2.5 py-1 rounded-lg text-slate-400 hover:text-slate-300 text-xs cursor-pointer"
               >
                 Cancelar
               </button>
@@ -437,7 +448,7 @@ const CommentCard: React.FC<CommentCardProps> = ({
                 type="button"
                 disabled={!replyContent.trim() || isSubmittingReply}
                 onClick={onSubmitReply}
-                className="flex items-center gap-1 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold"
+                className="flex items-center gap-1 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold cursor-pointer"
               >
                 {isSubmittingReply && <Loader2 className="w-3 h-3 animate-spin" />}
                 <span>Responder</span>
@@ -450,49 +461,94 @@ const CommentCard: React.FC<CommentCardProps> = ({
       {/* Nested Replies */}
       {comment.replies && comment.replies.length > 0 && (
         <div className="pl-3 sm:pl-6 border-l border-slate-800 space-y-3 pt-2 mt-2">
-          {comment.replies.map((reply) => (
-            <div key={reply.id} className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
-                    <img
-                      src={getAvatarUrl(reply.avatar_url)}
-                      alt={reply.username}
-                      className="w-full h-full object-cover"
-                    />
+          {comment.replies.map((reply) => {
+            const isReplyOwner = currentUser?.id === reply.user_id;
+            const canDeleteReply = isReplyOwner || userRole === 'admin';
+
+            return (
+              <div key={reply.id} className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full overflow-hidden bg-slate-800 border border-slate-700 shrink-0">
+                      <img
+                        src={getAvatarUrl(reply.avatar_url)}
+                        alt={reply.username}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-semibold text-slate-200">{reply.username}</span>
+                        {reply.user_role === 'admin' && (
+                          <span className="flex items-center gap-0.5 px-1 py-0.1 rounded bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 text-[8px] font-bold">
+                            Admin
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[9px] text-slate-500">{formatRelativeTime(reply.created_at)}</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-xs font-semibold text-slate-200">{reply.username}</span>
-                    <span className="text-[9px] text-slate-500 ml-2">{formatRelativeTime(reply.created_at)}</span>
-                  </div>
+
+                  {canDeleteReply && !reply.is_deleted && (
+                    <button
+                      onClick={() => onDelete(reply.id)}
+                      title="Eliminar respuesta"
+                      className="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
 
-                {(currentUser?.id === reply.user_id || userRole === 'admin') && !reply.is_deleted && (
-                  <button
-                    onClick={() => onDelete()}
-                    className="text-slate-500 hover:text-rose-400 p-1"
+                {reply.is_spoiler && !revealedSpoilers.has(reply.id) ? (
+                  <div
+                    onClick={() => toggleRevealSpoiler(reply.id)}
+                    className="p-2 rounded-lg bg-amber-950/20 border border-amber-800/30 text-amber-300 text-xs flex items-center justify-between cursor-pointer"
                   >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                    <span className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-3 h-3 text-amber-400" />
+                      <span>Contiene spoilers (Clic para ver)</span>
+                    </span>
+                    <Eye className="w-3 h-3 text-amber-400" />
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">
+                    {renderCommentContent(reply.content)}
+                  </p>
+                )}
+
+                {/* Reply Action Bar (Like & Responder) */}
+                {!reply.is_deleted && (
+                  <div className="flex items-center gap-3 pt-1 text-xs border-t border-slate-800/30">
+                    <button
+                      type="button"
+                      onClick={() => onLike(reply.id)}
+                      disabled={!currentUser}
+                      className={`flex items-center gap-1 py-0.5 px-1.5 rounded transition-colors cursor-pointer ${
+                        reply.is_liked_by_me
+                          ? 'text-rose-400 hover:text-rose-300 bg-rose-500/10'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                      }`}
+                    >
+                      <Heart className={`w-3 h-3 ${reply.is_liked_by_me ? 'fill-rose-400' : ''}`} />
+                      <span className="font-medium text-[11px]">{reply.likes_count || 0}</span>
+                    </button>
+
+                    {currentUser && (
+                      <button
+                        type="button"
+                        onClick={() => onStartReply(`@${reply.username} `)}
+                        className="flex items-center gap-1 text-slate-400 hover:text-indigo-400 py-0.5 px-1.5 rounded hover:bg-slate-800/40 transition-colors cursor-pointer text-[11px]"
+                      >
+                        <Reply className="w-3 h-3" />
+                        <span>Responder</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-
-              {reply.is_spoiler && !revealedSpoilers.has(reply.id) ? (
-                <div
-                  onClick={() => toggleRevealSpoiler(reply.id)}
-                  className="p-2 rounded-lg bg-amber-950/20 border border-amber-800/30 text-amber-300 text-xs flex items-center justify-between cursor-pointer"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <AlertTriangle className="w-3 h-3 text-amber-400" />
-                    <span>Contiene spoilers (Clic para ver)</span>
-                  </span>
-                  <Eye className="w-3 h-3 text-amber-400" />
-                </div>
-              ) : (
-                <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{reply.content}</p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
