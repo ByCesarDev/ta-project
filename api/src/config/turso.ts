@@ -1,12 +1,13 @@
 import { createClient, Client } from '@libsql/client';
+import { env } from './env.js';
 
 let tursoClient: Client | null = null;
 let initPromise: Promise<void> | null = null;
 
 export const getTursoClient = (): Client => {
   if (!tursoClient) {
-    const url = process.env.TURSO_DATABASE_URL || 'file:local_comments.db';
-    const authToken = process.env.TURSO_AUTH_TOKEN || undefined;
+    const url = env.TURSO_DATABASE_URL || 'file:local_comments.db';
+    const authToken = env.TURSO_AUTH_TOKEN || undefined;
 
     tursoClient = createClient({
       url,

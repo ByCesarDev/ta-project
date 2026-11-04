@@ -1,7 +1,9 @@
 import dotenv from 'dotenv';
+import path from 'node:path';
 import { z } from 'zod';
 
-// Load .env file
+// Load .env file reliably whether running from api/ or workspace root
+dotenv.config({ path: path.resolve(process.cwd(), 'api/.env') });
 dotenv.config();
 
 const isProduction = process.env.NODE_ENV === 'production';
