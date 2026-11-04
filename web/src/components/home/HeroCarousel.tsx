@@ -101,17 +101,27 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
       }
     }
 
-    // 2. Fallback: match directly from watchHistory via slug or ID
+    // 2. Comprehensive matching against watchHistory (by slug, ID, or normalized name)
     const targetSlugLower = (currentAnime.slug || '').toLowerCase();
     const targetId = Number(currentAnime.id);
+    const targetNameNorm = (currentAnime.name || currentAnime.title_english || currentAnime.title_romaji || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
 
     const matches = (watchHistory || [])
       .filter((h: any) => {
         const ep = h.episode;
         if (!ep) return false;
+
         if (ep.series_slug && ep.series_slug.toLowerCase() === targetSlugLower) return true;
         if (ep.anime?.slug && ep.anime.slug.toLowerCase() === targetSlugLower) return true;
         if (ep.anime?.id && Number(ep.anime.id) === targetId) return true;
+
+        if (targetNameNorm && ep.anime?.name) {
+          const epAnimeNameNorm = ep.anime.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (epAnimeNameNorm === targetNameNorm) return true;
+        }
+
         return false;
       })
       .sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
@@ -119,8 +129,8 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
     if (matches.length > 0) {
       const latest = matches[0];
       return {
-        episodeId: latest.episode_id || latest.episode?.id,
-        episodeNumber: latest.episode?.episode_number,
+        episodeId: latest.episode_id || latest.episode?.id || 1,
+        episodeNumber: latest.episode?.episode_number || 1,
       };
     }
 
@@ -216,7 +226,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
               </Button>
             </Link>
           ) : (
-            <Link to={firstEpId ? `/watch/${targetSlug}/${firstEpId}` : `/anime/${targetSlug}`}>
+            <Link to={`/watch/${targetSlug}/${firstEpId || 1}`}>
               <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
                 Ver Ahora
               </Button>
