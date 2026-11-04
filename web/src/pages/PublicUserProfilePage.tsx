@@ -67,7 +67,7 @@ export const PublicUserProfilePage: React.FC = () => {
 
   return (
     <PageContainer>
-      <div className="py-8 max-w-3xl mx-auto space-y-6">
+      <div className="py-8 mx-auto space-y-6">
         {/* Navigation & Actions Top Bar */}
         <div className="flex items-center justify-between">
           <button
