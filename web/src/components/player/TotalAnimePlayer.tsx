@@ -257,39 +257,95 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   const [parsedCues, setParsedCues] = useState<Array<{ start: number; end: number; text: string }>>([]);
   const parsedCuesRef = useRef<Array<{ start: number; end: number; text: string }>>([]);
   parsedCuesRef.current = parsedCues;
+  const currentFetchedSubUrlRef = useRef<string | null>(null);
   const [hlsSubtitleTracks, setHlsSubtitleTracks] = useState<
     Array<{ index: number; label: string; lang: string }>
   >([]);
 
-  // Combined available subtitle tracks (props + stream metadata + HLS embedded)
+  // Combined available subtitle tracks (props + stream metadata + availableSources + HLS embedded)
   const allSubtitleTracks = useMemo<SubtitleTrack[]>(() => {
     const list: SubtitleTrack[] = [];
-    const seenIds = new Set<string>();
+    const seenUrls = new Set<string>();
 
-    // 1. External tracks from props & stream
-    const external = [...(subtitles || []), ...(stream?.subtitles || [])];
-    for (const track of external) {
-      if (track && track.id && !seenIds.has(track.id)) {
-        seenIds.add(track.id);
-        list.push(track);
+    // 1. Universal subtitle tracks aggregated across all availableSources for this episode
+    if (availableSources && availableSources.length > 0) {
+      for (const s of availableSources) {
+        let sourceSubs: SubtitleTrack[] = [];
+
+        if (Array.isArray(s.subtitles)) {
+          sourceSubs = s.subtitles as any;
+        } else if (s.direct_stream_url?.includes('#subtitles=') || s.embed_url?.includes('#subtitles=')) {
+          try {
+            const rawUrl = s.direct_stream_url || s.embed_url;
+            const raw = rawUrl.split('#subtitles=')[1].split('&')[0];
+            sourceSubs = JSON.parse(decodeURIComponent(raw));
+          } catch {}
+        }
+
+        const rawAudio = (s.audio_language || (s.language === 'dub' ? 'es' : 'ja')).toLowerCase();
+        let code = 'ES';
+        if (rawAudio.startsWith('ja') || rawAudio.startsWith('jp')) code = 'JP';
+        else if (rawAudio.startsWith('pt')) code = 'PT';
+        else if (rawAudio.startsWith('en')) code = 'EN';
+        else if (rawAudio.startsWith('es')) code = 'ES';
+        else code = rawAudio.slice(0, 2).toUpperCase();
+
+        const originTag = s.language === 'dub' ? `Dob-${code}` : `Sub-${code}`;
+
+        for (let i = 0; i < sourceSubs.length; i++) {
+          const track = sourceSubs[i];
+          if (!track?.url) continue;
+          if (seenUrls.has(track.url)) continue;
+          seenUrls.add(track.url);
+
+          const baseLabel =
+            track.label ||
+            (track.language === 'es' ? 'Español' : track.language === 'en' ? 'English' : track.language || 'Subtítulo');
+
+          const finalLabel =
+            baseLabel.includes('(') || baseLabel.includes('[')
+              ? baseLabel
+              : `${baseLabel} (${originTag})`;
+
+          list.push({
+            id: `src_${s.id}_${track.language || 'und'}_${i}`,
+            language: track.language || 'und',
+            label: finalLabel,
+            url: track.url,
+            isDefault: track.isDefault,
+          });
+        }
       }
     }
 
-    // 2. Embedded tracks from HLS
-    for (const hlsTrack of hlsSubtitleTracks) {
-      const trackId = `hls_${hlsTrack.index}`;
-      if (!seenIds.has(trackId)) {
-        seenIds.add(trackId);
+    // 2. External tracks from props & active stream metadata
+    const extraExternal = [...(subtitles || []), ...(stream?.subtitles || [])];
+    for (let i = 0; i < extraExternal.length; i++) {
+      const track = extraExternal[i];
+      if (track?.url && !seenUrls.has(track.url)) {
+        seenUrls.add(track.url);
         list.push({
-          id: trackId,
-          language: hlsTrack.lang || 'und',
-          label: hlsTrack.label || `Pista ${hlsTrack.index + 1}`,
+          ...track,
+          id: track.id || `extra_${i}`,
         });
       }
     }
 
+    // 3. Embedded tracks from HLS
+    for (const hlsTrack of hlsSubtitleTracks) {
+      const trackId = `hls_${hlsTrack.index}`;
+      const baseLabel =
+        hlsTrack.label ||
+        (hlsTrack.lang === 'es' ? 'Español' : hlsTrack.lang === 'en' ? 'English' : `Pista ${hlsTrack.index + 1}`);
+      list.push({
+        id: trackId,
+        language: hlsTrack.lang || 'und',
+        label: `${baseLabel} (Embebido)`,
+      });
+    }
+
     return list;
-  }, [subtitles, stream?.subtitles, hlsSubtitleTracks]);
+  }, [availableSources, subtitles, stream?.subtitles, hlsSubtitleTracks]);
 
   // Human-readable active subtitle label for menu
   const selectedSubtitleLabel = useMemo(() => {
@@ -342,6 +398,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     pendingSeekTimeRef.current = null;
     wasPlayingRef.current = true;
     prevSourceIdRef.current = selectedSource?.id ?? null;
+    currentFetchedSubUrlRef.current = null;
   }, [episodeId]);
 
   // Synchronize playback position whenever selectedSource changes (e.g. language or quality switch)
@@ -651,6 +708,8 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   // 3. Subtitles Loader & WebVTT/SRT Parser
   useEffect(() => {
     if (!selectedSubtitle) {
+      currentFetchedSubUrlRef.current = null;
+      parsedCuesRef.current = [];
       setParsedCues((prev) => (prev.length === 0 ? prev : []));
       setActiveCueText(null);
       if (hlsRef.current) {
@@ -665,7 +724,9 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     );
 
     if (matchedHls && hlsRef.current) {
+      currentFetchedSubUrlRef.current = null;
       hlsRef.current.subtitleTrack = matchedHls.index;
+      parsedCuesRef.current = [];
       setParsedCues((prev) => (prev.length === 0 ? prev : []));
       return;
     }
@@ -683,6 +744,12 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       if (hlsRef.current) {
         hlsRef.current.subtitleTrack = -1;
       }
+
+      // If we already parsed and cached this exact subtitle URL, keep cues to prevent glitching/flicker
+      if (currentFetchedSubUrlRef.current === matchedTrack.url && parsedCuesRef.current.length > 0) {
+        return;
+      }
+      currentFetchedSubUrlRef.current = matchedTrack.url;
 
       fetch(matchedTrack.url, { referrerPolicy: 'no-referrer' })
         .then((res) => {
@@ -743,10 +810,12 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
           }
         })
         .catch(() => {
+          currentFetchedSubUrlRef.current = null;
           parsedCuesRef.current = [];
           setParsedCues((prev) => (prev.length === 0 ? prev : []));
         });
     } else {
+      currentFetchedSubUrlRef.current = null;
       parsedCuesRef.current = [];
       setParsedCues((prev) => (prev.length === 0 ? prev : []));
     }
@@ -1328,7 +1397,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
       {/* CUSTOM ANIME SUBTITLE RENDERER */}
       {selectedSubtitle && activeCueText && (
         <div
-          className={`absolute left-0 right-0 text-center pointer-events-none z-[35] px-6 transition-all duration-150 ${
+          className={`absolute left-0 right-0 text-center pointer-events-none z-10 px-6 transition-all duration-150 ${
             showControls ? 'bottom-20 sm:bottom-24' : 'bottom-6 sm:bottom-8'
           }`}
         >
@@ -1402,7 +1471,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
       {/* Top Header Controls (Fade with controls) */}
       <div
-        className={`absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-20 flex items-center justify-between transition-opacity duration-300 ${
+        className={`absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent z-30 flex items-center justify-between transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
@@ -1424,7 +1493,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
       {/* Bottom Controls Bar */}
       <div
-        className={`absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent z-20 flex flex-col gap-2 transition-opacity duration-300 ${
+        className={`absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent z-30 flex flex-col gap-2 transition-opacity duration-300 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >
@@ -1530,7 +1599,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
               {/* Settings Dropdown Popover */}
               {showSettings && (
-                <div className="absolute right-0 bottom-full mb-2 w-60 p-2.5 rounded-2xl bg-slate-900/95 border border-slate-700/80 backdrop-blur-xl shadow-2xl z-40 animate-fade-in text-xs max-h-[380px] overflow-y-auto">
+                <div className="absolute right-0 bottom-full mb-2 w-64 p-2.5 rounded-2xl bg-slate-900/95 border border-slate-700/80 backdrop-blur-xl shadow-2xl z-50 animate-fade-in text-xs max-h-[380px] overflow-y-auto">
                   {/* MAIN SETTINGS MENU */}
                   {settingsTab === 'main' && (
                     <div className="space-y-1">
@@ -1758,9 +1827,10 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                       {allSubtitleTracks.map((track) => {
                         const isSelected =
                           selectedSubtitle === track.id ||
-                          selectedSubtitle === track.language ||
-                          (selectedSubtitle === 'es' && (track.language === 'es' || track.label.toLowerCase().includes('español'))) ||
-                          (selectedSubtitle === 'en' && (track.language === 'en' || track.label.toLowerCase().includes('english')));
+                          (!allSubtitleTracks.some((t) => t.id === selectedSubtitle) &&
+                            (selectedSubtitle === track.language ||
+                              (selectedSubtitle === 'es' && (track.language === 'es' || track.label.toLowerCase().includes('español'))) ||
+                              (selectedSubtitle === 'en' && (track.language === 'en' || track.label.toLowerCase().includes('english')))));
 
                         return (
                           <button

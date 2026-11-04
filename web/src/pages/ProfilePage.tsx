@@ -78,7 +78,7 @@ export const ProfilePage: React.FC = () => {
 
   return (
     <PageContainer>
-      <div className="max-w-3xl mx-auto py-8 space-y-6">
+      <div className="mx-auto py-8 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl sm:text-3xl font-black text-white font-['Outfit'] flex items-center gap-2.5">

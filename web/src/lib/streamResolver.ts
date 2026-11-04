@@ -22,13 +22,23 @@ export async function resolveStreamSource(source: EpisodeSourceRow): Promise<Pla
   const providerLower = (source.provider || '').toLowerCase();
   const serverName = source.server_name || source.provider;
 
-  // Extract embedded subtitles from hash if present
+  // Extract embedded subtitles from source.subtitles or hash if present
   let embeddedSubtitles: Array<{ id: string; language: string; label: string; url?: string }> = [];
+  if (Array.isArray(source.subtitles) && source.subtitles.length > 0) {
+    embeddedSubtitles.push(...(source.subtitles as any));
+  }
   const rawUrl = source.direct_stream_url || source.embed_url || '';
   if (rawUrl.includes('#subtitles=')) {
     try {
       const rawSub = decodeURIComponent(rawUrl.split('#subtitles=')[1].split('&')[0]);
-      embeddedSubtitles = JSON.parse(rawSub);
+      const parsed = JSON.parse(rawSub);
+      if (Array.isArray(parsed)) {
+        for (const p of parsed) {
+          if (!embeddedSubtitles.some((e) => e.url === p.url)) {
+            embeddedSubtitles.push(p);
+          }
+        }
+      }
     } catch {
       // ignore
     }
