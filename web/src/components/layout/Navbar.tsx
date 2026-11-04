@@ -10,12 +10,24 @@ import {
   LogOut,
   Menu,
   X,
+  Users,
+  Settings,
 } from 'lucide-react';
 import { Button } from '../common/Button.js';
 import { getAvatarUrl } from '../../lib/utils.js';
+import { useViewerProfile } from '../../context/ViewerProfileContext.js';
+import { ProfileSelectorModal } from '../profiles/ProfileSelectorModal.js';
+import { ManageProfilesModal } from '../profiles/ManageProfilesModal.js';
 
 export const Navbar: React.FC = () => {
   const { user, profile, signOut } = useAuth();
+  const {
+    profiles,
+    activeProfile,
+    selectProfile,
+    openSelectorModal,
+    openManageModal,
+  } = useViewerProfile();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,34 +105,101 @@ export const Navbar: React.FC = () => {
             <div className="relative">
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-800/60 border border-transparent hover:border-slate-700 transition-all"
+                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-800/60 border border-transparent hover:border-slate-700 transition-all cursor-pointer"
               >
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-xs shadow-md border border-indigo-400/30 overflow-hidden">
-                  {profile?.avatar_url ? (
+                  {activeProfile?.avatar_url || profile?.avatar_url ? (
                     <img
-                      src={getAvatarUrl(profile.avatar_url)}
-                      alt={profile.username}
+                      src={getAvatarUrl(activeProfile?.avatar_url || profile?.avatar_url)}
+                      alt={activeProfile?.name || profile?.username}
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    profile?.username?.charAt(0).toUpperCase() || <UserIcon className="w-4 h-4" />
+                    (activeProfile?.name || profile?.username)?.charAt(0).toUpperCase() || <UserIcon className="w-4 h-4" />
                   )}
                 </div>
-                <span className="hidden lg:inline text-xs font-semibold text-slate-200">
-                  {profile?.username || 'Mi Cuenta'}
-                </span>
+                <div className="hidden lg:flex flex-col text-left">
+                  <span className="text-xs font-bold text-slate-200 line-clamp-1">
+                    {activeProfile?.name || profile?.username || 'Mi Perfil'}
+                  </span>
+                  {profiles.length > 1 && (
+                    <span className="text-[10px] text-indigo-400 font-semibold -mt-0.5">
+                      Cambiar perfil
+                    </span>
+                  )}
+                </div>
               </button>
 
               {/* User Dropdown */}
               {isUserMenuOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-52 rounded-2xl bg-[#0b0f19] border border-slate-800 shadow-2xl py-2 z-50 text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+                  className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#0b0f19] border border-slate-800 shadow-2xl py-2 z-50 text-xs backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
                   onMouseLeave={() => setIsUserMenuOpen(false)}
                 >
                   <div className="px-4 py-2 border-b border-slate-800/80 mb-1">
-                    <p className="font-bold text-slate-200 truncate">{profile?.username}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-bold text-slate-200 truncate">{activeProfile?.name || profile?.username}</p>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                        Perfil
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 truncate mt-0.5">{user.email}</p>
                   </div>
+
+                  {/* Quick Profile Switcher (if > 1 profile) */}
+                  {profiles.length > 1 && (
+                    <div className="px-3 py-1.5 border-b border-slate-800/80 mb-1">
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 px-1">
+                        Cambiar de perfil:
+                      </p>
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                        {profiles
+                          .filter((p) => p.id !== activeProfile?.id)
+                          .map((p) => (
+                            <button
+                              key={p.id}
+                              title={`Cambiar a ${p.name}`}
+                              onClick={() => {
+                                selectProfile(p.id);
+                                setIsUserMenuOpen(false);
+                              }}
+                              className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-800/80 transition-colors group cursor-pointer text-left shrink-0"
+                            >
+                              <div className="w-6 h-6 rounded-md overflow-hidden bg-slate-900 border border-slate-700 group-hover:border-indigo-400">
+                                <img src={getAvatarUrl(p.avatar_url)} alt={p.name} className="w-full h-full object-cover" />
+                              </div>
+                              <span className="text-[11px] font-semibold text-slate-300 group-hover:text-white max-w-[70px] truncate">
+                                {p.name}
+                              </span>
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      openSelectorModal();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors text-left cursor-pointer"
+                  >
+                    <Users className="w-4 h-4 text-indigo-400" />
+                    Todos los Perfiles
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      openManageModal();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors text-left cursor-pointer"
+                  >
+                    <Settings className="w-4 h-4 text-slate-400" />
+                    Administrar Perfiles
+                  </button>
+
+                  <div className="border-t border-slate-800/80 my-1" />
 
                   <Link
                     to="/watchlist"
@@ -146,7 +225,7 @@ export const Navbar: React.FC = () => {
                     className="flex items-center gap-2.5 px-4 py-2 text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"
                   >
                     <UserIcon className="w-4 h-4 text-cyan-400" />
-                    Perfil y Ajustes
+                    Cuenta y Ajustes
                   </Link>
 
                   <div className="border-t border-slate-800/80 my-1" />
@@ -156,7 +235,7 @@ export const Navbar: React.FC = () => {
                       setIsUserMenuOpen(false);
                       signOut();
                     }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors text-left"
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors text-left cursor-pointer"
                   >
                     <LogOut className="w-4 h-4" />
                     Cerrar Sesión
@@ -236,6 +315,13 @@ export const Navbar: React.FC = () => {
             )}
           </nav>
         </div>
+      )}
+      {/* Global Modals for Viewer Profiles */}
+      {user && (
+        <>
+          <ProfileSelectorModal />
+          <ManageProfilesModal />
+        </>
       )}
     </header>
   );

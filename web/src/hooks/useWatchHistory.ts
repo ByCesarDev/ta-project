@@ -1,58 +1,82 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.js';
+import { useViewerProfile } from '../context/ViewerProfileContext.js';
 import { HistoryItem } from '../types/index.js';
 
 export function useWatchHistory() {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
+  const profileId = activeProfile?.id;
 
   return useQuery({
-    queryKey: ['history', user?.id],
+    queryKey: ['history', user?.id, profileId],
     queryFn: async () => {
       if (!user) return [];
 
-      const { data, error } = await supabase
-        .from('user_history')
-        .select(`
+      const selectClause = `
+        id,
+        episode_id,
+        progress_seconds,
+        total_seconds,
+        is_completed,
+        updated_at,
+        episodes (
           id,
-          episode_id,
-          progress_seconds,
-          total_seconds,
-          is_completed,
-          updated_at,
-          episodes (
+          episode_number,
+          title,
+          thumbnail,
+          duration,
+          animes (
             id,
-            episode_number,
-            title,
-            thumbnail,
-            duration,
-            animes (
-              id,
-              name,
-              slug,
-              title_romaji,
-              title_english,
-              cover_image,
-              series_entries (
-                series_seasons (
+            name,
+            slug,
+            title_romaji,
+            title_english,
+            cover_image,
+            series_entries (
+              series_seasons (
+                id,
+                name,
+                season_number,
+                kind,
+                series (
                   id,
                   name,
-                  season_number,
-                  kind,
-                  series (
-                    id,
-                    name,
-                    slug
-                  )
+                  slug
                 )
               )
             )
           )
-        `)
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false });
+        )
+      `;
 
-      if (error) throw error;
+      let data: any[] | null = null;
+
+      // 1. If active profile is present, try querying by viewer_profile_id first
+      if (profileId) {
+        const { data: profileData, error: profileErr } = await supabase
+          .from('user_history')
+          .select(selectClause)
+          .eq('viewer_profile_id', profileId)
+          .order('updated_at', { ascending: false });
+
+        if (!profileErr && profileData) {
+          data = profileData;
+        }
+      }
+
+      // 2. Fallback to user_id if viewer_profile_id query failed (e.g. migration not run yet) or no profile
+      if (!data) {
+        const { data: userData, error: userErr } = await supabase
+          .from('user_history')
+          .select(selectClause)
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false });
+
+        if (userErr) throw userErr;
+        data = userData || [];
+      }
 
       return (data || []).map((item: any) => {
         const ep = item.episodes;
@@ -88,14 +112,27 @@ export function useWatchHistory() {
 
 export function useEpisodeProgress(episodeId?: number) {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
+  const profileId = activeProfile?.id;
 
   return useQuery({
-    queryKey: ['history', user?.id, 'episode', episodeId],
+    queryKey: ['history', user?.id, profileId, 'episode', episodeId],
     queryFn: async () => {
       if (!episodeId) return null;
 
       // 1. Try fetching from Supabase if authenticated
       if (user) {
+        if (profileId) {
+          const { data, error } = await supabase
+            .from('user_history')
+            .select('progress_seconds, total_seconds, is_completed')
+            .eq('viewer_profile_id', profileId)
+            .eq('episode_id', episodeId)
+            .maybeSingle();
+
+          if (!error && data) return data;
+        }
+
         const { data, error } = await supabase
           .from('user_history')
           .select('progress_seconds, total_seconds, is_completed')
@@ -108,7 +145,10 @@ export function useEpisodeProgress(episodeId?: number) {
 
       // 2. Fallback to localStorage for guest or instant local resume
       try {
-        const cached = localStorage.getItem(`ta_ep_progress_${episodeId}`);
+        const storageKey = profileId
+          ? `ta_ep_progress_${profileId}_${episodeId}`
+          : `ta_ep_progress_${episodeId}`;
+        const cached = localStorage.getItem(storageKey) || localStorage.getItem(`ta_ep_progress_${episodeId}`);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (parsed && typeof parsed.progress_seconds === 'number') {
@@ -131,6 +171,8 @@ export function useEpisodeProgress(episodeId?: number) {
 
 export function useSaveProgress() {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
+  const profileId = activeProfile?.id;
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -149,36 +191,47 @@ export function useSaveProgress() {
 
       // Always save to localStorage for zero-latency local recovery
       try {
-        localStorage.setItem(
-          `ta_ep_progress_${episodeId}`,
-          JSON.stringify({
-            progress_seconds: progressFloored,
-            total_seconds: totalFloored,
-            is_completed: isCompleted,
-            updated_at: new Date().toISOString(),
-          })
-        );
+        const payload = JSON.stringify({
+          progress_seconds: progressFloored,
+          total_seconds: totalFloored,
+          is_completed: isCompleted,
+          updated_at: new Date().toISOString(),
+        });
+        if (profileId) {
+          localStorage.setItem(`ta_ep_progress_${profileId}_${episodeId}`, payload);
+        }
+        localStorage.setItem(`ta_ep_progress_${episodeId}`, payload);
       } catch {
         // Ignore localStorage quota error
       }
 
       if (!user) return null; // Guest viewing, local storage is enough
 
+      const row: Record<string, any> = {
+        user_id: user.id,
+        episode_id: episodeId,
+        progress_seconds: progressFloored,
+        total_seconds: totalFloored,
+        is_completed: isCompleted,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (profileId) {
+        row.viewer_profile_id = profileId;
+        const { data, error } = await supabase
+          .from('user_history')
+          .upsert(row, { onConflict: 'viewer_profile_id,episode_id' })
+          .select()
+          .maybeSingle();
+
+        if (!error && data) return data;
+      }
+
+      // Fallback without viewer_profile_id
+      delete row.viewer_profile_id;
       const { data, error } = await supabase
         .from('user_history')
-        .upsert(
-          {
-            user_id: user.id,
-            episode_id: episodeId,
-            progress_seconds: progressFloored,
-            total_seconds: totalFloored,
-            is_completed: isCompleted,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'user_id,episode_id',
-          }
-        )
+        .upsert(row, { onConflict: 'user_id,episode_id' })
         .select()
         .single();
 
@@ -186,7 +239,9 @@ export function useSaveProgress() {
       return data;
     },
     onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['history', user?.id, profileId, 'episode', vars.episodeId] });
       queryClient.invalidateQueries({ queryKey: ['history', user?.id, 'episode', vars.episodeId] });
+      queryClient.invalidateQueries({ queryKey: ['history', user?.id, profileId] });
       queryClient.invalidateQueries({ queryKey: ['history', user?.id] });
     },
   });
@@ -194,6 +249,8 @@ export function useSaveProgress() {
 
 export function useToggleEpisodeWatched() {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
+  const profileId = activeProfile?.id;
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -212,15 +269,16 @@ export function useToggleEpisodeWatched() {
 
       // Local storage fallback
       try {
-        localStorage.setItem(
-          `ta_ep_progress_${episodeId}`,
-          JSON.stringify({
-            progress_seconds: progressSeconds,
-            total_seconds: totalSeconds,
-            is_completed: willBeCompleted,
-            updated_at: new Date().toISOString(),
-          })
-        );
+        const payload = JSON.stringify({
+          progress_seconds: progressSeconds,
+          total_seconds: totalSeconds,
+          is_completed: willBeCompleted,
+          updated_at: new Date().toISOString(),
+        });
+        if (profileId) {
+          localStorage.setItem(`ta_ep_progress_${profileId}_${episodeId}`, payload);
+        }
+        localStorage.setItem(`ta_ep_progress_${episodeId}`, payload);
       } catch {
         // ignore
       }
@@ -228,21 +286,38 @@ export function useToggleEpisodeWatched() {
       if (!user) return { is_completed: willBeCompleted };
 
       if (willBeCompleted) {
+        const row: Record<string, any> = {
+          user_id: user.id,
+          episode_id: episodeId,
+          progress_seconds: progressSeconds,
+          total_seconds: totalSeconds,
+          is_completed: true,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (profileId) {
+          row.viewer_profile_id = profileId;
+          const { error } = await supabase
+            .from('user_history')
+            .upsert(row, { onConflict: 'viewer_profile_id,episode_id' });
+          if (!error) return { is_completed: willBeCompleted };
+        }
+
+        delete row.viewer_profile_id;
         const { error } = await supabase
           .from('user_history')
-          .upsert(
-            {
-              user_id: user.id,
-              episode_id: episodeId,
-              progress_seconds: progressSeconds,
-              total_seconds: totalSeconds,
-              is_completed: true,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'user_id,episode_id' }
-          );
+          .upsert(row, { onConflict: 'user_id,episode_id' });
         if (error) throw error;
       } else {
+        if (profileId) {
+          const { error } = await supabase
+            .from('user_history')
+            .delete()
+            .eq('viewer_profile_id', profileId)
+            .eq('episode_id', episodeId);
+          if (!error) return { is_completed: willBeCompleted };
+        }
+
         const { error } = await supabase
           .from('user_history')
           .delete()
@@ -254,7 +329,9 @@ export function useToggleEpisodeWatched() {
       return { is_completed: willBeCompleted };
     },
     onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['history', user?.id, profileId, 'episode', vars.episodeId] });
       queryClient.invalidateQueries({ queryKey: ['history', user?.id, 'episode', vars.episodeId] });
+      queryClient.invalidateQueries({ queryKey: ['history', user?.id, profileId] });
       queryClient.invalidateQueries({ queryKey: ['history', user?.id] });
     },
   });
@@ -262,6 +339,8 @@ export function useToggleEpisodeWatched() {
 
 export function useToggleSeasonWatched() {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
+  const profileId = activeProfile?.id;
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -280,16 +359,20 @@ export function useToggleSeasonWatched() {
       episodeIds.forEach((id) => {
         try {
           if (markAsWatched) {
-            localStorage.setItem(
-              `ta_ep_progress_${id}`,
-              JSON.stringify({
-                progress_seconds: defaultDuration,
-                total_seconds: defaultDuration,
-                is_completed: true,
-                updated_at: new Date().toISOString(),
-              })
-            );
+            const payload = JSON.stringify({
+              progress_seconds: defaultDuration,
+              total_seconds: defaultDuration,
+              is_completed: true,
+              updated_at: new Date().toISOString(),
+            });
+            if (profileId) {
+              localStorage.setItem(`ta_ep_progress_${profileId}_${id}`, payload);
+            }
+            localStorage.setItem(`ta_ep_progress_${id}`, payload);
           } else {
+            if (profileId) {
+              localStorage.removeItem(`ta_ep_progress_${profileId}_${id}`);
+            }
             localStorage.removeItem(`ta_ep_progress_${id}`);
           }
         } catch {
@@ -300,7 +383,23 @@ export function useToggleSeasonWatched() {
       if (!user) return;
 
       if (markAsWatched) {
-        const rows = episodeIds.map((id) => ({
+        if (profileId) {
+          const profileRows = episodeIds.map((id) => ({
+            user_id: user.id,
+            viewer_profile_id: profileId,
+            episode_id: id,
+            progress_seconds: defaultDuration,
+            total_seconds: defaultDuration,
+            is_completed: true,
+            updated_at: new Date().toISOString(),
+          }));
+          const { error } = await supabase
+            .from('user_history')
+            .upsert(profileRows, { onConflict: 'viewer_profile_id,episode_id' });
+          if (!error) return;
+        }
+
+        const legacyRows = episodeIds.map((id) => ({
           user_id: user.id,
           episode_id: id,
           progress_seconds: defaultDuration,
@@ -311,9 +410,18 @@ export function useToggleSeasonWatched() {
 
         const { error } = await supabase
           .from('user_history')
-          .upsert(rows, { onConflict: 'user_id,episode_id' });
+          .upsert(legacyRows, { onConflict: 'user_id,episode_id' });
         if (error) throw error;
       } else {
+        if (profileId) {
+          const { error } = await supabase
+            .from('user_history')
+            .delete()
+            .eq('viewer_profile_id', profileId)
+            .in('episode_id', episodeIds);
+          if (!error) return;
+        }
+
         const { error } = await supabase
           .from('user_history')
           .delete()
@@ -323,6 +431,7 @@ export function useToggleSeasonWatched() {
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['history', user?.id, profileId] });
       queryClient.invalidateQueries({ queryKey: ['history', user?.id] });
     },
   });

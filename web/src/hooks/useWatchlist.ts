@@ -1,79 +1,120 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.js';
 import { useAuth } from '../context/AuthContext.js';
+import { useViewerProfile } from '../context/ViewerProfileContext.js';
 
 export function useWatchlist() {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
+  const profileId = activeProfile?.id;
 
   return useQuery({
-    queryKey: ['watchlist', user?.id],
+    queryKey: ['watchlist', user?.id, profileId],
     queryFn: async () => {
       if (!user) return [];
 
-      // 1. Query user_favorites for series-level saves
-      const { data: seriesFavs } = await supabase
-        .from('user_favorites')
-        .select(`
+      const seriesSelect = `
+        id,
+        series_id,
+        created_at,
+        series (
           id,
-          series_id,
-          created_at,
-          series (
+          name,
+          slug,
+          description,
+          cover_image,
+          banner_image,
+          status,
+          views_count,
+          series_seasons (
             id,
-            name,
-            slug,
-            description,
-            cover_image,
-            banner_image,
-            status,
-            views_count,
-            series_seasons (
-              id,
-              series_entries (
-                anime:animes (
-                  id,
-                  episodes
-                )
+            series_entries (
+              anime:animes (
+                id,
+                episodes
               )
             )
           )
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        )
+      `;
+
+      // 1. Query user_favorites for series-level saves
+      let seriesFavs: any[] | null = null;
+      if (profileId) {
+        const { data, error } = await supabase
+          .from('user_favorites')
+          .select(seriesSelect)
+          .eq('viewer_profile_id', profileId)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          seriesFavs = data;
+        }
+      }
+
+      if (!seriesFavs) {
+        const { data } = await supabase
+          .from('user_favorites')
+          .select(seriesSelect)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        seriesFavs = data || [];
+      }
+
+      const animeSelect = `
+        id,
+        anime_id,
+        created_at,
+        animes (
+          id,
+          name,
+          slug,
+          title_romaji,
+          title_english,
+          cover_image,
+          banner_image,
+          status,
+          episodes,
+          views_count,
+          series_entries (
+            series_seasons (
+              series (
+                id,
+                name,
+                slug,
+                cover_image,
+                banner_image,
+                status
+              )
+            )
+          )
+        )
+      `;
 
       // 2. Query legacy watch_later for any anime saves
-      const { data: animeFavs } = await supabase
-        .from('watch_later')
-        .select(`
-          id,
-          anime_id,
-          created_at,
-          animes (
-            id,
-            name,
-            slug,
-            title_romaji,
-            title_english,
-            cover_image,
-            banner_image,
-            status,
-            episodes,
-            views_count,
-            series_entries (
-              series_seasons (
-                series (
-                  id,
-                  name,
-                  slug,
-                  cover_image,
-                  banner_image,
-                  status
-                )
-              )
-            )
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      let animeFavs: any[] | null = null;
+      if (profileId) {
+        const { data, error } = await supabase
+          .from('watch_later')
+          .select(animeSelect)
+          .eq('viewer_profile_id', profileId)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          animeFavs = data;
+        }
+      }
+
+      if (!animeFavs) {
+        const { data } = await supabase
+          .from('watch_later')
+          .select(animeSelect)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        animeFavs = data || [];
+      }
 
       const results: any[] = [];
       const seenSlugs = new Set<string>();
@@ -156,13 +197,37 @@ export function useWatchlist() {
 
 export function useIsInWatchlist(id?: number) {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
+  const profileId = activeProfile?.id;
 
   return useQuery({
-    queryKey: ['watchlist', user?.id, 'check', id],
+    queryKey: ['watchlist', user?.id, profileId, 'check', id],
     queryFn: async () => {
       if (!user || !id) return false;
 
-      // Check user_favorites by series_id
+      // 1. Check with profileId if available
+      if (profileId) {
+        const { data: fav, error: favErr } = await supabase
+          .from('user_favorites')
+          .select('id')
+          .eq('viewer_profile_id', profileId)
+          .eq('series_id', id)
+          .maybeSingle();
+
+        if (!favErr && fav) return true;
+
+        const { data: wl, error: wlErr } = await supabase
+          .from('watch_later')
+          .select('id')
+          .eq('viewer_profile_id', profileId)
+          .eq('anime_id', id)
+          .maybeSingle();
+
+        if (!wlErr && wl) return true;
+        if (!favErr && !wlErr) return false;
+      }
+
+      // 2. Check user_favorites by series_id fallback
       const { data: fav } = await supabase
         .from('user_favorites')
         .select('id')
@@ -172,7 +237,7 @@ export function useIsInWatchlist(id?: number) {
 
       if (fav) return true;
 
-      // Check watch_later by anime_id
+      // 3. Check watch_later by anime_id fallback
       const { data: wl } = await supabase
         .from('watch_later')
         .select('id')
@@ -188,6 +253,8 @@ export function useIsInWatchlist(id?: number) {
 
 export function useToggleWatchlist(id?: number) {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
+  const profileId = activeProfile?.id;
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -195,7 +262,49 @@ export function useToggleWatchlist(id?: number) {
       if (!user) throw new Error('Debes iniciar sesión para guardar favoritos');
       if (!id) throw new Error('Elemento no especificado');
 
-      // 1. Check user_favorites
+      if (profileId) {
+        // 1. Check user_favorites with profileId
+        const { data: existingFav } = await supabase
+          .from('user_favorites')
+          .select('id')
+          .eq('viewer_profile_id', profileId)
+          .eq('series_id', id)
+          .maybeSingle();
+
+        if (existingFav) {
+          await supabase.from('user_favorites').delete().eq('id', existingFav.id);
+          await supabase.from('watch_later').delete().eq('viewer_profile_id', profileId).eq('anime_id', id);
+          return { isSaved: false };
+        }
+
+        // 2. Check watch_later with profileId
+        const { data: existingWl } = await supabase
+          .from('watch_later')
+          .select('id')
+          .eq('viewer_profile_id', profileId)
+          .eq('anime_id', id)
+          .maybeSingle();
+
+        if (existingWl) {
+          await supabase.from('watch_later').delete().eq('id', existingWl.id);
+          return { isSaved: false };
+        }
+
+        // 3. Try adding with viewer_profile_id
+        const { error: favErr } = await supabase
+          .from('user_favorites')
+          .insert({ user_id: user.id, viewer_profile_id: profileId, series_id: id });
+
+        if (!favErr) return { isSaved: true };
+
+        const { error: wlErr } = await supabase
+          .from('watch_later')
+          .insert({ user_id: user.id, viewer_profile_id: profileId, anime_id: id });
+
+        if (!wlErr) return { isSaved: true };
+      }
+
+      // Legacy fallback
       const { data: existingFav } = await supabase
         .from('user_favorites')
         .select('id')
@@ -204,19 +313,11 @@ export function useToggleWatchlist(id?: number) {
         .maybeSingle();
 
       if (existingFav) {
-        await supabase
-          .from('user_favorites')
-          .delete()
-          .eq('id', existingFav.id);
-        await supabase
-          .from('watch_later')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('anime_id', id);
+        await supabase.from('user_favorites').delete().eq('id', existingFav.id);
+        await supabase.from('watch_later').delete().eq('user_id', user.id).eq('anime_id', id);
         return { isSaved: false };
       }
 
-      // 2. Check watch_later
       const { data: existingWl } = await supabase
         .from('watch_later')
         .select('id')
@@ -225,29 +326,24 @@ export function useToggleWatchlist(id?: number) {
         .maybeSingle();
 
       if (existingWl) {
-        await supabase
-          .from('watch_later')
-          .delete()
-          .eq('id', existingWl.id);
+        await supabase.from('watch_later').delete().eq('id', existingWl.id);
         return { isSaved: false };
       }
 
-      // 3. Add to user_favorites
       const { error: favErr } = await supabase
         .from('user_favorites')
         .insert({ user_id: user.id, series_id: id });
 
       if (favErr) {
-        // Fallback to watch_later if series_id fk failed (e.g. standalone anime ID)
-        await supabase
-          .from('watch_later')
-          .insert({ user_id: user.id, anime_id: id });
+        await supabase.from('watch_later').insert({ user_id: user.id, anime_id: id });
       }
 
       return { isSaved: true };
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['watchlist', user?.id, profileId] });
       queryClient.invalidateQueries({ queryKey: ['watchlist', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['watchlist', user?.id, profileId, 'check', id] });
       queryClient.invalidateQueries({ queryKey: ['watchlist', user?.id, 'check', id] });
     },
   });

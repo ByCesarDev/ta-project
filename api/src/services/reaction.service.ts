@@ -1,4 +1,5 @@
 import { getTursoClient, initTursoDatabase } from '../config/turso.js';
+import { viewerProfileService } from './viewerProfile.service.js';
 
 export interface ReactionStats {
   likes: number;
@@ -8,21 +9,31 @@ export interface ReactionStats {
 
 export class ReactionService {
   /**
-   * Retrieves global like/dislike counts and current user's reaction for an episode
+   * Retrieves global like/dislike counts and current viewer profile's reaction for an episode
    */
-  public async getEpisodeReactions(episodeId: number, userId?: string): Promise<ReactionStats> {
+  public async getEpisodeReactions(
+    episodeId: number,
+    userId?: string,
+    viewerProfileId?: string
+  ): Promise<ReactionStats> {
     await initTursoDatabase();
     const client = getTursoClient();
+
+    let targetProfileId: string | null = null;
+    if (userId) {
+      targetProfileId = await viewerProfileService.resolveValidatedProfileId(userId, viewerProfileId);
+    }
 
     const [statsRes, userRes] = await Promise.all([
       client.execute({
         sql: `SELECT likes_count, dislikes_count FROM episode_reaction_stats WHERE episode_id = ?`,
         args: [episodeId],
       }),
-      userId
+      targetProfileId
         ? client.execute({
-            sql: `SELECT reaction_type FROM episode_reactions WHERE episode_id = ? AND user_id = ?`,
-            args: [episodeId, userId],
+            sql: `SELECT reaction_type FROM episode_reactions 
+                  WHERE episode_id = ? AND (viewer_profile_id = ? OR (viewer_profile_id IS NULL AND user_id = ?))`,
+            args: [episodeId, targetProfileId, userId!],
           })
         : Promise.resolve({ rows: [] }),
     ]);
@@ -35,16 +46,19 @@ export class ReactionService {
   }
 
   /**
-   * Sets or toggles user reaction ('like' or 'dislike')
+   * Sets or toggles user/viewer profile reaction ('like' or 'dislike')
    */
   public async setEpisodeReaction(
     episodeId: number,
     userId: string,
-    reactionType: 'like' | 'dislike'
+    reactionType: 'like' | 'dislike',
+    viewerProfileId?: string
   ): Promise<ReactionStats> {
     await initTursoDatabase();
     const client = getTursoClient();
     const now = new Date().toISOString();
+
+    const targetProfileId = await viewerProfileService.resolveValidatedProfileId(userId, viewerProfileId);
 
     // Ensure stats row exists
     await client.execute({
@@ -52,10 +66,11 @@ export class ReactionService {
       args: [episodeId],
     });
 
-    // Check existing reaction
+    // Check existing reaction for this viewer profile or legacy user_id
     const existing = await client.execute({
-      sql: `SELECT reaction_type FROM episode_reactions WHERE episode_id = ? AND user_id = ?`,
-      args: [episodeId, userId],
+      sql: `SELECT reaction_type FROM episode_reactions 
+            WHERE episode_id = ? AND (viewer_profile_id = ? OR (viewer_profile_id IS NULL AND user_id = ?))`,
+      args: [episodeId, targetProfileId, userId],
     });
 
     const currentReaction = existing.rows[0]?.reaction_type as string | undefined;
@@ -67,8 +82,9 @@ export class ReactionService {
       await client.batch(
         [
           {
-            sql: `DELETE FROM episode_reactions WHERE episode_id = ? AND user_id = ?`,
-            args: [episodeId, userId],
+            sql: `DELETE FROM episode_reactions 
+                  WHERE episode_id = ? AND (viewer_profile_id = ? OR (viewer_profile_id IS NULL AND user_id = ?))`,
+            args: [episodeId, targetProfileId, userId],
           },
           {
             sql: `UPDATE episode_reaction_stats SET ${decField} = MAX(0, ${decField} - 1) WHERE episode_id = ?`,
@@ -85,8 +101,10 @@ export class ReactionService {
       await client.batch(
         [
           {
-            sql: `UPDATE episode_reactions SET reaction_type = ?, updated_at = ? WHERE episode_id = ? AND user_id = ?`,
-            args: [reactionType, now, episodeId, userId],
+            sql: `UPDATE episode_reactions 
+                  SET reaction_type = ?, viewer_profile_id = ?, updated_at = ? 
+                  WHERE episode_id = ? AND (viewer_profile_id = ? OR (viewer_profile_id IS NULL AND user_id = ?))`,
+            args: [reactionType, targetProfileId, now, episodeId, targetProfileId, userId],
           },
           {
             sql: `UPDATE episode_reaction_stats SET ${decField} = MAX(0, ${decField} - 1), ${incField} = ${incField} + 1 WHERE episode_id = ?`,
@@ -102,8 +120,9 @@ export class ReactionService {
       await client.batch(
         [
           {
-            sql: `INSERT INTO episode_reactions (episode_id, user_id, reaction_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-            args: [episodeId, userId, reactionType, now, now],
+            sql: `INSERT INTO episode_reactions (episode_id, user_id, viewer_profile_id, reaction_type, created_at, updated_at) 
+                  VALUES (?, ?, ?, ?, ?, ?)`,
+            args: [episodeId, userId, targetProfileId, reactionType, now, now],
           },
           {
             sql: `UPDATE episode_reaction_stats SET ${incField} = ${incField} + 1 WHERE episode_id = ?`,

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { PageContainer } from '../components/layout/PageContainer.js';
 import { useWatchHistory } from '../hooks/useWatchHistory.js';
 import { useAuth } from '../context/AuthContext.js';
+import { useViewerProfile } from '../context/ViewerProfileContext.js';
 import { History, Play, CheckCircle2, LogIn, Compass } from 'lucide-react';
 import { Button } from '../components/common/Button.js';
 import { Skeleton } from '../components/common/Skeleton.js';
@@ -10,6 +11,7 @@ import { formatTime } from '../lib/utils.js';
 
 export const HistoryPage: React.FC = () => {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
   const { data: history, isLoading } = useWatchHistory();
 
   if (!user) {
@@ -44,7 +46,7 @@ export const HistoryPage: React.FC = () => {
           Historial de Reproducción
         </h1>
         <p className="text-xs text-slate-400 mt-1">
-          {history?.length || 0} episodios vistos recientemente
+          {history?.length || 0} episodios vistos en el perfil de {activeProfile?.name || 'tu cuenta'}
         </p>
       </div>
 

@@ -1,10 +1,12 @@
 import crypto from 'node:crypto';
 import { getTursoClient, initTursoDatabase } from '../config/turso.js';
 import { supabaseAdmin } from '../config/supabaseAdmin.js';
+import { viewerProfileService } from './viewerProfile.service.js';
 
 export interface SavedEpisodeItem {
   id: string;
   user_id: string;
+  viewer_profile_id?: string | null;
   episode_id: number;
   anime_id?: number | null;
   series_id?: number | null;
@@ -19,24 +21,27 @@ export interface SavedEpisodeItem {
 
 export class SavedEpisodeService {
   /**
-   * Returns all saved episodes for a user
+   * Returns all saved episodes for a user/viewer profile
    */
-  public async getSavedEpisodes(userId: string): Promise<SavedEpisodeItem[]> {
+  public async getSavedEpisodes(userId: string, viewerProfileId?: string): Promise<SavedEpisodeItem[]> {
     await initTursoDatabase();
     const client = getTursoClient();
 
+    const targetProfileId = await viewerProfileService.resolveValidatedProfileId(userId, viewerProfileId);
+
     const res = await client.execute({
-      sql: `SELECT id, user_id, episode_id, anime_id, series_id, anime_slug, anime_title, 
+      sql: `SELECT id, user_id, viewer_profile_id, episode_id, anime_id, series_id, anime_slug, anime_title, 
                    episode_number, episode_title, thumbnail, duration, created_at 
             FROM user_saved_episodes 
-            WHERE user_id = ? 
+            WHERE viewer_profile_id = ? OR (viewer_profile_id IS NULL AND user_id = ?) 
             ORDER BY created_at DESC`,
-      args: [userId],
+      args: [targetProfileId, userId],
     });
 
     const items: SavedEpisodeItem[] = res.rows.map((r: any) => ({
       id: String(r.id),
       user_id: String(r.user_id),
+      viewer_profile_id: r.viewer_profile_id ? String(r.viewer_profile_id) : null,
       episode_id: Number(r.episode_id),
       anime_id: r.anime_id ? Number(r.anime_id) : null,
       series_id: r.series_id ? Number(r.series_id) : null,
@@ -90,15 +95,18 @@ export class SavedEpisodeService {
   }
 
   /**
-   * Checks if an episode is saved by user
+   * Checks if an episode is saved by user / viewer profile
    */
-  public async isEpisodeSaved(userId: string, episodeId: number): Promise<boolean> {
+  public async isEpisodeSaved(userId: string, episodeId: number, viewerProfileId?: string): Promise<boolean> {
     await initTursoDatabase();
     const client = getTursoClient();
 
+    const targetProfileId = await viewerProfileService.resolveValidatedProfileId(userId, viewerProfileId);
+
     const res = await client.execute({
-      sql: `SELECT 1 FROM user_saved_episodes WHERE user_id = ? AND episode_id = ?`,
-      args: [userId, episodeId],
+      sql: `SELECT 1 FROM user_saved_episodes 
+            WHERE episode_id = ? AND (viewer_profile_id = ? OR (viewer_profile_id IS NULL AND user_id = ?))`,
+      args: [episodeId, targetProfileId, userId],
     });
 
     return res.rows.length > 0;
@@ -119,17 +127,20 @@ export class SavedEpisodeService {
       episodeTitle?: string | null;
       thumbnail?: string | null;
       duration?: string | null;
-    }
+    },
+    viewerProfileId?: string
   ): Promise<{ is_saved: boolean }> {
     await initTursoDatabase();
     const client = getTursoClient();
 
-    const isSaved = await this.isEpisodeSaved(userId, episodeId);
+    const targetProfileId = await viewerProfileService.resolveValidatedProfileId(userId, viewerProfileId);
+    const isSaved = await this.isEpisodeSaved(userId, episodeId, targetProfileId);
 
     if (isSaved) {
       await client.execute({
-        sql: `DELETE FROM user_saved_episodes WHERE user_id = ? AND episode_id = ?`,
-        args: [userId, episodeId],
+        sql: `DELETE FROM user_saved_episodes 
+              WHERE episode_id = ? AND (viewer_profile_id = ? OR (viewer_profile_id IS NULL AND user_id = ?))`,
+        args: [episodeId, targetProfileId, userId],
       });
       return { is_saved: false };
     } else {
@@ -163,11 +174,12 @@ export class SavedEpisodeService {
       const now = new Date().toISOString();
       await client.execute({
         sql: `INSERT INTO user_saved_episodes 
-              (id, user_id, episode_id, anime_id, series_id, anime_slug, anime_title, episode_number, episode_title, thumbnail, duration, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              (id, user_id, viewer_profile_id, episode_id, anime_id, series_id, anime_slug, anime_title, episode_number, episode_title, thumbnail, duration, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id,
           userId,
+          targetProfileId,
           episodeId,
           metadata.animeId || null,
           metadata.seriesId || null,
@@ -187,13 +199,16 @@ export class SavedEpisodeService {
   /**
    * Deletes a saved episode
    */
-  public async removeSavedEpisode(userId: string, episodeId: number): Promise<void> {
+  public async removeSavedEpisode(userId: string, episodeId: number, viewerProfileId?: string): Promise<void> {
     await initTursoDatabase();
     const client = getTursoClient();
 
+    const targetProfileId = await viewerProfileService.resolveValidatedProfileId(userId, viewerProfileId);
+
     await client.execute({
-      sql: `DELETE FROM user_saved_episodes WHERE user_id = ? AND episode_id = ?`,
-      args: [userId, episodeId],
+      sql: `DELETE FROM user_saved_episodes 
+            WHERE episode_id = ? AND (viewer_profile_id = ? OR (viewer_profile_id IS NULL AND user_id = ?))`,
+      args: [episodeId, targetProfileId, userId],
     });
   }
 }

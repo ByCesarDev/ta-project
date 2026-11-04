@@ -555,6 +555,7 @@ export interface Database {
         Row: {
           id: number;
           user_id: string;
+          viewer_profile_id?: string | null;
           episode_id: number;
           progress_seconds: number;
           total_seconds: number;
@@ -565,6 +566,7 @@ export interface Database {
         Insert: {
           id?: number;
           user_id: string;
+          viewer_profile_id?: string | null;
           episode_id: number;
           progress_seconds?: number;
           total_seconds?: number;
@@ -575,6 +577,7 @@ export interface Database {
         Update: {
           id?: number;
           user_id?: string;
+          viewer_profile_id?: string | null;
           episode_id?: number;
           progress_seconds?: number;
           total_seconds?: number;
@@ -596,18 +599,21 @@ export interface Database {
         Row: {
           id: number;
           user_id: string;
+          viewer_profile_id?: string | null;
           anime_id: number;
           created_at: string;
         };
         Insert: {
           id?: number;
           user_id: string;
+          viewer_profile_id?: string | null;
           anime_id: number;
           created_at?: string;
         };
         Update: {
           id?: number;
           user_id?: string;
+          viewer_profile_id?: string | null;
           anime_id?: number;
           created_at?: string;
         };
@@ -821,18 +827,21 @@ export interface Database {
         Row: {
           id: number;
           user_id: string;
+          viewer_profile_id?: string | null;
           series_id: number;
           created_at: string;
         };
         Insert: {
           id?: number;
           user_id: string;
+          viewer_profile_id?: string | null;
           series_id: number;
           created_at?: string;
         };
         Update: {
           id?: number;
           user_id?: string;
+          viewer_profile_id?: string | null;
           series_id?: number;
           created_at?: string;
         };
@@ -842,6 +851,44 @@ export interface Database {
             columns: ["series_id"];
             isOneToOne: false;
             referencedRelation: "series";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      viewer_profiles: {
+        Row: {
+          id: string;
+          account_id: string;
+          name: string;
+          avatar_url: string | null;
+          is_default: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          account_id: string;
+          name: string;
+          avatar_url?: string | null;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          account_id?: string;
+          name?: string;
+          avatar_url?: string | null;
+          is_default?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "viewer_profiles_account_id_fkey";
+            columns: ["account_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
             referencedColumns: ["id"];
           }
         ];

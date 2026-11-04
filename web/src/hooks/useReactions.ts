@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.js';
+import { useViewerProfile } from '../context/ViewerProfileContext.js';
 
 export interface ReactionStats {
   likes: number;
@@ -16,14 +17,17 @@ const getAuthToken = async (): Promise<string | null> => {
 };
 
 export function useEpisodeReactions(episodeId: number) {
+  const { activeProfile } = useViewerProfile();
+
   return useQuery<ReactionStats>({
-    queryKey: ['episode-reactions', episodeId],
+    queryKey: ['episode-reactions', episodeId, activeProfile?.id],
     queryFn: async () => {
       const token = await getAuthToken();
       const res = await fetch(`${API_BASE}/reactions/episode/${episodeId}`, {
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(activeProfile?.id ? { 'x-viewer-profile-id': activeProfile.id } : {}),
         },
       });
 
@@ -45,6 +49,7 @@ export function useEpisodeReactions(episodeId: number) {
 
 export function useSetEpisodeReaction(episodeId: number) {
   const queryClient = useQueryClient();
+  const { activeProfile } = useViewerProfile();
 
   return useMutation({
     mutationFn: async (reaction: 'like' | 'dislike') => {
@@ -56,6 +61,7 @@ export function useSetEpisodeReaction(episodeId: number) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...(activeProfile?.id ? { 'x-viewer-profile-id': activeProfile.id } : {}),
         },
         body: JSON.stringify({ reaction }),
       });
@@ -68,11 +74,12 @@ export function useSetEpisodeReaction(episodeId: number) {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(['episode-reactions', episodeId], {
+      queryClient.setQueryData(['episode-reactions', episodeId, activeProfile?.id], {
         likes: data.likes,
         dislikes: data.dislikes,
         user_reaction: data.user_reaction,
       });
+      queryClient.invalidateQueries({ queryKey: ['episode-reactions', episodeId] });
     },
   });
 }

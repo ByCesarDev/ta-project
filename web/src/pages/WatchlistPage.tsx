@@ -4,6 +4,7 @@ import { PageContainer } from '../components/layout/PageContainer.js';
 import { useWatchlist, useToggleWatchlist } from '../hooks/useWatchlist.js';
 import { useSavedEpisodes, useRemoveSavedEpisode, SavedEpisodeItem } from '../hooks/useSavedEpisodes.js';
 import { useAuth } from '../context/AuthContext.js';
+import { useViewerProfile } from '../context/ViewerProfileContext.js';
 import { Bookmark, Trash2, LogIn, Compass, Tv, Play, Film } from 'lucide-react';
 import { Button } from '../components/common/Button.js';
 import { AnimeCardSkeleton, Skeleton } from '../components/common/Skeleton.js';
@@ -11,6 +12,7 @@ import { AnimeCard } from '../components/common/AnimeCard.js';
 
 export const WatchlistPage: React.FC = () => {
   const { user } = useAuth();
+  const { activeProfile } = useViewerProfile();
   const [activeTab, setActiveTab] = useState<'series' | 'episodes'>('series');
 
   const { data: watchlist, isLoading: isWatchlistLoading } = useWatchlist();
@@ -54,8 +56,8 @@ export const WatchlistPage: React.FC = () => {
           </h1>
           <p className="text-xs text-slate-400 mt-1">
             {activeTab === 'series'
-              ? `${seriesCount} ${seriesCount === 1 ? 'serie guardada' : 'series guardadas'} en tu cuenta`
-              : `${episodesCount} ${episodesCount === 1 ? 'episodio guardado' : 'episodios guardados'} en tu cuenta`}
+              ? `${seriesCount} ${seriesCount === 1 ? 'serie guardada' : 'series guardadas'} en el perfil de ${activeProfile?.name || 'tu cuenta'}`
+              : `${episodesCount} ${episodesCount === 1 ? 'episodio guardado' : 'episodios guardados'} en el perfil de ${activeProfile?.name || 'tu cuenta'}`}
           </p>
         </div>
 

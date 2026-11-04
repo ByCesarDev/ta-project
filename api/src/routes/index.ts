@@ -9,6 +9,7 @@ import thumbnailRoutes from './thumbnail.routes.js';
 import commentRoutes from './comment.routes.js';
 import reactionRoutes from './reaction.routes.js';
 import savedEpisodeRoutes from './savedEpisode.routes.js';
+import viewerProfileRoutes from './viewerProfile.routes.js';
 
 const apiRouter = Router();
 
@@ -17,6 +18,7 @@ apiRouter.use('/thumbnails', thumbnailRoutes);
 apiRouter.use('/comments', commentRoutes);
 apiRouter.use('/reactions', reactionRoutes);
 apiRouter.use('/saved-episodes', savedEpisodeRoutes);
+apiRouter.use('/viewer-profiles', viewerProfileRoutes);
 apiRouter.use('/series', seriesRoutes);
 apiRouter.use('/animes', animeRoutes);
 apiRouter.use('/stream', streamRoutes);

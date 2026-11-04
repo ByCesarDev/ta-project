@@ -14,7 +14,12 @@ export class SavedEpisodeController {
     }
 
     try {
-      const episodes = await savedEpisodeService.getSavedEpisodes(userId);
+      const viewerProfileId =
+        (req.headers['x-viewer-profile-id'] as string) ||
+        (req.query.viewer_profile_id as string) ||
+        req.body?.viewer_profile_id;
+
+      const episodes = await savedEpisodeService.getSavedEpisodes(userId, viewerProfileId);
       res.status(200).json({ success: true, episodes });
     } catch (err: any) {
       res.status(500).json({ error: 'InternalServerError', message: err.message || 'Error al obtener episodios guardados.' });
@@ -40,7 +45,12 @@ export class SavedEpisodeController {
     }
 
     try {
-      const isSaved = await savedEpisodeService.isEpisodeSaved(userId, episodeId);
+      const viewerProfileId =
+        (req.headers['x-viewer-profile-id'] as string) ||
+        (req.query.viewer_profile_id as string) ||
+        req.body?.viewer_profile_id;
+
+      const isSaved = await savedEpisodeService.isEpisodeSaved(userId, episodeId, viewerProfileId);
       res.status(200).json({ success: true, is_saved: isSaved });
     } catch (err: any) {
       res.status(500).json({ error: 'InternalServerError', message: err.message || 'Error al verificar guardado.' });
@@ -73,16 +83,26 @@ export class SavedEpisodeController {
     }
 
     try {
-      const result = await savedEpisodeService.toggleSavedEpisode(userId, episodeId, {
-        animeId,
-        seriesId,
-        animeSlug,
-        animeTitle,
-        episodeNumber,
-        episodeTitle,
-        thumbnail,
-        duration,
-      });
+      const viewerProfileId =
+        (req.headers['x-viewer-profile-id'] as string) ||
+        (req.query.viewer_profile_id as string) ||
+        req.body?.viewer_profile_id;
+
+      const result = await savedEpisodeService.toggleSavedEpisode(
+        userId,
+        episodeId,
+        {
+          animeId,
+          seriesId,
+          animeSlug,
+          animeTitle,
+          episodeNumber,
+          episodeTitle,
+          thumbnail,
+          duration,
+        },
+        viewerProfileId
+      );
 
       res.status(200).json({ success: true, ...result });
     } catch (err: any) {
@@ -109,7 +129,12 @@ export class SavedEpisodeController {
     }
 
     try {
-      await savedEpisodeService.removeSavedEpisode(userId, episodeId);
+      const viewerProfileId =
+        (req.headers['x-viewer-profile-id'] as string) ||
+        (req.query.viewer_profile_id as string) ||
+        req.body?.viewer_profile_id;
+
+      await savedEpisodeService.removeSavedEpisode(userId, episodeId, viewerProfileId);
       res.status(200).json({ success: true, message: 'Episodio eliminado de guardados.' });
     } catch (err: any) {
       res.status(500).json({ error: 'InternalServerError', message: err.message || 'Error al eliminar episodio guardado.' });

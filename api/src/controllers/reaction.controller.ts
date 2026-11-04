@@ -16,7 +16,12 @@ export class ReactionController {
     }
 
     try {
-      const stats = await reactionService.getEpisodeReactions(episodeId, req.user?.id);
+      const viewerProfileId =
+        (req.headers['x-viewer-profile-id'] as string) ||
+        (req.query.viewer_profile_id as string) ||
+        req.body?.viewer_profile_id;
+
+      const stats = await reactionService.getEpisodeReactions(episodeId, req.user?.id, viewerProfileId);
       res.status(200).json({ success: true, ...stats });
     } catch (err: any) {
       res.status(500).json({ error: 'InternalServerError', message: err.message || 'Error al obtener reacciones.' });
@@ -49,7 +54,12 @@ export class ReactionController {
     }
 
     try {
-      const updated = await reactionService.setEpisodeReaction(episodeId, userId, reaction);
+      const viewerProfileId =
+        (req.headers['x-viewer-profile-id'] as string) ||
+        (req.query.viewer_profile_id as string) ||
+        req.body?.viewer_profile_id;
+
+      const updated = await reactionService.setEpisodeReaction(episodeId, userId, reaction, viewerProfileId);
       res.status(200).json({ success: true, ...updated });
     } catch (err: any) {
       res.status(500).json({ error: 'InternalServerError', message: err.message || 'Error al guardar reacción.' });

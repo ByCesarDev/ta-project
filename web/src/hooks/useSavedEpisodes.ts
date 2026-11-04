@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.js';
+import { useViewerProfile } from '../context/ViewerProfileContext.js';
 
 export interface SavedEpisodeItem {
   id: string;
   user_id: string;
+  viewer_profile_id?: string | null;
   episode_id: number;
   anime_id?: number | null;
   series_id?: number | null;
@@ -25,11 +27,13 @@ const getAuthToken = async (): Promise<string | null> => {
 };
 
 /**
- * Fetch all saved episodes of current user
+ * Fetch all saved episodes of current active viewer profile
  */
 export function useSavedEpisodes() {
+  const { activeProfile } = useViewerProfile();
+
   return useQuery<SavedEpisodeItem[]>({
-    queryKey: ['saved-episodes'],
+    queryKey: ['saved-episodes', activeProfile?.id],
     queryFn: async () => {
       const token = await getAuthToken();
       if (!token) return [];
@@ -38,6 +42,7 @@ export function useSavedEpisodes() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...(activeProfile?.id ? { 'x-viewer-profile-id': activeProfile.id } : {}),
         },
       });
 
@@ -53,11 +58,13 @@ export function useSavedEpisodes() {
 }
 
 /**
- * Check if a specific episode is saved
+ * Check if a specific episode is saved for current viewer profile
  */
 export function useIsEpisodeSaved(episodeId?: number) {
+  const { activeProfile } = useViewerProfile();
+
   return useQuery<boolean>({
-    queryKey: ['saved-episodes', 'check', episodeId],
+    queryKey: ['saved-episodes', 'check', episodeId, activeProfile?.id],
     queryFn: async () => {
       if (!episodeId) return false;
       const token = await getAuthToken();
@@ -70,6 +77,7 @@ export function useIsEpisodeSaved(episodeId?: number) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...(activeProfile?.id ? { 'x-viewer-profile-id': activeProfile.id } : {}),
         },
       });
 
@@ -83,10 +91,11 @@ export function useIsEpisodeSaved(episodeId?: number) {
 }
 
 /**
- * Toggle saved status of an episode
+ * Toggle saved status of an episode for active viewer profile
  */
 export function useToggleSavedEpisode(episodeId: number) {
   const queryClient = useQueryClient();
+  const { activeProfile } = useViewerProfile();
 
   return useMutation({
     mutationFn: async (metadata: {
@@ -113,6 +122,7 @@ export function useToggleSavedEpisode(episodeId: number) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...(activeProfile?.id ? { 'x-viewer-profile-id': activeProfile.id } : {}),
         },
         body: JSON.stringify(metadata),
       });
@@ -125,7 +135,7 @@ export function useToggleSavedEpisode(episodeId: number) {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(['saved-episodes', 'check', episodeId], data.is_saved);
+      queryClient.setQueryData(['saved-episodes', 'check', episodeId, activeProfile?.id], data.is_saved);
       queryClient.invalidateQueries({ queryKey: ['saved-episodes'] });
     },
   });
@@ -136,6 +146,7 @@ export function useToggleSavedEpisode(episodeId: number) {
  */
 export function useRemoveSavedEpisode() {
   const queryClient = useQueryClient();
+  const { activeProfile } = useViewerProfile();
 
   return useMutation({
     mutationFn: async (episodeId: number) => {
@@ -150,6 +161,7 @@ export function useRemoveSavedEpisode() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...(activeProfile?.id ? { 'x-viewer-profile-id': activeProfile.id } : {}),
         },
       });
 
@@ -158,7 +170,7 @@ export function useRemoveSavedEpisode() {
       }
     },
     onSuccess: (_data, episodeId) => {
-      queryClient.setQueryData(['saved-episodes', 'check', episodeId], false);
+      queryClient.setQueryData(['saved-episodes', 'check', episodeId, activeProfile?.id], false);
       queryClient.invalidateQueries({ queryKey: ['saved-episodes'] });
     },
   });
