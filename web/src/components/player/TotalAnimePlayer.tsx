@@ -193,6 +193,10 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
   const hideControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastRecordedTimeRef = useRef<number>(0);
   const initialSeekDoneRef = useRef<boolean>(false);
+  const currentTimeRef = useRef<number>(0);
+  const pendingSeekTimeRef = useRef<number | null>(null);
+  const wasPlayingRef = useRef<boolean>(true);
+  const prevSourceIdRef = useRef<number | string | null>(selectedSource?.id ?? null);
 
   // Playback state
   const [stream, setStream] = useState<PlayableStream | null>(null);
@@ -330,11 +334,50 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     [episodeId]
   );
 
-  // Reset initial seek state when episode changes
+  // Reset seek state when episode changes
   useEffect(() => {
     initialSeekDoneRef.current = false;
     lastRecordedTimeRef.current = 0;
+    currentTimeRef.current = 0;
+    pendingSeekTimeRef.current = null;
+    wasPlayingRef.current = true;
+    prevSourceIdRef.current = selectedSource?.id ?? null;
   }, [episodeId]);
+
+  // Synchronize playback position whenever selectedSource changes (e.g. language or quality switch)
+  useEffect(() => {
+    if (prevSourceIdRef.current !== selectedSource?.id) {
+      prevSourceIdRef.current = selectedSource?.id ?? null;
+      // Capture exact position before source switches
+      const currentPos = videoRef.current?.currentTime || currentTimeRef.current;
+      if (currentPos > 0) {
+        pendingSeekTimeRef.current = currentPos;
+        lastRecordedTimeRef.current = currentPos;
+        triggerSaveProgress(currentPos, videoRef.current?.duration || duration);
+      }
+    }
+  }, [selectedSource, duration, triggerSaveProgress]);
+
+  // Track playing/paused state in ref
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onPlay = () => {
+      wasPlayingRef.current = true;
+    };
+    const onPause = () => {
+      wasPlayingRef.current = false;
+    };
+
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+
+    return () => {
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+    };
+  }, []);
 
   // Keep activeQuality in sync with selectedQuality prop
   useEffect(() => {
@@ -399,10 +442,20 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     const streamUrl = stream.url;
 
     if (stream.type === 'hls' && Hls.isSupported()) {
+      // Determine seek target:
+      // Priority 1: Pending seek time from language / audio variant / quality switch
+      // Priority 2: Initial resume from saved watch history
+      const targetTime = pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0
+        ? pendingSeekTimeRef.current
+        : (!initialSeekDoneRef.current && savedProgress?.progress_seconds && savedProgress.progress_seconds > 5
+            ? savedProgress.progress_seconds
+            : -1);
+
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
         startLevel: -1,
+        startPosition: targetTime > 0 ? targetTime : -1,
         maxBufferLength: 30,
         maxMaxBufferLength: 60,
         autoStartLoad: true,
@@ -450,10 +503,30 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
           });
         }
 
-        video.play().then(() => setIsPlaying(true)).catch(() => {
+        // Ensure video element's currentTime is synced to the target time
+        if (targetTime > 0) {
+          video.currentTime = targetTime;
+          setCurrentTime(targetTime);
+          if (pendingSeekTimeRef.current !== null) {
+            setResumeToast(`Continuando en ${formatTime(targetTime)}`);
+            setTimeout(() => setResumeToast(null), 3000);
+            pendingSeekTimeRef.current = null;
+          } else if (!initialSeekDoneRef.current) {
+            setResumeToast(`Reanudando en ${formatTime(targetTime)}`);
+            setTimeout(() => setResumeToast(null), 3500);
+            initialSeekDoneRef.current = true;
+          }
+        }
+
+        if (wasPlayingRef.current) {
+          video.play().then(() => setIsPlaying(true)).catch(() => {
+            setIsPlaying(false);
+            setIsBuffering(false);
+          });
+        } else {
           setIsPlaying(false);
           setIsBuffering(false);
-        });
+        }
       });
 
       hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_event, data) => {
@@ -534,12 +607,37 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     } else if (video.canPlayType('application/vnd.apple.mpegurl') || stream.type === 'mp4') {
       // Native HLS (Safari/iOS) or direct MP4
       video.src = streamUrl;
+      const targetTime = pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0
+        ? pendingSeekTimeRef.current
+        : (!initialSeekDoneRef.current && savedProgress?.progress_seconds && savedProgress.progress_seconds > 5
+            ? savedProgress.progress_seconds
+            : -1);
+
+      const onLoaded = () => {
+        if (targetTime > 0) {
+          video.currentTime = targetTime;
+          setCurrentTime(targetTime);
+          if (pendingSeekTimeRef.current !== null) {
+            setResumeToast(`Continuando en ${formatTime(targetTime)}`);
+            setTimeout(() => setResumeToast(null), 3000);
+            pendingSeekTimeRef.current = null;
+          } else if (!initialSeekDoneRef.current) {
+            setResumeToast(`Reanudando en ${formatTime(targetTime)}`);
+            setTimeout(() => setResumeToast(null), 3500);
+            initialSeekDoneRef.current = true;
+          }
+        }
+        if (wasPlayingRef.current) {
+          video.play().then(() => setIsPlaying(true)).catch(() => {
+            setIsPlaying(false);
+            setIsBuffering(false);
+          });
+        }
+      };
+
+      video.addEventListener('loadedmetadata', onLoaded, { once: true });
       video.load();
       setIsBuffering(false);
-      video.play().then(() => setIsPlaying(true)).catch(() => {
-        setIsPlaying(false);
-        setIsBuffering(false);
-      });
     }
 
     return () => {
@@ -712,6 +810,17 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
 
     setDuration(video.duration);
 
+    // If we have a pending seek from a language/quality switch, prioritize it
+    if (pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0) {
+      const targetTime = pendingSeekTimeRef.current;
+      video.currentTime = targetTime;
+      setCurrentTime(targetTime);
+      setResumeToast(`Continuando en ${formatTime(targetTime)}`);
+      setTimeout(() => setResumeToast(null), 3000);
+      pendingSeekTimeRef.current = null;
+      return;
+    }
+
     // If we have saved progress and have not performed initial seek
     if (!initialSeekDoneRef.current && savedProgress?.progress_seconds) {
       const targetTime = savedProgress.progress_seconds;
@@ -725,10 +834,10 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
         setTimeout(() => setResumeToast(null), 3500);
       }
       initialSeekDoneRef.current = true;
-    } else if (lastRecordedTimeRef.current > 5) {
+    } else if (currentTimeRef.current > 2) {
       // Preserve timestamp on server or quality/language switch
-      video.currentTime = lastRecordedTimeRef.current;
-      setCurrentTime(lastRecordedTimeRef.current);
+      video.currentTime = currentTimeRef.current;
+      setCurrentTime(currentTimeRef.current);
     }
   };
 
@@ -738,6 +847,7 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
     if (!video) return;
 
     const cur = video.currentTime;
+    currentTimeRef.current = cur;
     setCurrentTime(cur);
 
     // Sync active subtitle cue
@@ -1551,6 +1661,15 @@ export const TotalAnimePlayer: React.FC<TotalAnimePlayerProps> = ({
                             <button
                               key={opt.key}
                               onClick={() => {
+                                // Instantly capture and sync current playback position before switching language
+                                const currentPos = videoRef.current?.currentTime || currentTimeRef.current;
+                                if (currentPos > 0) {
+                                  pendingSeekTimeRef.current = currentPos;
+                                  lastRecordedTimeRef.current = currentPos;
+                                  triggerSaveProgress(currentPos, videoRef.current?.duration || duration);
+                                }
+                                wasPlayingRef.current = isPlaying;
+
                                 if (onSelectAudioVariant) {
                                   onSelectAudioVariant(opt.key);
                                 } else if (onSelectLanguage) {
