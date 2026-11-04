@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Bookmark, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { Button } from '../common/Button.js';
 import { Badge } from '../common/Badge.js';
 import { useToggleWatchlist, useIsInWatchlist } from '../../hooks/useWatchlist.js';
+import { useWatchHistory } from '../../hooks/useWatchHistory.js';
 import { formatStatusLabel } from '../../lib/utils.js';
 
 interface HeroCarouselProps {
@@ -15,6 +16,9 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
 
+  // Consume watch history for active viewer profile
+  const { data: watchHistory = [] } = useWatchHistory();
+
   // Gentle auto-slide (only when user is not hovering)
   useEffect(() => {
     if (!animes || animes.length <= 1 || isHovered) return;
@@ -24,16 +28,115 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
     return () => clearInterval(timer);
   }, [animes, isHovered]);
 
-  if (isLoading || !animes || animes.length === 0) {
+  const currentAnime = animes && animes.length > 0 ? animes[currentIndex] : null;
+
+  // Map user watch history for quick lookups
+  const historyMap = useMemo(() => {
+    const map = new Map<
+      number,
+      { progress_seconds: number; total_seconds: number; is_completed: boolean; updated_at: string }
+    >();
+    if (watchHistory) {
+      watchHistory.forEach((h: any) => {
+        if (h.episode_id) {
+          map.set(h.episode_id, {
+            progress_seconds: h.progress_seconds || 0,
+            total_seconds: h.total_seconds || 0,
+            is_completed: Boolean(h.is_completed),
+            updated_at: h.updated_at,
+          });
+        }
+      });
+    }
+    return map;
+  }, [watchHistory]);
+
+  // Extract all episodes across all seasons of currentAnime if present
+  const allEpisodes = useMemo(() => {
+    if (!currentAnime) return [];
+    const list: any[] = [];
+    const seasons = currentAnime.seasons || currentAnime.series_seasons || [];
+    seasons.forEach((season: any) => {
+      (season.series_entries || []).forEach((entry: any) => {
+        const anime = entry.anime;
+        if (anime && Array.isArray(anime.episodes)) {
+          anime.episodes.forEach((ep: any) => {
+            list.push({ ep, season, anime });
+          });
+        }
+      });
+    });
+    return list;
+  }, [currentAnime]);
+
+  // Determine resume / continue watching episode (identical to AnimeDetailPage)
+  const resumeInfo = useMemo(() => {
+    if (!currentAnime) return null;
+
+    // 1. Try resolving through preloaded episodes (matching AnimeDetailPage)
+    if (allEpisodes.length > 0) {
+      const watchedItems = allEpisodes
+        .filter((item) => historyMap.has(item.ep.id))
+        .map((item) => ({
+          ...item,
+          history: historyMap.get(item.ep.id)!,
+        }))
+        .sort((a, b) => new Date(b.history.updated_at).getTime() - new Date(a.history.updated_at).getTime());
+
+      if (watchedItems.length > 0) {
+        const latest = watchedItems[0];
+        const latestIdx = allEpisodes.findIndex((item) => item.ep.id === latest.ep.id);
+
+        if (latest.history.is_completed && latestIdx < allEpisodes.length - 1) {
+          return {
+            episodeId: allEpisodes[latestIdx + 1].ep.id,
+            episodeNumber: allEpisodes[latestIdx + 1].ep.episode_number,
+          };
+        }
+
+        return {
+          episodeId: latest.ep.id,
+          episodeNumber: latest.ep.episode_number,
+        };
+      }
+    }
+
+    // 2. Fallback: match directly from watchHistory via slug or ID
+    const targetSlugLower = (currentAnime.slug || '').toLowerCase();
+    const targetId = Number(currentAnime.id);
+
+    const matches = (watchHistory || [])
+      .filter((h: any) => {
+        const ep = h.episode;
+        if (!ep) return false;
+        if (ep.series_slug && ep.series_slug.toLowerCase() === targetSlugLower) return true;
+        if (ep.anime?.slug && ep.anime.slug.toLowerCase() === targetSlugLower) return true;
+        if (ep.anime?.id && Number(ep.anime.id) === targetId) return true;
+        return false;
+      })
+      .sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+
+    if (matches.length > 0) {
+      const latest = matches[0];
+      return {
+        episodeId: latest.episode_id || latest.episode?.id,
+        episodeNumber: latest.episode?.episode_number,
+      };
+    }
+
+    return null;
+  }, [currentAnime, allEpisodes, historyMap, watchHistory]);
+
+  if (isLoading || !currentAnime) {
     return (
       <div className="w-full h-[460px] sm:h-[520px] rounded-3xl shimmer bg-slate-900/80 mb-12" />
     );
   }
 
-  const currentAnime = animes[currentIndex];
   const title = currentAnime.title_english || currentAnime.title_romaji || currentAnime.name;
   const statusInfo = formatStatusLabel(currentAnime.status);
   const targetSlug = currentAnime.series_slug || currentAnime.slug;
+  const firstEpId = allEpisodes.length > 0 ? allEpisodes[0].ep.id : null;
 
   return (
     <div
@@ -104,13 +207,21 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
           {currentAnime.description || 'Disfruta de esta increíble serie con la mejor calidad y subtítulos en TotalAnime.'}
         </p>
 
-        {/* Action Buttons */}
+        {/* Action Buttons: Dynamic Resume / Start Watching */}
         <div className="flex flex-wrap items-center gap-3 pt-2">
-          <Link to={`/anime/${targetSlug}`}>
-            <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
-              Ver Ahora
-            </Button>
-          </Link>
+          {resumeInfo ? (
+            <Link to={`/watch/${targetSlug}/${resumeInfo.episodeId}`}>
+              <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
+                Continuar Viendo {resumeInfo.episodeNumber ? `(EP ${resumeInfo.episodeNumber})` : ''}
+              </Button>
+            </Link>
+          ) : (
+            <Link to={firstEpId ? `/watch/${targetSlug}/${firstEpId}` : `/anime/${targetSlug}`}>
+              <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
+                Ver Ahora
+              </Button>
+            </Link>
+          )}
 
           <Link to={`/anime/${targetSlug}`}>
             <Button
