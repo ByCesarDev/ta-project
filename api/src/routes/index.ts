@@ -7,12 +7,16 @@ import animeRoutes from './anime.routes.js';
 import avatarRoutes from './avatar.routes.js';
 import thumbnailRoutes from './thumbnail.routes.js';
 import commentRoutes from './comment.routes.js';
+import reactionRoutes from './reaction.routes.js';
+import savedEpisodeRoutes from './savedEpisode.routes.js';
 
 const apiRouter = Router();
 
 apiRouter.use('/avatars', avatarRoutes);
 apiRouter.use('/thumbnails', thumbnailRoutes);
 apiRouter.use('/comments', commentRoutes);
+apiRouter.use('/reactions', reactionRoutes);
+apiRouter.use('/saved-episodes', savedEpisodeRoutes);
 apiRouter.use('/series', seriesRoutes);
 apiRouter.use('/animes', animeRoutes);
 apiRouter.use('/stream', streamRoutes);

@@ -131,10 +131,13 @@ export const EpisodeInfo: React.FC<EpisodeInfoProps> = ({
       {/* Compact Actions Row */}
       <div className="pt-1">
         <EpisodeReactions
+          episodeId={episodeId}
           animeSlug={seriesSlug}
           episodeNumber={episodeNumber}
+          episodeTitle={episodeTitle}
           animeTitle={seriesName}
           seriesId={seriesId}
+          duration={formattedDuration}
           variant="inline"
         />
       </div>
