@@ -333,6 +333,32 @@ describe('TotalAnime Web: Institutional & Legal Configuration', () => {
       expect(email).toMatch(/^[a-z]+@totalanime\.net$/);
     });
   });
+
+  it('should export all 7 legal & institutional page components properly', async () => {
+    const { AboutPage } = await import('../src/pages/AboutPage.js');
+    const { TermsPage } = await import('../src/pages/TermsPage.js');
+    const { PrivacyPage } = await import('../src/pages/PrivacyPage.js');
+    const { CopyrightPage } = await import('../src/pages/CopyrightPage.js');
+    const { DmcaPage } = await import('../src/pages/DmcaPage.js');
+    const { FaqPage } = await import('../src/pages/FaqPage.js');
+    const { ContactPage } = await import('../src/pages/ContactPage.js');
+
+    expect(typeof AboutPage).toBe('function');
+    expect(typeof TermsPage).toBe('function');
+    expect(typeof PrivacyPage).toBe('function');
+    expect(typeof CopyrightPage).toBe('function');
+    expect(typeof DmcaPage).toBe('function');
+    expect(typeof FaqPage).toBe('function');
+    expect(typeof ContactPage).toBe('function');
+  });
+
+  it('should export LegalLayout and Footer components properly', async () => {
+    const { LegalLayout } = await import('../src/components/layout/LegalLayout.js');
+    const { Footer } = await import('../src/components/layout/Footer.js');
+
+    expect(typeof LegalLayout).toBe('function');
+    expect(typeof Footer).toBe('function');
+  });
 });
 
 
