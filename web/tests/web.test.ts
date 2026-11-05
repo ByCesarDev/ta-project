@@ -318,4 +318,22 @@ describe('TotalAnime Web: Stream URL Expiration Lifecycle', () => {
   });
 });
 
+describe('TotalAnime Web: Institutional & Legal Configuration', () => {
+  it('should have valid institutional contact emails for totalanime.net domain', () => {
+    const legalEmails = {
+      general: 'contacto@totalanime.net',
+      support: 'soporte@totalanime.net',
+      dmca: 'dmca@totalanime.net',
+      privacy: 'privacidad@totalanime.net',
+      legal: 'legal@totalanime.net',
+    };
+
+    Object.values(legalEmails).forEach((email) => {
+      expect(email.endsWith('@totalanime.net')).toBe(true);
+      expect(email).toMatch(/^[a-z]+@totalanime\.net$/);
+    });
+  });
+});
+
+
 

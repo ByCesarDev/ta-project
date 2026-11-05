@@ -171,6 +171,17 @@ export const RegisterPage: React.FC = () => {
             >
               Registrarme
             </Button>
+
+            <p className="text-[11px] text-slate-500 text-center leading-relaxed pt-1">
+              Al registrarte, aceptas nuestros{' '}
+              <Link to="/terms" className="text-slate-400 hover:text-indigo-400 underline">
+                Términos de servicio
+              </Link>{' '}
+              y nuestra{' '}
+              <Link to="/privacy" className="text-slate-400 hover:text-indigo-400 underline">
+                Política de privacidad
+              </Link>.
+            </p>
           </form>
 
           <div className="mt-8 pt-6 border-t border-slate-800/80 text-center text-xs text-slate-400">

@@ -1,14 +1,14 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Tv, Heart, ShieldCheck } from 'lucide-react';
+import { Tv, Heart, ShieldCheck, Mail } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
     <footer className="bg-[#05070a] border-t border-slate-800/80 mt-20 pt-12 pb-8 text-xs text-slate-400">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-10">
-          {/* Brand */}
-          <div className="md:col-span-2 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 mb-10">
+          {/* Brand & Intro */}
+          <div className="sm:col-span-2 space-y-3">
             <Link to="/" className="flex items-center gap-2 group">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md">
                 <Tv className="w-4 h-4" />
@@ -17,18 +17,24 @@ export const Footer: React.FC = () => {
                 Total<span className="text-indigo-400">Anime</span> 2.0
               </span>
             </Link>
-            <p className="text-slate-400 leading-relaxed max-w-md text-xs">
-              Tu portal moderno de anime streaming. Disfruta del catálogo completo en alta calidad,
-              con múltiples opciones de servidores, subtítulos al día y seguimiento de reproducción sincronizado.
+            <p className="text-slate-400 leading-relaxed max-w-sm text-xs">
+              Plataforma dedicada a organizar información relacionada con el anime y facilitar el descubrimiento de series, episodios y fuentes externas de reproducción.
             </p>
+            <div className="pt-2 flex items-center gap-2 text-[11px] text-slate-400">
+              <Mail className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Contacto general:</span>
+              <a href="mailto:contacto@totalanime.net" className="text-indigo-400 hover:text-indigo-300 font-medium">
+                contacto@totalanime.net
+              </a>
+            </div>
           </div>
 
           {/* Quick Links */}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <h4 className="font-bold text-white uppercase text-[11px] tracking-wider font-['Outfit']">
-              Navegación
+              Explorar
             </h4>
-            <ul className="space-y-1.5 text-slate-400">
+            <ul className="space-y-2 text-slate-400 text-xs">
               <li>
                 <Link to="/" className="hover:text-indigo-400 transition-colors">
                   Inicio
@@ -41,40 +47,95 @@ export const Footer: React.FC = () => {
               </li>
               <li>
                 <Link to="/directory?status=RELEASING" className="hover:text-indigo-400 transition-colors">
-                  Animes en Emisión
+                  En Emisión
                 </Link>
               </li>
               <li>
                 <Link to="/watchlist" className="hover:text-indigo-400 transition-colors">
-                  Mi Lista de Favoritos
+                  Mi Lista
+                </Link>
+              </li>
+              <li>
+                <Link to="/history" className="hover:text-indigo-400 transition-colors">
+                  Historial
                 </Link>
               </li>
             </ul>
           </div>
 
-          {/* Legal / Disclaimer */}
-          <div className="space-y-2">
+          {/* Legal / Policies */}
+          <div className="space-y-2.5">
             <h4 className="font-bold text-white uppercase text-[11px] tracking-wider font-['Outfit']">
-              Aviso Legal
+              Legal y Políticas
             </h4>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Ningún archivo de video se encuentra alojado en nuestros servidores. Todo el contenido es
-              proporcionado por servicios externos y terceros no afiliados.
-            </p>
-            <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium pt-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Plataforma segura y sin anuncios intrusivos
+            <ul className="space-y-2 text-slate-400 text-xs">
+              <li>
+                <Link to="/terms" className="hover:text-indigo-400 transition-colors">
+                  Términos de servicio
+                </Link>
+              </li>
+              <li>
+                <Link to="/privacy" className="hover:text-indigo-400 transition-colors">
+                  Política de privacidad
+                </Link>
+              </li>
+              <li>
+                <Link to="/copyright" className="hover:text-indigo-400 transition-colors">
+                  Derechos de autor
+                </Link>
+              </li>
+              <li>
+                <Link to="/dmca" className="hover:text-indigo-400 transition-colors">
+                  Reclamaciones (DMCA)
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Help & About */}
+          <div className="space-y-2.5">
+            <h4 className="font-bold text-white uppercase text-[11px] tracking-wider font-['Outfit']">
+              Institucional
+            </h4>
+            <ul className="space-y-2 text-slate-400 text-xs">
+              <li>
+                <Link to="/about" className="hover:text-indigo-400 transition-colors">
+                  Acerca de TotalAnime
+                </Link>
+              </li>
+              <li>
+                <Link to="/faq" className="hover:text-indigo-400 transition-colors">
+                  Preguntas frecuentes
+                </Link>
+              </li>
+              <li>
+                <Link to="/contact" className="hover:text-indigo-400 transition-colors">
+                  Contacto y soporte
+                </Link>
+              </li>
+            </ul>
+
+            <div className="pt-2 text-[11px] text-slate-400 flex items-center gap-1 font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Proyecto independiente</span>
             </div>
           </div>
         </div>
 
+        {/* Disclaimer statement */}
+        <div className="pt-6 pb-6 border-t border-slate-800/60 text-[11px] text-slate-400 leading-relaxed">
+          <p>
+            TotalAnime es una plataforma independiente que organiza información sobre anime y facilita el descubrimiento de contenido. Cuando se proporcionan enlaces o reproductores de terceros, estos operan bajo la administración de servicios externos. TotalAnime no pretende ser propietaria ni representante oficial de las obras audiovisuales mencionadas.
+          </p>
+        </div>
+
         {/* Bottom Bar */}
-        <div className="pt-8 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
-          <p>© 2026 TotalAnime 2.0. Todos los derechos reservados.</p>
+        <div className="pt-6 border-t border-slate-800/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-400">
+          <p>© 2026 TotalAnime.net. Todos los derechos reservados.</p>
           <div className="flex items-center gap-1">
             <span>Hecho con</span>
             <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
-            <span>para la comunidad otaku</span>
+            <span>para la comunidad anime</span>
           </div>
         </div>
       </div>
