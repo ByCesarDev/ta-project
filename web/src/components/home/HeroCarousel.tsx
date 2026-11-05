@@ -168,7 +168,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
       </div>
 
       {/* Slide Content */}
-      <div className="relative h-full max-w-3xl flex flex-col justify-end p-6 sm:p-12 z-10 space-y-4">
+      <div className="relative h-full max-w-4xl flex flex-col justify-end p-6 sm:p-12 z-10 space-y-4">
         {/* Badges */}
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="primary" size="sm" className="font-bold tracking-wider uppercase bg-indigo-600/90 text-white">
@@ -218,11 +218,11 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
         </p>
 
         {/* Action Buttons: Dynamic Resume / Start Watching */}
-        <div className="flex flex-wrap items-center gap-3 pt-2">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 pt-2">
           {resumeInfo ? (
             <Link to={`/watch/${targetSlug}/${resumeInfo.episodeNumber ?? resumeInfo.episodeId}`}>
               <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
-                Continuar Viendo {resumeInfo.episodeNumber ? `(EP ${resumeInfo.episodeNumber})` : ''}
+                Continuar {resumeInfo.episodeNumber ? `(EP ${resumeInfo.episodeNumber})` : 'Viendo'}
               </Button>
             </Link>
           ) : (
