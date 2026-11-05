@@ -84,7 +84,7 @@ const NavigationCard: React.FC<{
 
   return (
     <Link
-      to={`/watch/${seriesSlug}/${item.episode.id}`}
+      to={`/watch/${seriesSlug}/${item.episode.episode_number ?? item.episode.id}`}
       className="group relative flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-2xl bg-[#0c101c] border border-slate-800/80 hover:border-indigo-500/50 hover:bg-[#111728] transition-all min-h-[88px] sm:min-h-[96px] shadow-md"
     >
       <div className="flex items-center gap-3 min-w-0">

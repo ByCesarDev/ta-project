@@ -649,14 +649,15 @@ export function useWatchEpisode(seriesSlug: string, episodeIdOrNumber: string | 
 
       const targetNum = Number(episodeIdOrNumber);
 
-      // Priority 1: Exact match by unique Episode ID (DB primary key)
+      // Match Strategy:
+      // Priority 1: Match by human episode_number first (standard for /watch/:slug/:episodeNumber)
       let matchedItem = !isNaN(targetNum)
-        ? allFlatEpisodes.find((item) => item.episode.id === targetNum)
+        ? allFlatEpisodes.find((item) => Number(item.episode.episode_number) === targetNum)
         : null;
 
-      // Priority 2: Fallback match by episode_number (selects the first season matching in display order)
+      // Priority 2: Fallback match by unique Episode ID (DB primary key) for backwards compatibility
       if (!matchedItem && !isNaN(targetNum)) {
-        matchedItem = allFlatEpisodes.find((item) => Number(item.episode.episode_number) === targetNum);
+        matchedItem = allFlatEpisodes.find((item) => item.episode.id === targetNum);
       }
 
       // Priority 3: Fallback default to first episode of the series

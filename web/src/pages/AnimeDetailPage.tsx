@@ -55,20 +55,42 @@ export const AnimeDetailPage: React.FC = () => {
   useEffect(() => {
     if (series?.seasons && series.seasons.length > 0) {
       if (seasonParam) {
-        const found = series.seasons.find((s) => String(s.id) === seasonParam);
+        // Support matching by human season_number (e.g. ?season=2) or by legacy DB id (e.g. ?season=9)
+        const found = series.seasons.find(
+          (s) => String(s.season_number) === seasonParam || String(s.id) === seasonParam
+        );
         if (found) {
           setActiveSeasonId(found.id);
+          // If the URL has a legacy DB id (like ?season=9) or ?season=1 for season 1, normalize or clean it up
+          if ((found.season_number === 1 && seasonParam) || String(found.id) === seasonParam) {
+            const nextParams = new URLSearchParams(searchParams);
+            if (found.season_number && found.season_number > 1) {
+              nextParams.set('season', String(found.season_number));
+            } else {
+              nextParams.delete('season');
+            }
+            if (nextParams.toString() !== searchParams.toString()) {
+              setSearchParams(nextParams, { replace: true });
+            }
+          }
           return;
         }
       }
       // Default to first season
       setActiveSeasonId(series.seasons[0].id);
     }
-  }, [series, seasonParam]);
+  }, [series, seasonParam, searchParams, setSearchParams]);
 
   const handleSelectSeason = (seasonId: number) => {
     setActiveSeasonId(seasonId);
-    setSearchParams({ season: String(seasonId) });
+    const selectedSeason = series?.seasons?.find((s) => s.id === seasonId);
+    const nextParams = new URLSearchParams(searchParams);
+    if (selectedSeason?.season_number && selectedSeason.season_number > 1) {
+      nextParams.set('season', String(selectedSeason.season_number));
+    } else {
+      nextParams.delete('season');
+    }
+    setSearchParams(nextParams);
   };
 
   // Map user watch history for quick lookups
@@ -329,13 +351,13 @@ export const AnimeDetailPage: React.FC = () => {
             {/* Actions: Dynamic Resume / Start Watching */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
               {resumeEpisodeInfo ? (
-                <Link to={`/watch/${series.slug}/${resumeEpisodeInfo.episode.id}`}>
+                <Link to={`/watch/${series.slug}/${resumeEpisodeInfo.episode.episode_number ?? resumeEpisodeInfo.episode.id}`}>
                   <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
                     Continuar Viendo (EP {resumeEpisodeInfo.episode.episode_number})
                   </Button>
                 </Link>
               ) : firstEp ? (
-                <Link to={`/watch/${series.slug}/${firstEp.id}`}>
+                <Link to={`/watch/${series.slug}/${firstEp.episode_number ?? firstEp.id}`}>
                   <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
                     Empezar a Ver (EP {firstEp.episode_number})
                   </Button>
@@ -508,7 +530,7 @@ export const AnimeDetailPage: React.FC = () => {
                     }`}
                   >
                     <Link
-                      to={`/watch/${series.slug}/${ep.id}`}
+                      to={`/watch/${series.slug}/${ep.episode_number ?? ep.id}`}
                       className="block relative aspect-video w-full overflow-hidden bg-slate-900"
                     >
                       <img
@@ -578,7 +600,7 @@ export const AnimeDetailPage: React.FC = () => {
                     {/* Card Footer Info with 3-Dots Menu */}
                     <div className="p-2.5 flex items-center justify-between gap-2">
                       <Link
-                        to={`/watch/${series.slug}/${ep.id}`}
+                        to={`/watch/${series.slug}/${ep.episode_number ?? ep.id}`}
                         className="font-semibold text-xs text-slate-200 group-hover:text-indigo-400 line-clamp-1 flex-1"
                         title={ep.title || `Episodio ${ep.episode_number}`}
                       >

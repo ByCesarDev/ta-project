@@ -86,7 +86,7 @@ export const HistoryPage: React.FC = () => {
 
             const animeTitle = ep.anime.series_name || ep.anime.title_english || ep.anime.title_romaji || ep.anime.name;
             const seriesSlug = ep.anime.series_slug || ep.anime.slug;
-            const watchTarget = ep.id || ep.episode_number;
+            const watchTarget = ep.episode_number || ep.id;
 
             return (
               <div

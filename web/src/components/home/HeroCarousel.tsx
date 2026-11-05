@@ -146,7 +146,7 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
   const title = currentAnime.title_english || currentAnime.title_romaji || currentAnime.name;
   const statusInfo = formatStatusLabel(currentAnime.status);
   const targetSlug = currentAnime.series_slug || currentAnime.slug;
-  const firstEpId = allEpisodes.length > 0 ? allEpisodes[0].ep.id : null;
+  const firstEpTarget = allEpisodes.length > 0 ? (allEpisodes[0].ep.episode_number ?? allEpisodes[0].ep.id ?? 1) : 1;
 
   return (
     <div
@@ -220,13 +220,13 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ animes, isLoading })
         {/* Action Buttons: Dynamic Resume / Start Watching */}
         <div className="flex flex-wrap items-center gap-3 pt-2">
           {resumeInfo ? (
-            <Link to={`/watch/${targetSlug}/${resumeInfo.episodeId}`}>
+            <Link to={`/watch/${targetSlug}/${resumeInfo.episodeNumber ?? resumeInfo.episodeId}`}>
               <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
                 Continuar Viendo {resumeInfo.episodeNumber ? `(EP ${resumeInfo.episodeNumber})` : ''}
               </Button>
             </Link>
           ) : (
-            <Link to={`/watch/${targetSlug}/${firstEpId || 1}`}>
+            <Link to={`/watch/${targetSlug}/${firstEpTarget}`}>
               <Button size="lg" leftIcon={<Play className="w-5 h-5 fill-white" />}>
                 Ver Ahora
               </Button>

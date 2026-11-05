@@ -8,6 +8,7 @@ interface EpisodeInfoProps {
   seriesSlug: string;
   seriesId?: number;
   seasonId?: number;
+  seasonNumber?: number | null;
   seasonName?: string | null;
   partLabel?: string | null;
   episodeId: number;
@@ -72,6 +73,7 @@ export const EpisodeInfo: React.FC<EpisodeInfoProps> = ({
   seriesSlug,
   seriesId,
   seasonId,
+  seasonNumber,
   seasonName,
   partLabel,
   episodeId,
@@ -101,12 +103,15 @@ export const EpisodeInfo: React.FC<EpisodeInfoProps> = ({
   const cleanSynopsis = synopsis?.trim() || '';
   const isLongSynopsis = cleanSynopsis.length > 180;
 
+  // Determine query param for season
+  const seasonQuery = seasonNumber && seasonNumber > 1 ? `?season=${seasonNumber}` : '';
+
   return (
     <div className="space-y-3.5 min-w-0">
       {/* Series Name Link */}
       <div>
         <Link
-          to={`/anime/${seriesSlug}${seasonId ? `?season=${seasonId}` : ''}`}
+          to={`/anime/${seriesSlug}${seasonQuery || (seasonId && !seasonNumber ? `?season=${seasonId}` : '')}`}
           className="text-sm font-semibold text-indigo-400 hover:text-indigo-300 transition-colors inline-block"
         >
           {seriesName}

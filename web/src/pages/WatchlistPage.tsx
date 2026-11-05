@@ -180,7 +180,7 @@ const SavedEpisodeCard: React.FC<{
   return (
     <div className="group relative flex flex-col rounded-2xl overflow-hidden bg-[#0c101c] border border-slate-800 hover:border-indigo-500/50 transition-all duration-300 hover:-translate-y-1 shadow-md">
       <Link
-        to={`/watch/${ep.anime_slug}/${ep.episode_id}`}
+        to={`/watch/${ep.anime_slug}/${ep.episode_number || ep.episode_id}`}
         className="block relative aspect-video w-full overflow-hidden bg-slate-900 border-b border-slate-800/60"
       >
         {hasThumbnail ? (
@@ -237,7 +237,7 @@ const SavedEpisodeCard: React.FC<{
             {ep.anime_title}
           </Link>
           <Link
-            to={`/watch/${ep.anime_slug}/${ep.episode_id}`}
+            to={`/watch/${ep.anime_slug}/${ep.episode_number || ep.episode_id}`}
             className="text-xs font-bold text-white group-hover:text-indigo-300 line-clamp-1 mt-0.5 block"
             title={title}
           >

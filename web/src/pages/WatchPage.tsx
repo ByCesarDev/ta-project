@@ -23,8 +23,9 @@ export const WatchPage: React.FC = () => {
 
   // Canonical URL sync: If the current URL slug is an alias or old anime slug, replace URL with canonical series slug
   useEffect(() => {
-    if (watchData?.series?.slug && slug && watchData.series.slug !== slug && watchData.episode?.id) {
-      navigate(`/watch/${watchData.series.slug}/${watchData.episode.id}`, { replace: true });
+    if (watchData?.series?.slug && slug && watchData.series.slug !== slug && watchData.episode) {
+      const epTarget = watchData.episode.episode_number ?? watchData.episode.id;
+      navigate(`/watch/${watchData.series.slug}/${epTarget}`, { replace: true });
     }
   }, [watchData, slug, navigate]);
 
@@ -224,7 +225,7 @@ export const WatchPage: React.FC = () => {
         {/* Discrete Back Link to Series */}
         <div className="pt-1">
           <Link
-            to={`/anime/${series.slug}${season?.id ? `?season=${season.id}` : ''}`}
+            to={`/anime/${series.slug}${season?.season_number && season.season_number > 1 ? `?season=${season.season_number}` : ''}`}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors group"
           >
             <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:text-white transition-colors" />
@@ -249,7 +250,8 @@ export const WatchPage: React.FC = () => {
           hasNextEpisode={Boolean(nextEpItem)}
           onSelectNextEpisode={() => {
             if (nextEpItem) {
-              navigate(`/watch/${series.slug}/${nextEpItem.episode.id}`);
+              const nextTarget = nextEpItem.episode.episode_number ?? nextEpItem.episode.id;
+              navigate(`/watch/${series.slug}/${nextTarget}`);
             }
           }}
         />
@@ -263,6 +265,7 @@ export const WatchPage: React.FC = () => {
               seriesSlug={series.slug}
               seriesId={series.id}
               seasonId={season?.id}
+              seasonNumber={season?.season_number}
               seasonName={season?.name}
               partLabel={watchData.anime?.name && watchData.anime.name !== series.name ? watchData.anime.name : null}
               episodeId={episode.id}

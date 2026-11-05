@@ -134,7 +134,7 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
           return (
             <Link
               key={item.id}
-              to={`/watch/${targetSlug}/${ep.id}`}
+              to={`/watch/${targetSlug}/${ep.episode_number ?? ep.id}`}
               className="group flex flex-col rounded-2xl overflow-hidden bg-[#0c101c]/80 border border-slate-800/80 hover:border-indigo-500/50 shadow-md transition-all duration-300 hover:-translate-y-1"
             >
               {/* Thumbnail Container */}
