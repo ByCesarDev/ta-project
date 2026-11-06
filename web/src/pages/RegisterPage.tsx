@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.js';
 import { PageContainer } from '../components/layout/PageContainer.js';
 import { Button } from '../components/common/Button.js';
@@ -8,6 +8,9 @@ import { Tv, Mail, Lock, User, AlertCircle, CheckCircle2, UserPlus } from 'lucid
 export const RegisterPage: React.FC = () => {
   const { user, signUp } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = (location.state as any)?.from?.pathname || '/';
 
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -17,9 +20,9 @@ export const RegisterPage: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // If already logged in, redirect to home
+  // If already logged in, redirect to home or destination
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={from} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,7 +59,7 @@ export const RegisterPage: React.FC = () => {
     } else {
       setSuccessMsg('¡Cuenta creada exitosamente! Redirigiendo...');
       setTimeout(() => {
-        navigate('/');
+        navigate(from, { replace: true });
       }, 1500);
     }
   };

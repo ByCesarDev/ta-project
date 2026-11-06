@@ -361,5 +361,34 @@ describe('TotalAnime Web: Institutional & Legal Configuration', () => {
   });
 });
 
+describe('TotalAnime Web: Mandatory Authentication & Route Guards', () => {
+  it('should export ProtectedRoute and PublicOnlyRoute guards properly', async () => {
+    const { ProtectedRoute } = await import('../src/components/auth/ProtectedRoute.js');
+    const { PublicOnlyRoute } = await import('../src/components/auth/PublicOnlyRoute.js');
+
+    expect(typeof ProtectedRoute).toBe('function');
+    expect(typeof PublicOnlyRoute).toBe('function');
+  });
+
+  it('should export ForgotPasswordPage and AuthCallbackPage properly', async () => {
+    const { ForgotPasswordPage } = await import('../src/pages/ForgotPasswordPage.js');
+    const { AuthCallbackPage } = await import('../src/pages/AuthCallbackPage.js');
+
+    expect(typeof ForgotPasswordPage).toBe('function');
+    expect(typeof AuthCallbackPage).toBe('function');
+  });
+
+  it('should provide getAuthHeaders and fetchWithAuth helpers', async () => {
+    const { getAuthHeaders, fetchWithAuth } = await import('../src/lib/api.js');
+
+    expect(typeof getAuthHeaders).toBe('function');
+    expect(typeof fetchWithAuth).toBe('function');
+
+    const headers = await getAuthHeaders();
+    expect(typeof headers).toBe('object');
+  });
+});
+
+
 
 

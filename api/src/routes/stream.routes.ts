@@ -1,18 +1,18 @@
 import { Router } from 'express';
 import { streamController } from '../controllers/stream.controller.js';
 import { apiRateLimiter } from '../middlewares/rateLimiter.js';
-import { optionalAuthenticateUser, requireModeratorOrAdmin } from '../middlewares/jwtAuthGuard.js';
+import { authenticateUser, requireModeratorOrAdmin } from '../middlewares/jwtAuthGuard.js';
 
 const router = Router();
 
-// GET /api/v1/stream/:animeSlug/:episodeNumber (Public with rate limiter & optional auth for staff refresh)
-router.get('/:animeSlug/:episodeNumber', apiRateLimiter, optionalAuthenticateUser, streamController.getStreamSources);
+// GET /api/v1/stream/:animeSlug/:episodeNumber (Authenticated users only)
+router.get('/:animeSlug/:episodeNumber', apiRateLimiter, authenticateUser, streamController.getStreamSources);
 
-// GET /api/v1/stream/sources/:sourceId/resolve (Public with optional staff auth for quarantine check)
-router.get('/sources/:sourceId/resolve', apiRateLimiter, optionalAuthenticateUser, streamController.resolveSourceById);
+// GET /api/v1/stream/sources/:sourceId/resolve (Authenticated users only)
+router.get('/sources/:sourceId/resolve', apiRateLimiter, authenticateUser, streamController.resolveSourceById);
 
-// POST /api/v1/stream/resolve (Public resolver with rate limiting)
-router.post('/resolve', apiRateLimiter, streamController.resolveDirectSource);
+// POST /api/v1/stream/resolve (Authenticated users only)
+router.post('/resolve', apiRateLimiter, authenticateUser, streamController.resolveDirectSource);
 
 // GET /api/v1/stream/proxy (High-performance video streaming proxy with Range support)
 router.get('/proxy', streamController.proxyStream);

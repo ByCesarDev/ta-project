@@ -4,8 +4,8 @@ import { viewerProfileController } from '../controllers/viewerProfile.controller
 
 const router = Router();
 
-// Public profile endpoint (open to unauthenticated & authenticated users)
-router.get('/public/:identifier', (req, res) => viewerProfileController.getPublicProfile(req, res));
+// Community public profile endpoint (requires authenticated platform user)
+router.get('/public/:identifier', authenticateUser, (req, res) => viewerProfileController.getPublicProfile(req, res));
 
 router.get('/', authenticateUser, (req, res) => viewerProfileController.getProfiles(req, res));
 router.post('/', authenticateUser, (req, res) => viewerProfileController.createProfile(req, res));

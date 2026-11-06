@@ -12,6 +12,8 @@ interface AuthContextType {
   signIn: (email: string, pass: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, pass: string, username: string) => Promise<{ error: Error | null; session?: Session | null }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
   refreshProfile: () => Promise<void>;
 }
 
@@ -117,6 +119,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const resetPassword = async (email: string) => {
+    try {
+      const redirectUrl = `${window.location.origin}/auth/callback?type=recovery`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: redirectUrl,
+      });
+      if (error) return { error: new Error(error.message) };
+      return { error: null };
+    } catch (err: unknown) {
+      return { error: err instanceof Error ? err : new Error('Error al enviar el correo de recuperación') };
+    }
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) return { error: new Error(error.message) };
+      return { error: null };
+    } catch (err: unknown) {
+      return { error: err instanceof Error ? err : new Error('Error al actualizar la contraseña') };
+    }
+  };
+
   const refreshProfile = async () => {
     if (user) {
       await fetchUserProfileAndRole(user.id);
@@ -133,6 +160,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       signIn,
       signUp,
       signOut,
+      resetPassword,
+      updatePassword,
       refreshProfile,
     }),
     [user, profile, role, session, isLoading]

@@ -1,20 +1,20 @@
 import { Router } from 'express';
 import { seriesController } from '../controllers/series.controller.js';
-import { requireModeratorOrAdmin, requireAdmin } from '../middlewares/jwtAuthGuard.js';
+import { authenticateUser, requireModeratorOrAdmin, requireAdmin } from '../middlewares/jwtAuthGuard.js';
 
 const router = Router();
 
 // ==========================================
-// Public Routes
+// Catalog & Series Endpoints (Authenticated Users Only)
 // ==========================================
 // GET /api/v1/series - List series with pagination and filters
-router.get('/', seriesController.listSeries);
+router.get('/', authenticateUser, seriesController.listSeries);
 
 // GET /api/v1/series/:slug - Get full series details by slug
-router.get('/:slug', seriesController.getSeriesBySlug);
+router.get('/:slug', authenticateUser, seriesController.getSeriesBySlug);
 
 // POST /api/v1/series/:id/view - Increment view count
-router.post('/:id/view', seriesController.recordView);
+router.post('/:id/view', authenticateUser, seriesController.recordView);
 
 // ==========================================
 // Moderator & Admin Protected Routes

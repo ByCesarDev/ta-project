@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase.js';
+import { fetchWithAuth } from '../lib/api.js';
 import {
   SeriesWithSeasons,
   SeriesFilters,
@@ -25,7 +26,7 @@ export function useSeriesCatalog(filters: SeriesFilters = {}) {
         if (filters.page) params.set('page', String(filters.page));
         if (filters.limit) params.set('limit', String(filters.limit));
 
-        const res = await fetch(`${API_BASE_URL}/series?${params.toString()}`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/series?${params.toString()}`);
         if (res.ok) {
           const data = await res.json();
           return {
@@ -141,7 +142,7 @@ export function useFeaturedSeries() {
     queryKey: ['series', 'featured'],
     queryFn: async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/series?limit=5&sortBy=views`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/series?limit=5&sortBy=views`);
         if (res.ok) {
           const data = await res.json();
           if (data && Array.isArray(data.series) && data.series.length > 0) {
@@ -236,7 +237,7 @@ export function useSeriesDetail(slug: string) {
       if (!slug) return null;
 
       try {
-        const res = await fetch(`${API_BASE_URL}/series/${encodeURIComponent(slug)}`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/series/${encodeURIComponent(slug)}`);
         if (res.ok) {
           const data = await res.json();
           return data as SeriesWithSeasons;
@@ -468,7 +469,7 @@ export function useWatchEpisode(seriesSlug: string, episodeIdOrNumber: string | 
       // 1. Fetch full series hierarchy
       let seriesRes: SeriesWithSeasons | null = null;
       try {
-        const res = await fetch(`${API_BASE_URL}/series/${encodeURIComponent(seriesSlug)}`);
+        const res = await fetchWithAuth(`${API_BASE_URL}/series/${encodeURIComponent(seriesSlug)}`);
         if (res.ok) {
           seriesRes = await res.json();
         }

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { AvatarItem } from '../types/index.js';
+import { fetchWithAuth } from '../lib/api.js';
 
 export function useAvatars() {
   const rawApiUrl = (import.meta.env.VITE_API_URL as string) || 'http://localhost:4000';
@@ -8,7 +9,7 @@ export function useAvatars() {
   return useQuery<AvatarItem[]>({
     queryKey: ['avatars-list'],
     queryFn: async () => {
-      const res = await fetch(`${apiBase}/avatars`);
+      const res = await fetchWithAuth(`${apiBase}/avatars`);
       if (!res.ok) {
         throw new Error('Error al cargar la lista de avatares');
       }

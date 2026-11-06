@@ -1,5 +1,6 @@
 import { EpisodeSourceRow, PlayableStream } from '../types/index.js';
 import { checkStreamUrlExpiration } from './streamExpiration.js';
+import { fetchWithAuth } from './api.js';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -130,8 +131,8 @@ export async function resolveStreamSource(
       : `${API_BASE_URL}/api/v1/stream/resolve${forceRefresh ? '?refresh=true' : ''}`;
 
     const res = source.id
-      ? await fetch(resolveEndpoint, { signal: controller.signal })
-      : await fetch(resolveEndpoint, {
+      ? await fetchWithAuth(resolveEndpoint, { signal: controller.signal })
+      : await fetchWithAuth(resolveEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...source, force_refresh: forceRefresh }),

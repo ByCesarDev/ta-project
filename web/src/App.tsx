@@ -14,6 +14,8 @@ import { WatchlistPage } from './pages/WatchlistPage.js';
 import { HistoryPage } from './pages/HistoryPage.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage.js';
+import { AuthCallbackPage } from './pages/AuthCallbackPage.js';
 import { ProfilePage } from './pages/ProfilePage.js';
 import { ProfilesPage } from './pages/ProfilesPage.js';
 import { AccountSettingsPage } from './pages/AccountSettingsPage.js';
@@ -28,6 +30,8 @@ import { ContactPage } from './pages/ContactPage.js';
 import { ProfileSelectorModal } from './components/profiles/ProfileSelectorModal.js';
 import { ManageProfilesModal } from './components/profiles/ManageProfilesModal.js';
 import { UserPreviewModal } from './components/modals/UserPreviewModal.js';
+import { ProtectedRoute } from './components/auth/ProtectedRoute.js';
+import { PublicOnlyRoute } from './components/auth/PublicOnlyRoute.js';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,19 +50,124 @@ export const App: React.FC = () => {
           <UserPreviewProvider>
             <BrowserRouter>
               <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/directory" element={<CatalogPage />} />
-                <Route path="/anime/:slug" element={<AnimeDetailPage />} />
-                <Route path="/watch/:slug/:episodeId" element={<WatchPage />} />
-                <Route path="/watch/:slug" element={<WatchPage />} />
-                <Route path="/watchlist" element={<WatchlistPage />} />
-                <Route path="/history" element={<HistoryPage />} />
-                <Route path="/profiles" element={<ProfilesPage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/u/:username" element={<PublicUserProfilePage />} />
-                <Route path="/settings/account" element={<AccountSettingsPage />} />
+                {/* Protected Application Routes: Mandatory Account Session Required */}
+                <Route
+                  path="/"
+                  element={
+                    <ProtectedRoute>
+                      <HomePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/directory"
+                  element={
+                    <ProtectedRoute>
+                      <CatalogPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/anime/:slug"
+                  element={
+                    <ProtectedRoute>
+                      <AnimeDetailPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/watch/:slug/:episodeId"
+                  element={
+                    <ProtectedRoute>
+                      <WatchPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/watch/:slug"
+                  element={
+                    <ProtectedRoute>
+                      <WatchPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/watchlist"
+                  element={
+                    <ProtectedRoute>
+                      <WatchlistPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/history"
+                  element={
+                    <ProtectedRoute>
+                      <HistoryPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profiles"
+                  element={
+                    <ProtectedRoute>
+                      <ProfilesPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <ProfilePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/u/:username"
+                  element={
+                    <ProtectedRoute>
+                      <PublicUserProfilePage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/settings/account"
+                  element={
+                    <ProtectedRoute>
+                      <AccountSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Public Auth Routes: Accessible only when NOT authenticated */}
+                <Route
+                  path="/login"
+                  element={
+                    <PublicOnlyRoute>
+                      <LoginPage />
+                    </PublicOnlyRoute>
+                  }
+                />
+                <Route
+                  path="/register"
+                  element={
+                    <PublicOnlyRoute>
+                      <RegisterPage />
+                    </PublicOnlyRoute>
+                  }
+                />
+                <Route
+                  path="/forgot-password"
+                  element={
+                    <PublicOnlyRoute>
+                      <ForgotPasswordPage />
+                    </PublicOnlyRoute>
+                  }
+                />
+
+                {/* Public Standalone / Compliance Routes */}
+                <Route path="/auth/callback" element={<AuthCallbackPage />} />
                 <Route path="/about" element={<AboutPage />} />
                 <Route path="/terms" element={<TermsPage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
@@ -66,6 +175,8 @@ export const App: React.FC = () => {
                 <Route path="/dmca" element={<DmcaPage />} />
                 <Route path="/faq" element={<FaqPage />} />
                 <Route path="/contact" element={<ContactPage />} />
+
+                {/* Catch-all route */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
               <ProfileSelectorModal />

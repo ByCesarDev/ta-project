@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { fetchWithAuth } from '../lib/api.js';
 
 export interface PublicViewerProfileData {
   id: string;
@@ -25,7 +26,7 @@ export function usePublicProfile(identifier?: string | null) {
     queryFn: async () => {
       if (!clean) return null;
 
-      const res = await fetch(`${API_BASE}/viewer-profiles/public/${encodeURIComponent(clean)}`, {
+      const res = await fetchWithAuth(`${API_BASE}/viewer-profiles/public/${encodeURIComponent(clean)}`, {
         headers: {
           'Content-Type': 'application/json',
         },

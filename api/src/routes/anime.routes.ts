@@ -1,17 +1,17 @@
 import { Router } from 'express';
 import { animeController } from '../controllers/anime.controller.js';
-import { requireModeratorOrAdmin, requireAdmin } from '../middlewares/jwtAuthGuard.js';
+import { authenticateUser, requireModeratorOrAdmin, requireAdmin } from '../middlewares/jwtAuthGuard.js';
 
 const router = Router();
 
 // ==========================================
-// Public Routes
+// Catalog & Anime Endpoints (Authenticated Users Only)
 // ==========================================
 // GET /api/v1/animes - List anime entries with pagination, status, and search filters
-router.get('/', animeController.listAnimes);
+router.get('/', authenticateUser, animeController.listAnimes);
 
 // GET /api/v1/animes/:idOrSlug - Get anime details by ID or Slug
-router.get('/:idOrSlug', animeController.getAnimeByIdOrSlug);
+router.get('/:idOrSlug', authenticateUser, animeController.getAnimeByIdOrSlug);
 
 // ==========================================
 // Staff Protected Routes

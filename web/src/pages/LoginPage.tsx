@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.js';
 import { PageContainer } from '../components/layout/PageContainer.js';
 import { Button } from '../components/common/Button.js';
@@ -8,6 +8,9 @@ import { Tv, Mail, Lock, AlertCircle, Eye, EyeOff, LogIn } from 'lucide-react';
 export const LoginPage: React.FC = () => {
   const { user, signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = (location.state as any)?.from?.pathname || '/';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,9 +18,9 @@ export const LoginPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // If already logged in, redirect to home
+  // If already logged in, redirect to intended target or home
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={from} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,7 +39,7 @@ export const LoginPage: React.FC = () => {
     if (error) {
       setErrorMsg(error.message || 'Credenciales incorrectas');
     } else {
-      navigate('/');
+      navigate(from, { replace: true });
     }
   };
 
@@ -83,9 +86,17 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                Contraseña
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Contraseña
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
                 <input
